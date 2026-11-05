@@ -20,7 +20,7 @@ describe("showStagingBanner", () => {
     const el = showStagingBanner();
     expect(document.body.firstChild).toBe(el);
     expect(el.textContent).toContain("STAGING");
-    expect(el.textContent).toContain("ステージング環境");
+    expect(el.textContent).toContain("STAGING｜");
   });
 
   it("links to every staging environment", () => {
