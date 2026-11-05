@@ -299,3 +299,20 @@ textarea:disabled {
   margin-left: 8px;
 }
 
+/* Ranking links keep the theme link color even after visiting:
+   the browser default visited purple is unreadable on the dark
+   background. */
+.ranking a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.ranking a:visited {
+  color: var(--link);
+}
+
+.ranking a:hover {
+  color: var(--link-active);
+  text-decoration: underline;
+}
+
