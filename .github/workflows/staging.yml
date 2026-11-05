@@ -1,0 +1,61 @@
+name: Deploy Staging Preview
+
+on:
+  push:
+    branches-ignore: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - run: npm install
+    - run: npm test
+
+    - name: Build staging variant
+      env:
+        VITE_GAS_ENDPOINT: "https://script.google.com/macros/s/AKfycbyRCLUuKbRElDdlUc0Rqh6Qxdfxd5R8hICpRe-keEyGCe1z-mC9gfN798MlXfQgY8kw/exec"
+        VITE_STAGING: "1"
+      run: npm run build:staging
+
+    - name: Deploy staging to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist-staging
+        destination_dir: staging
+        keep_files: true
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: npm ci
+      - name: Wait for the preview to be published
+        run: sleep 60
+      - name: Check the staging preview in a real browser
+        env:
+          HOME: /root
+          APP: ga
+        run: npx playwright test e2e/staging.check.js
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
