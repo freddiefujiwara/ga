@@ -15,4 +15,10 @@ export const CONFIG = {
   GAS_ENDPOINT:
     import.meta.env.VITE_GAS_ENDPOINT ??
     "https://script.google.com/macros/s/AKfycbypis7IqAtM2u0_h7ysiZ5UgztUEwNYJ1zPMnr8IbTBXiyfiapfRMtD_9CxVpc5G8YVzQ/exec",
+  // The blog's RSS feed (blog-gas ?o=rss): used to turn article page
+  // paths in the ranking into article titles. Public content metadata,
+  // so the production feed is used for both builds.
+  BLOG_RSS_URL:
+    "https://script.google.com/macros/s/AKfycbydcnw4yt5K8lz8Wf0PCbG6Q9yD3jf1W2lsGucOor2KII7duJr7qevcMiwNHJTe8GZH/exec?o=rss",
+  SITE_ORIGIN: "https://freddiefujiwara.com",
 };

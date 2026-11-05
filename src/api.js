@@ -77,3 +77,78 @@ export function dimensionRanking(response, limit = 10) {
       views: Number(row.metricValues[0].value) || 0,
     }));
 }
+
+// --- Article titles from the blog RSS feed ---
+
+function unescapeXml(text) {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// Parse the blog RSS into a Map of article id -> title. The feed's
+// item links are https://freddiefujiwara.com/blog/<id>. Tolerant by
+// design: anything unparsable is skipped, never thrown.
+export function parseRssTitles(xml) {
+  const titles = new Map();
+  if (typeof xml !== "string") {
+    return titles;
+  }
+  const itemPattern = /<item>([\s\S]*?)<\/item>/g;
+  let item;
+  while ((item = itemPattern.exec(xml)) !== null) {
+    const title = /<title>([\s\S]*?)<\/title>/.exec(item[1]);
+    const link = /<link>([\s\S]*?)<\/link>/.exec(item[1]);
+    if (!title || !link) {
+      continue;
+    }
+    const id = unescapeXml(link[1].trim()).split("/").filter(Boolean).pop();
+    if (id) {
+      titles.set(id, unescapeXml(title[1].trim()));
+    }
+  }
+  return titles;
+}
+
+export async function fetchArticleTitles(rssUrl, fetchImpl = fetch) {
+  try {
+    const res = await fetchImpl(rssUrl);
+    return parseRssTitles(await res.text());
+  } catch {
+    return new Map();
+  }
+}
+
+// --- Page path display (title + link) ---
+
+// Friendly labels for the site's own app pages. Blog article paths
+// are resolved through the RSS titles instead.
+const KNOWN_PAGES = {
+  "/": "トップページ",
+  "/blog/": "ブログ トップ",
+  "/list-of-stuff/": "持ち物リスト",
+  "/health/": "健康",
+  "/asset/": "資産",
+  "/alarm/": "アラーム",
+  "/tweet/": "ツイート",
+  "/ga/": "アクセス解析",
+};
+
+// Shape one GA pagePath into a display label and a link target.
+// Article paths appear both as /<id> and /blog/<id>; both resolve to
+// the canonical /blog/<id> URL. Unknown paths keep the raw path as
+// the label and still link to the page itself.
+export function pageDisplay(path, titles, origin) {
+  const href = (p) => `${origin}${p}`;
+  if (KNOWN_PAGES[path]) {
+    return { label: KNOWN_PAGES[path], href: href(path) };
+  }
+  const id = path.replace(/^\/(blog\/)?/, "").replace(/\/$/, "");
+  if (id && !id.includes("/") && titles && titles.has(id)) {
+    return { label: titles.get(id), href: href(`/blog/${id}`) };
+  }
+  return { label: path, href: href(path) };
+}

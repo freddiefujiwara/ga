@@ -9,6 +9,8 @@ import {
   totalsOf,
   dailySeries,
   dimensionRanking,
+  fetchArticleTitles,
+  pageDisplay,
 } from "./api.js";
 import { buildLineChartSvg } from "./chart.js";
 import {
@@ -76,6 +78,9 @@ function showExpired() {
 }
 
 async function loadDashboard() {
+  // Article titles come from the blog RSS feed; fetched in parallel
+  // and never allowed to block (or break) the numbers.
+  const titlesPromise = fetchArticleTitles(CONFIG.BLOG_RSS_URL);
   const [totals, daily, pages, sources] = await Promise.all([
     fetchReport(CONFIG.GAS_ENDPOINT, auth(), { dimensions: "" }),
     fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
@@ -106,10 +111,10 @@ async function loadDashboard() {
   document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
     dailySeries(daily),
   );
-  const renderRanking = (elId, response) => {
+  const renderRanking = (elId, response, limit) => {
     const list = document.getElementById(elId);
     list.innerHTML = "";
-    for (const item of dimensionRanking(response, elId === "top-pages" ? 10 : 8)) {
+    for (const item of dimensionRanking(response, limit)) {
       const li = document.createElement("li");
       li.textContent = item.name;
       const span = document.createElement("span");
@@ -119,8 +124,27 @@ async function loadDashboard() {
       list.appendChild(li);
     }
   };
-  renderRanking("top-pages", pages);
-  renderRanking("top-sources", sources);
+  // Page rows show the article title (from the blog RSS) and link to
+  // the page itself, opening in a new tab.
+  const titles = await titlesPromise;
+  const pageList = document.getElementById("top-pages");
+  pageList.innerHTML = "";
+  for (const item of dimensionRanking(pages, 10)) {
+    const display = pageDisplay(item.name, titles, CONFIG.SITE_ORIGIN);
+    const li = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = display.href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = display.label;
+    li.appendChild(link);
+    const span = document.createElement("span");
+    span.className = "rank-value";
+    span.textContent = item.views.toLocaleString();
+    li.appendChild(span);
+    pageList.appendChild(li);
+  }
+  renderRanking("top-sources", sources, 8);
   gateEl.hidden = true;
   expiredEl.hidden = true;
   dashboardEl.hidden = false;
