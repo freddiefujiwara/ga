@@ -1,4 +1,4 @@
-// Requests to the ga4-gas endpoint (GET with query parameters; the
+// Requests to the ga-gas endpoint (GET with query parameters; the
 // bridge is a plain doGet). Auth travels as an id_token parameter
 // (Google sign-in) or a share_token parameter (temporary access link).
 // Each function returns the parsed JSON ({ ok: true, ... } on success).

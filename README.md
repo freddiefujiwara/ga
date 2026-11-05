@@ -1,6 +1,6 @@
 # ga
 
-freddiefujiwara.com のアクセス解析ページ（https://freddiefujiwara.com/ga/）。GA4 の集計を ga4-gas 経由で表示する自分専用ダッシュボード。
+freddiefujiwara.com のアクセス解析ページ（https://freddiefujiwara.com/ga/）。GA4 の集計を ga-gas 経由で表示する自分専用ダッシュボード。
 
 ## 画面の内容
 
@@ -15,11 +15,11 @@ freddiefujiwara.com のアクセス解析ページ（https://freddiefujiwara.com
 
 - Googleログイン（許可されたアカウント）でデータ表示と一時アクセスリンクの発行ができる
 - 一時アクセスリンク（`#share=...`、30日有効）ならログイン不要で開ける。再発行で旧リンクは無効になる
-- 認可の判定は ga4-gas 側で行い、クライアント側に許可メールの判定は持たせない
+- 認可の判定は ga-gas 側で行い、クライアント側に許可メールの判定は持たせない
 
 ## 開発とデプロイ
 
 - `npm test`：vitest 単体テスト
-- `npm run build`：本番ビルド（dist、ベース /ga/、本番 ga4-gas に接続）
-- `npm run build:staging`：ステージングビルド（dist-staging、ベース /ga/staging/、VITE_GAS_ENDPOINT で ga4-gas-staging に接続、VITE_STAGING=1 でバナー表示）
+- `npm run build`：本番ビルド（dist、ベース /ga/、本番 ga-gas に接続）
+- `npm run build:staging`：ステージングビルド（dist-staging、ベース /ga/staging/、VITE_GAS_ENDPOINT で ga-gas-staging に接続、VITE_STAGING=1 でバナー表示）
 - CI：PR ではステージングへだけデプロイされ単体テスト＋E2E（e2e/staging.check.js、APP=ga）がゲートになる。main へのマージで本番へデプロイ
