@@ -12,7 +12,7 @@ import {
   fetchArticleTitles,
   pageDisplay,
 } from "./api.js";
-import { buildLineChartSvg } from "./chart.js";
+import { buildLineChartSvg, tooltipText } from "./chart.js";
 import {
   parseShareToken,
   buildShareUrl,
@@ -111,6 +111,7 @@ async function loadDashboard() {
   document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
     dailySeries(daily),
   );
+  wireChartTooltip();
   const renderRanking = (elId, response, limit) => {
     const list = document.getElementById(elId);
     list.innerHTML = "";
@@ -151,6 +152,46 @@ async function loadDashboard() {
   logoutBtn.hidden = !idToken;
   shareCardEl.hidden = !idToken;
   return true;
+}
+
+// --- Daily chart tooltip (hover on PC, tap on touch) ---
+
+const chartTooltipEl = document.getElementById("chart-tooltip");
+
+function showChartTooltip(pointEl) {
+  chartTooltipEl.textContent = tooltipText({
+    date: pointEl.dataset.date,
+    views: pointEl.dataset.views,
+  });
+  const rect = pointEl.getBoundingClientRect();
+  chartTooltipEl.style.left = `${rect.left + rect.width / 2}px`;
+  chartTooltipEl.style.top = `${rect.top}px`;
+  chartTooltipEl.hidden = false;
+}
+
+function hideChartTooltip() {
+  chartTooltipEl.hidden = true;
+}
+
+let chartTooltipWired = false;
+
+function wireChartTooltip() {
+  if (chartTooltipWired) {
+    return;
+  }
+  chartTooltipWired = true;
+  const chart = document.getElementById("daily-chart");
+  const onPoint = (event) => {
+    const pointEl = event.target.closest(".chart-point");
+    if (pointEl) {
+      showChartTooltip(pointEl);
+    } else if (event.type === "pointerdown") {
+      hideChartTooltip();
+    }
+  };
+  chart.addEventListener("pointermove", onPoint);
+  chart.addEventListener("pointerdown", onPoint);
+  chart.addEventListener("pointerleave", hideChartTooltip);
 }
 
 function onSignedIn(credential) {
