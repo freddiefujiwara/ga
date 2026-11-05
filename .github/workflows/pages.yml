@@ -1,0 +1,42 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - run: npm install
+    - run: npm test
+    - run: npm run build
+
+    - name: Build staging variant into dist/staging
+      env:
+        VITE_GAS_ENDPOINT: "https://script.google.com/macros/s/AKfycbyRCLUuKbRElDdlUc0Rqh6Qxdfxd5R8hICpRe-keEyGCe1z-mC9gfN798MlXfQgY8kw/exec"
+        VITE_STAGING: "1"
+      run: |
+        npm run build:staging
+        mkdir -p dist/staging
+        cp -r dist-staging/* dist/staging/
+
+    - name: Deploy to GitHub Pages
+      if: github.event_name == 'push'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
