@@ -20,7 +20,7 @@ for (const app of targets) {
     });
     const resp = await page.goto(stagingPath(app));
     expect(resp.status()).toBe(200);
-    await expect(page.getByText("ステージング環境です")).toBeVisible();
+    await expect(page.getByText("STAGING")).toBeVisible();
     if (app.gas) {
       const ids = GAS[app.gas];
       if (app.dataOnLoad) {
