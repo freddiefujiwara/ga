@@ -1,29 +1,82 @@
 // Minimal SVG line chart for the daily views series. Pure string
 // building so it can be unit-tested without a DOM.
+//
+// The chart carries the data on its points: every day gets an
+// invisible, finger-sized hit circle (class "chart-point", with
+// data-date / data-views) that main.js turns into a tooltip on
+// hover and tap. A handful of date labels under the axis give the
+// 28 days a readable scale.
+
+// "20261102" -> "11/2"
+export function formatDateLabel(yyyymmdd) {
+  const m = String(yyyymmdd).slice(4);
+  return `${Number(m.slice(0, 2))}/${Number(m.slice(2, 4))}`;
+}
+
+// "20261102" -> "2026年11月2日"
+export function formatDateFull(yyyymmdd) {
+  const s = String(yyyymmdd);
+  return `${s.slice(0, 4)}年${Number(s.slice(4, 6))}月${Number(s.slice(6, 8))}日`;
+}
+
+export function tooltipText(point) {
+  return `${formatDateFull(point.date)} · ${Number(point.views).toLocaleString()}回`;
+}
+
+// Indices of up to `count` evenly spaced ticks, always including
+// the first and last point.
+export function tickIndices(length, count = 5) {
+  if (length <= 0) {
+    return [];
+  }
+  if (length <= count) {
+    return Array.from({ length }, (_, i) => i);
+  }
+  const indices = [];
+  for (let i = 0; i < count; i += 1) {
+    const idx = Math.round((i * (length - 1)) / (count - 1));
+    if (!indices.includes(idx)) {
+      indices.push(idx);
+    }
+  }
+  return indices;
+}
 
 export function buildLineChartSvg(points, options = {}) {
   const width = options.width || 720;
-  const height = options.height || 180;
-  const padding = options.padding || 24;
+  const height = options.height || 196;
+  const pad = options.padding || 24;
+  const padBottom = pad + 22; // room for the date labels
   if (!points || points.length === 0) {
     return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="日別表示回数"></svg>`;
   }
   const max = Math.max(...points.map((p) => p.views), 1);
-  const innerW = width - padding * 2;
-  const innerH = height - padding * 2;
+  const innerW = width - pad * 2;
+  const innerH = height - pad - padBottom;
   const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
   const coords = points.map((p, i) => {
-    const x = padding + stepX * i;
-    const y = padding + innerH - (p.views / max) * innerH;
+    const x = pad + stepX * i;
+    const y = pad + innerH - (p.views / max) * innerH;
     return [Number(x.toFixed(1)), Number(y.toFixed(1))];
   });
   const polyline = coords.map(([x, y]) => `${x},${y}`).join(" ");
   const dots = coords
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.5"></circle>`)
+    .join("");
+  const hits = coords
     .map(
       ([x, y], i) =>
-        `<circle cx="${x}" cy="${y}" r="2.5"><title>${points[i].date}: ${points[i].views}</title></circle>`,
+        `<circle class="chart-point" cx="${x}" cy="${y}" r="12" data-date="${points[i].date}" data-views="${points[i].views}"></circle>`,
     )
     .join("");
-  const maxLabel = `<text x="${padding}" y="${padding - 8}" font-size="11">最大 ${max}</text>`;
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="日別表示回数"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${maxLabel}</svg>`;
+  const axisLabels = tickIndices(points.length)
+    .map((i) => {
+      const [x] = coords[i];
+      const anchor =
+        i === 0 ? "start" : i === points.length - 1 ? "end" : "middle";
+      return `<text class="chart-axis-label" x="${x}" y="${height - 6}" text-anchor="${anchor}">${formatDateLabel(points[i].date)}</text>`;
+    })
+    .join("");
+  const maxLabel = `<text x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="日別表示回数"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
 }

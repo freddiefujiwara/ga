@@ -260,6 +260,30 @@ textarea:disabled {
   stroke: #4da3ff;
 }
 
+.chart-point {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.chart-axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.chart-tooltip {
+  position: fixed;
+  transform: translate(-50%, -140%);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+}
+
 .ranking {
   margin: 8px 0 8px 20px;
   padding: 0;
@@ -274,3 +298,4 @@ textarea:disabled {
   font-weight: 700;
   margin-left: 8px;
 }
+
