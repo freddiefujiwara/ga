@@ -229,6 +229,20 @@ if (hashToken) {
     })
     .catch(() => showExpired());
 } else {
-  showGate();
-  initGoogleSignIn();
+  // Probe the bridge once on load, like the other apps do. A 401 just
+  // means "sign in"; if the bridge ever answers anonymously, go
+  // straight to the dashboard.
+  fetchReport(CONFIG.GAS_ENDPOINT, {}, { dimensions: "" })
+    .then((result) => {
+      if (result.ok) {
+        loadDashboard();
+      } else {
+        showGate();
+        initGoogleSignIn();
+      }
+    })
+    .catch(() => {
+      showGate();
+      initGoogleSignIn();
+    });
 }
