@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>アクセス解析</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="アクセス解析" />
+    <meta property="og:description" content="freddiefujiwara.com のアクセス解析（GA4）" />
+    <meta property="og:url" content="https://freddiefujiwara.com/ga/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="アクセス解析" />
+    <meta name="twitter:description" content="freddiefujiwara.com のアクセス解析（GA4）" />
+    <link rel="icon"
+  href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script type="module" crossorigin src="/ga/staging/assets/index-Ls2FVTvF.js"></script>
+    <link rel="stylesheet" crossorigin href="/ga/staging/assets/index-Dm6IC84b.css">
+  </head>
+  <body>
+    <div class="layout">
+      <header class="header">
+        <h1>アクセス解析</h1>
+        <div class="header-actions">
+          <div class="header-buttons">
+            <button id="theme-toggle" class="theme-toggle" type="button">ライト</button>
+            <button id="logout" class="theme-toggle" type="button" hidden>ログアウト</button>
+          </div>
+        </div>
+      </header>
+      <main>
+        <section id="gate" class="table-wrap auth-gate">
+          <h2 class="section-title">Googleログインが必要です</h2>
+          <p class="meta">許可されたアカウントでサインインしてください。</p>
+          <div id="signin" class="google-login-button"></div>
+          <p id="gate-error" class="error"></p>
+        </section>
+        <section id="share-expired" class="table-wrap auth-gate" hidden>
+          <h2 class="section-title">リンクの有効期限が切れています</h2>
+          <p class="meta">この一時アクセスリンクは無効か、期限切れです。発行者に新しいリンクを依頼してください。</p>
+        </section>
+        <div id="dashboard" hidden>
+          <section class="table-wrap">
+            <h2 class="section-title">直近28日間</h2>
+            <p id="account" class="meta"></p>
+            <div class="totals-row">
+              <div class="total-box">
+                <div class="total-label">表示回数</div>
+                <div class="total-value" id="total-views">-</div>
+              </div>
+              <div class="total-box">
+                <div class="total-label">ユーザー</div>
+                <div class="total-value" id="total-users">-</div>
+              </div>
+              <div class="total-box">
+                <div class="total-label">セッション</div>
+                <div class="total-value" id="total-sessions">-</div>
+              </div>
+            </div>
+            <div id="daily-chart" class="chart-wrap"></div>
+          </section>
+          <section class="table-wrap">
+            <h2 class="section-title">ページ別 上位10件</h2>
+            <ol id="top-pages" class="ranking"></ol>
+          </section>
+          <section class="table-wrap">
+            <h2 class="section-title">参照元 上位8件</h2>
+            <ol id="top-sources" class="ranking"></ol>
+          </section>
+        </div>
+        <section id="share-card" class="table-wrap" hidden>
+          <h2 class="section-title">一時アクセスリンク</h2>
+          <p class="meta">ログイン不要で1か月間このページを使えるURLを発行します。新しいURLを発行すると、前のURLは無効になります。この画面を閉じると発行したURLは再表示できません。</p>
+          <div id="share-issued" hidden>
+            <p>
+              <strong id="share-remaining"></strong>
+              <span class="meta">（<span id="share-expires"></span> まで有効）</span>
+            </p>
+            <div class="share-url-row">
+              <input id="share-url" class="share-url-input" type="text" readonly aria-label="一時アクセスURL" />
+              <button id="share-copy" class="theme-toggle" type="button">URLをコピー</button>
+            </div>
+            <div class="composer-row">
+              <button id="share-reissue" class="theme-toggle" type="button">新しいURLを発行し直す</button>
+              <button id="share-revoke" class="theme-toggle" type="button">今すぐ無効化する</button>
+            </div>
+          </div>
+          <p id="share-issue-row">
+            <button id="share-issue" class="theme-toggle" type="button">1か月間有効なURLを発行</button>
+          </p>
+          <p id="share-status" class="meta"></p>
+        </section>
+      </main>
+    </div>
+
+  </body>
+</html>
