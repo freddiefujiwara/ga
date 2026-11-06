@@ -10,7 +10,7 @@ import {
   dailySeries,
   dimensionRanking,
   fetchArticleTitles,
-  pageDisplay,
+  pageRanking,
 } from "./api.js";
 import { buildLineChartSvg, tooltipText } from "./chart.js";
 import {
@@ -88,7 +88,9 @@ async function loadDashboard() {
       metrics: "screenPageViews",
       limit: 40,
     }),
-    fetchReport(CONFIG.GAS_ENDPOINT, auth(), { limit: 10 }),
+    // Fetch well past the top 10: the same article can be split
+    // across two page paths, and the rows are merged before ranking.
+    fetchReport(CONFIG.GAS_ENDPOINT, auth(), { limit: 250 }),
     fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
       dimensions: "sessionDefaultChannelGroup",
       limit: 8,
@@ -126,18 +128,18 @@ async function loadDashboard() {
     }
   };
   // Page rows show the article title (from the blog RSS) and link to
-  // the page itself, opening in a new tab.
+  // the page itself, opening in a new tab. Split article paths are
+  // merged into a single row by pageRanking.
   const titles = await titlesPromise;
   const pageList = document.getElementById("top-pages");
   pageList.innerHTML = "";
-  for (const item of dimensionRanking(pages, 10)) {
-    const display = pageDisplay(item.name, titles, CONFIG.SITE_ORIGIN);
+  for (const item of pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 10)) {
     const li = document.createElement("li");
     const link = document.createElement("a");
-    link.href = display.href;
+    link.href = item.href;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = display.label;
+    link.textContent = item.label;
     li.appendChild(link);
     const span = document.createElement("span");
     span.className = "rank-value";

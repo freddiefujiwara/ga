@@ -137,6 +137,21 @@ const KNOWN_PAGES = {
   "/ga/": "アクセス解析",
 };
 
+// The identity a pagePath counts under in the ranking. Blog articles
+// were recorded both as /<id> (the SPA's base-relative route) and as
+// /blog/<id> (the real URL); both canonicalize to /blog/<id> so their
+// views merge into one row. Every other path is its own identity.
+export function canonicalPageKey(path) {
+  const id = String(path || "").replace(/^\/(blog\/)?/, "").replace(/\/$/, "");
+  // Article ids are the long URL-safe document tokens (they start
+  // with a digit); app pages such as /list-of-stuff/ are not articles
+  // and keep their own identity.
+  if (/^[0-9][A-Za-z0-9_-]{24,}$/.test(id)) {
+    return `/blog/${id}`;
+  }
+  return path;
+}
+
 // Shape one GA pagePath into a display label and a link target.
 // Article paths appear both as /<id> and /blog/<id>; both resolve to
 // the canonical /blog/<id> URL. Unknown paths keep the raw path as
@@ -151,4 +166,21 @@ export function pageDisplay(path, titles, origin) {
     return { label: titles.get(id), href: href(`/blog/${id}`) };
   }
   return { label: path, href: href(path) };
+}
+
+// Build the page ranking with split article paths merged: rows that
+// share a canonical key are summed first, then sorted by views.
+// Returns [{ label, href, views }] ready to render.
+export function pageRanking(response, titles, origin, limit = 10) {
+  const merged = new Map();
+  for (const row of rowsOf(response)) {
+    const path = row.dimensionValues[0].value;
+    const views = Number(row.metricValues[0].value) || 0;
+    const key = canonicalPageKey(path);
+    merged.set(key, (merged.get(key) || 0) + views);
+  }
+  return [...merged.entries()]
+    .map(([key, views]) => ({ ...pageDisplay(key, titles, origin), views }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, limit);
 }

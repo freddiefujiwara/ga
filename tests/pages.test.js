@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseRssTitles, pageDisplay } from "../src/api.js";
+import {
+  parseRssTitles,
+  pageDisplay,
+  canonicalPageKey,
+  pageRanking,
+} from "../src/api.js";
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -92,5 +97,72 @@ describe("pageDisplay", () => {
       origin,
     );
     expect(d.label).toBe("/1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8");
+  });
+});
+
+describe("canonicalPageKey", () => {
+  it("merges the bare and /blog/-prefixed article paths", () => {
+    const id = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
+    expect(canonicalPageKey(`/${id}`)).toBe(`/blog/${id}`);
+    expect(canonicalPageKey(`/blog/${id}`)).toBe(`/blog/${id}`);
+  });
+
+  it("leaves app pages and the top page untouched", () => {
+    expect(canonicalPageKey("/")).toBe("/");
+    expect(canonicalPageKey("/blog/")).toBe("/blog/");
+    expect(canonicalPageKey("/list-of-stuff/")).toBe("/list-of-stuff/");
+    expect(canonicalPageKey("/ga/")).toBe("/ga/");
+  });
+});
+
+describe("pageRanking", () => {
+  const titles = parseRssTitles(RSS);
+  const origin = "https://freddiefujiwara.com";
+  const row = (path, views) => ({
+    dimensionValues: [{ value: path }],
+    metricValues: [{ value: String(views) }],
+  });
+  const response = (rows) => ({ ok: true, data: { rows } });
+
+  it("sums split article paths into one row and re-sorts", () => {
+    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
+    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
+    const ranking = pageRanking(
+      response([
+        row(`/${idA}`, 300),
+        row(`/blog/${idB}`, 120),
+        row("/", 100),
+        row(`/blog/${idA}`, 86),
+      ]),
+      titles,
+      origin,
+      10,
+    );
+    expect(ranking).toEqual([
+      {
+        label: "2026-11-02 Museのご紹介 & 使い方",
+        href: `${origin}/blog/${idA}`,
+        views: 386,
+      },
+      {
+        label: "2026-10-31 川口の行きたい店まとめ",
+        href: `${origin}/blog/${idB}`,
+        views: 120,
+      },
+      { label: "トップページ", href: `${origin}/`, views: 100 },
+    ]);
+  });
+
+  it("keeps different articles and app pages separate", () => {
+    const ranking = pageRanking(
+      response([row("/list-of-stuff/", 50), row("/blog/", 40)]),
+      titles,
+      origin,
+      10,
+    );
+    expect(ranking).toEqual([
+      { label: "持ち物リスト", href: `${origin}/list-of-stuff/`, views: 50 },
+      { label: "ブログ トップ", href: `${origin}/blog/`, views: 40 },
+    ]);
   });
 });
