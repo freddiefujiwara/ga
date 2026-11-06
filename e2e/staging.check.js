@@ -56,6 +56,10 @@ for (const app of targets) {
         // staging backend is alive and reachable.
         expect(data.ok).toBe(false);
         expect(typeof data.error).toBe("string");
+      } else if (app.gas === "bucket") {
+        // bucket-list is auth-gated even in staging; its error shape
+        // is { error: { code, message } }.
+        expect(data.error.code).toBe(401);
       } else {
         // health / asset are auth-gated even in staging.
         expect(data.status).toBe(401);
