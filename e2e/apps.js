@@ -60,7 +60,7 @@ export const APPS = [
   { name: "health", path: "/health/", gas: "health", dataOnLoad: true },
   { name: "asset", path: "/asset/", gas: "asset", dataOnLoad: true },
   { name: "ga", path: "/ga/", gas: "ga", dataOnLoad: true },
-  { name: "bucket", path: "/bucket-list/", gas: "bucket", dataOnLoad: false },
+  { name: "bucket", path: "/bucket-list-admin/", gas: "bucket", dataOnLoad: false },
 ];
 
 export const stagingPath = (app) => `${app.path}staging/`;
