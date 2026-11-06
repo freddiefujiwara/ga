@@ -21,6 +21,7 @@ export const STAGING_LINKS = [
   ["健康", "/health/staging/"],
   ["資産", "/asset/staging/"],
   ["GA", "/ga/staging/"],
+  ["バケットリスト", "/bucket-list/staging/"],
 ];
 
 // The production root of this app. The staging build's base is
