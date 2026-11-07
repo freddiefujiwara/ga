@@ -15,7 +15,7 @@ export function isStagingBuild(env = import.meta.env) {
 export const STAGING_LINKS = [
   ["トップ", "/staging/"],
   ["ブログ", "/blog/staging/"],
-  ["持ち物", "/list-of-stuff/staging/"],
+  ["持ち物", "/list-of-stuff-admin/staging/"],
   ["ツイート", "/tweet/staging/"],
   ["アラーム", "/alarm/staging/"],
   ["健康", "/health/staging/"],
