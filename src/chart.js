@@ -47,8 +47,9 @@ export function buildLineChartSvg(points, options = {}) {
   const height = options.height || 196;
   const pad = options.padding || 24;
   const padBottom = pad + 22; // room for the date labels
+  const ariaLabel = options.label || "日別表示回数";
   if (!points || points.length === 0) {
-    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="日別表示回数"></svg>`;
+    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"></svg>`;
   }
   const max = Math.max(...points.map((p) => p.views), 1);
   const innerW = width - pad * 2;
@@ -78,5 +79,5 @@ export function buildLineChartSvg(points, options = {}) {
     })
     .join("");
   const maxLabel = `<text x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="日別表示回数"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
 }
