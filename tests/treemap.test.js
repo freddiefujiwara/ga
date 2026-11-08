@@ -6,6 +6,7 @@ import {
   genreTreemap,
   hasLabelRoom,
   squarifiedLayout,
+  tileLabelLevel,
 } from "../src/treemap.js";
 
 // Same fixture numbers as tests/overview.test.js.
@@ -243,6 +244,47 @@ describe("deltaTone / hasLabelRoom", () => {
   });
 });
 
+describe("tileLabelLevel", () => {
+  it("grants the full stack only to tiles tall and wide enough for three lines", () => {
+    expect(tileLabelLevel({ w: 24, h: 42 })).toBe("full");
+    expect(tileLabelLevel({ w: 100, h: 100 })).toBe("full");
+    // One percent short on either axis drops the total line.
+    expect(tileLabelLevel({ w: 24, h: 41 })).toBe("value");
+    expect(tileLabelLevel({ w: 23, h: 60 })).toBe("value");
+  });
+
+  it("keeps name + average on mid-size tiles", () => {
+    expect(tileLabelLevel({ w: 22, h: 30 })).toBe("value");
+    expect(tileLabelLevel({ w: 60, h: 35 })).toBe("value");
+    // Too short for the big figure: the name alone stays.
+    expect(tileLabelLevel({ w: 30, h: 29 })).toBe("name");
+    expect(tileLabelLevel({ w: 21, h: 40 })).toBe("name");
+  });
+
+  it("keeps the name alone on small tiles and nothing below that", () => {
+    expect(tileLabelLevel({ w: 14, h: 20 })).toBe("name");
+    expect(tileLabelLevel({ w: 40, h: 19 })).toBe("none");
+    expect(tileLabelLevel({ w: 13, h: 40 })).toBe("none");
+    expect(tileLabelLevel({ w: 10, h: 10 })).toBe("none");
+  });
+
+  it("matches the tiles that overflowed in the owner's screenshot", () => {
+    // Rectangles estimated from the shot: the cramped tiles must
+    // no longer receive the lines that did not fit.
+    expect(tileLabelLevel({ w: 44, h: 53 })).toBe("full"); // 街歩き・スポット
+    expect(tileLabelLevel({ w: 26, h: 30 })).toBe("value"); // 日常・その他: 合計が見切れた
+    expect(tileLabelLevel({ w: 26, h: 15 })).toBe("none"); // 理容・リラクゼーション: 名前が溢れた
+    expect(tileLabelLevel({ w: 26, h: 12 })).toBe("none"); // グルメ: 数字が下端に被った
+  });
+
+  it("treats junk as no room", () => {
+    expect(tileLabelLevel(null)).toBe("none");
+    expect(tileLabelLevel(undefined)).toBe("none");
+    expect(tileLabelLevel({})).toBe("none");
+    expect(tileLabelLevel({ w: NaN, h: 50 })).toBe("none");
+  });
+});
+
 describe("genreTreemap", () => {
   // The totals and the averages rank these rows differently on
   // purpose: グルメ has the bigger total, カフェ・スイーツ the
@@ -285,6 +327,35 @@ describe("genreTreemap", () => {
       totalText: "合計 3000",
     });
     expect(legend[2]).toMatchObject({ avg: null, avgLabel: "—" });
+  });
+
+  it("stamps every tile with the level its own size earns", () => {
+    const { tiles } = genreTreemap(rows, pick);
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      expect(tile.labelLevel).toBe(tileLabelLevel(tile));
+      expect(tile.labelRoom).toBe(tile.labelLevel !== "none");
+    }
+    // Both fixture tiles span the full height, so both earn the
+    // full stack.
+    expect(tiles.every((t) => t.labelLevel === "full")).toBe(true);
+  });
+
+  it("leaves a cramped tile blank while the legend keeps its figures", () => {
+    const skewed = [
+      { genre: "街歩き・スポット", totalViews: 29702, avgViews: 29702 },
+      { genre: "グルメ", totalViews: 900, avgViews: 900 },
+    ];
+    const { tiles, legend } = genreTreemap(skewed, pick);
+    const big = tiles.find((t) => t.name === "街歩き・スポット");
+    const small = tiles.find((t) => t.name === "グルメ");
+    expect(big.labelLevel).toBe("full");
+    // The small tile's share of the area is ~3%, far too flat or
+    // narrow for any line of text.
+    expect(small.labelLevel).toBe("none");
+    expect(small.labelRoom).toBe(false);
+    expect(legend.map((e) => e.name)).toEqual(["街歩き・スポット", "グルメ"]);
+    expect(legend[1]).toMatchObject({ avgLabel: "900", totalText: "合計 900" });
   });
 
   it("tolerates junk input", () => {

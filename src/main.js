@@ -244,9 +244,10 @@ async function loadDashboard() {
 // Both genre sections lead with the visuals, in the same order:
 // a treemap whose tile area is the genre's per-item average, the
 // legend directly under the tiles, then a bar chart comparing
-// the same average; the full table follows below. Tiles too
-// small for text stay blank; the legend under the map lists
-// every genre's average and total.
+// the same average; the full table follows below. Each tile
+// draws only the text lines its size can hold (see
+// tileLabelLevel); the legend under the map lists every genre's
+// average and total, so nothing is lost on the small tiles.
 
 function renderGenreTreemap(mapEl, legendEl, map) {
   mapEl.innerHTML = "";
@@ -264,18 +265,26 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     div.style.width = `${tile.w}%`;
     div.style.height = `${tile.h}%`;
     div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
-    if (tile.labelRoom) {
+    // Draw only the lines this tile's size can hold: the level
+    // comes from tileLabelLevel, and a line that is not drawn
+    // cannot overflow. The legend below carries every figure.
+    const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
+    if (level !== "none") {
       const name = document.createElement("div");
       name.className = "treemap-tile-name";
       name.textContent = tile.name;
+      div.appendChild(name);
+    }
+    if (level === "full" || level === "value") {
       const value = document.createElement("div");
       value.className = "treemap-tile-value";
       value.textContent = tile.avgLabel;
+      div.appendChild(value);
+    }
+    if (level === "full") {
       const total = document.createElement("div");
       total.className = "treemap-tile-sub";
       total.textContent = tile.totalText;
-      div.appendChild(name);
-      div.appendChild(value);
       div.appendChild(total);
     }
     mapEl.appendChild(div);
