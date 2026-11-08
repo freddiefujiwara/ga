@@ -17,8 +17,8 @@
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/ga/assets/index-BAVv0r2c.js"></script>
-    <link rel="stylesheet" crossorigin href="/ga/assets/index-RGqdB6T_.css">
+    <script type="module" crossorigin src="/ga/assets/index-D15sqQn6.js"></script>
+    <link rel="stylesheet" crossorigin href="/ga/assets/index-DiL9dMMp.css">
   </head>
   <body>
     <div class="layout">
@@ -53,9 +53,8 @@
           <div id="tab-overview" class="tab-panel">
             <section class="table-wrap">
               <h2 class="section-title">チャネルの大きさ</h2>
-              <div id="channel-treemap" class="treemap"></div>
-              <ul id="channel-legend" class="channel-legend"></ul>
-              <p class="meta">タイルの面積は各チャネルの指標の大きさ、色は前回比です（増えたら緑、減ったら赤）。指標はチャネルごとに異なります。</p>
+              <div id="channel-bars" class="demo-bars channel-bars"></div>
+              <p class="meta">棒の長さは各チャネルの指標の大きさ、色は前回比です（増えたら緑、減ったら赤）。指標はチャネルごとに異なります。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">主要KPI</h2>
@@ -91,7 +90,8 @@
                     <ol id="sns-countries" class="ranking"></ol>
                   </div>
                 </div>
-                <h3 class="subsection-title">投稿ごと（直近30件）</h3>
+                <h3 class="subsection-title">投稿ごと</h3>
+                <p class="meta" id="sns-media-range"></p>
                 <div class="table-scroll">
                   <table class="data-table" id="sns-media-table">
                     <thead>
@@ -112,24 +112,39 @@
                     <tbody id="sns-media-body"></tbody>
                   </table>
                 </div>
-                <h3 class="subsection-title">ジャンル別（直近の投稿）</h3>
+                <h3 class="subsection-title">ジャンル別</h3>
+                <p class="meta">
+                  <label>期間
+                    <select id="sns-genre-period">
+                      <option value="all">取得分すべて</option>
+                      <option value="30d">過去30日</option>
+                      <option value="7d">過去7日</option>
+                    </select>
+                  </label>
+                </p>
+                <p class="meta" id="sns-genre-range"></p>
+                <div id="sns-genre-treemap" class="treemap"></div>
+                <ul id="sns-genre-legend" class="channel-legend"></ul>
+                <p class="meta">平均再生回数</p>
+                <div id="sns-genre-bars" class="demo-bars genre-bars"></div>
                 <div class="table-scroll">
                   <table class="data-table" id="sns-genre-table">
                     <thead>
                       <tr>
-                        <th>ジャンル</th>
-                        <th class="num">投稿数</th>
-                        <th class="num">再生合計</th>
-                        <th class="num">平均再生</th>
-                        <th class="num">保存率</th>
-                        <th class="num">いいね率</th>
-                        <th>再生トップ</th>
+                        <th class="sortable" data-sort-key="genre">ジャンル</th>
+                        <th class="num sortable" data-sort-key="count">投稿数</th>
+                        <th class="num sortable" data-sort-key="totalViews">再生合計</th>
+                        <th class="num sortable" data-sort-key="avgViews">平均再生</th>
+                        <th class="num sortable" data-sort-key="saveRate">保存率</th>
+                        <th class="num sortable" data-sort-key="likeRate">いいね率</th>
+                        <th class="sortable" data-sort-key="top">再生トップ</th>
                       </tr>
                     </thead>
                     <tbody id="sns-genre-body"></tbody>
                   </table>
                 </div>
                 <p class="meta">ジャンルはキャプションのキーワードで振り分けています。保存率・いいね率は、投稿ごとの率（保存÷再生、いいね÷再生）の平均です。</p>
+                <p class="meta">集計は取得済みの投稿だけが対象です（すべての投稿ではありません）。</p>
                 <div id="sns-notes"></div>
               </div>
             </section>
