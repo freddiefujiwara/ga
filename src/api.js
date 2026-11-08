@@ -199,14 +199,6 @@ export function snsTotalFollowers(detail) {
   return parts.length ? parts.reduce((sum, v) => sum + v, 0) : null;
 }
 
-// The profile-links-taps card: the official API returns 0 for this
-// metric even when the Instagram app shows real taps (measured on
-// 2026-11-09), so a 0 is displayed as "—" instead of a fake count.
-// Any other number is shown as-is.
-export function formatTapsCount(value) {
-  return value === 0 ? "—" : formatCount(value);
-}
-
 // Overview cards for the SNS section: [{ label, value }] with the
 // values already formatted ("—" for anything missing).
 export function snsOverview(detail) {
@@ -224,7 +216,6 @@ export function snsOverview(detail) {
     { label: "リーチ（過去30日）", value: formatCount(ig.reach_30d) },
     { label: "反応した人数（過去30日）", value: formatCount(ig.accounts_engaged_30d) },
     { label: "反応の合計（過去30日）", value: formatCount(interactions.total) },
-    { label: "プロフィールのリンク（過去30日）", value: formatTapsCount(ig.profile_links_taps_30d) },
     { label: "フォロワー以外（過去30日）", value: formatPercent(ig.non_follower_pct) },
     { label: "フォロー（過去30日）", value: formatCount(ig.follows_30d) },
     { label: "フォロー解除（過去30日）", value: formatCount(ig.unfollows_30d) },
