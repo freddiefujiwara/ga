@@ -11,7 +11,7 @@
 // before general gourmet because cafe captions routinely carry
 // gourmet hashtags too.
 
-import { captionHead, mediaTypeLabel } from "./api.js";
+import { captionHead, formatCount, mediaTypeLabel } from "./api.js";
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 
@@ -128,7 +128,126 @@ export function formatRate(value) {
   return isNum(value) ? `${(value * 100).toFixed(1)}%` : "—";
 }
 
-// Per-genre rollup of the recent-media snapshot:
+// Period windows for the genre rollup, keyed by the value of the
+// period selector on the Instagram tab. "all" keeps every fetched
+// post; the ranged windows keep the posts published within the
+// last N days (counted back from `now`).
+export const GENRE_PERIODS = [
+  { key: "all", label: "取得分すべて", days: null },
+  { key: "30d", label: "過去30日", days: 30 },
+  { key: "7d", label: "過去7日", days: 7 },
+];
+
+const postedTime = (post) => {
+  const time = post?.posted_at ? new Date(post.posted_at).getTime() : NaN;
+  return Number.isFinite(time) ? time : null;
+};
+
+// The posts of one period window. "all" (and any unknown key)
+// returns the fetched posts untouched; a ranged window keeps the
+// posts whose posted_at falls inside it — a post without a usable
+// date cannot be placed in a window, so it drops out of ranged
+// windows only.
+export function filterMediaByPeriod(media, periodKey, now = new Date()) {
+  const list = Array.isArray(media) ? media : [];
+  const period = GENRE_PERIODS.find((p) => p.key === periodKey);
+  if (!period || period.days === null) {
+    return [...list];
+  }
+  const cutoff = now.getTime() - period.days * 24 * 60 * 60 * 1000;
+  return list.filter((post) => {
+    const time = postedTime(post);
+    return time !== null && time >= cutoff;
+  });
+}
+
+// The oldest and newest post dates in a population, as the raw
+// posted_at strings: { from, to }. Posts without a usable date do
+// not take part; null when no post has one.
+export function mediaDateRange(media) {
+  const list = Array.isArray(media) ? media : [];
+  let from = null;
+  let to = null;
+  for (const post of list) {
+    const time = postedTime(post);
+    if (time === null) {
+      continue;
+    }
+    if (from === null || time < from.time) {
+      from = { time, iso: post.posted_at };
+    }
+    if (to === null || time > to.time) {
+      to = { time, iso: post.posted_at };
+    }
+  }
+  return from ? { from: from.iso, to: to.iso } : null;
+}
+
+// Bar-chart shape for comparing one per-genre average across
+// genres (Instagram: avgViews; blog: perArticle): [{ name, value,
+// valueLabel, pct }] sorted by the value, biggest first, with pct
+// scaled so the biggest bar is 100. Rows whose average is missing
+// keep an empty bar (pct 0, label "—") and sink to the end. The
+// name comes from the row's `genre` (Instagram) or `tag` (blog).
+export function genreAverageBars(rows, valueKey) {
+  const list = Array.isArray(rows) ? rows : [];
+  const entries = list.map((row) => ({
+    name: row ? (row.genre ?? row.tag ?? "") : "",
+    value: row && isNum(row[valueKey]) ? row[valueKey] : null,
+  }));
+  const max = entries.reduce(
+    (biggest, entry) => (entry.value !== null && entry.value > biggest ? entry.value : biggest),
+    0,
+  );
+  return entries
+    .map((entry) => ({
+      ...entry,
+      valueLabel: formatCount(entry.value),
+      pct:
+        entry.value !== null && max > 0
+          ? Math.round((entry.value / max) * 1000) / 10
+          : 0,
+    }))
+    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
+}
+
+// Sort genre-stat rows (either flavour: Instagram rows keyed by
+// `genre`, blog rows keyed by `tag`) by one column. The "top"
+// column sorts by the top entry's view count. Missing values
+// always sink to the bottom, whichever direction is chosen —
+// the same rule sortMedia uses for the per-post table. Returns
+// a new array.
+export function sortGenreRows(rows, key = "totalViews", dir = "desc") {
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  const sign = dir === "asc" ? 1 : -1;
+  const valueOf = (row) => {
+    if (!row) {
+      return null;
+    }
+    const value = key === "top" ? row.top?.views : row[key];
+    return isNum(value) || typeof value === "string" ? value : null;
+  };
+  return [...rows].sort((a, b) => {
+    const av = valueOf(a);
+    const bv = valueOf(b);
+    if (av === null && bv === null) {
+      return 0;
+    }
+    if (av === null) {
+      return 1;
+    }
+    if (bv === null) {
+      return -1;
+    }
+    const cmp =
+      isNum(av) && isNum(bv) ? av - bv : String(av).localeCompare(String(bv));
+    return cmp * sign;
+  });
+}
+
+// Per-genre rollup of a media list:
 // [{ genre, count, totalViews, avgViews, saveRate, likeRate, top }]
 // sorted by total views, biggest first; genres with no posts are
 // omitted. Definitions, chosen so null-heavy snapshots stay sane:
@@ -140,12 +259,10 @@ export function formatRate(value) {
 //   numeric numerator; null when no post qualifies.
 // - top is the most-viewed post of the genre ({ title, views,
 //   permalink }), null when no post reported views.
-export function instagramGenreStats(detail, rules = INSTAGRAM_GENRE_RULES) {
-  const media = Array.isArray(detail?.instagram?.recent_media)
-    ? detail.instagram.recent_media
-    : [];
+export function genreStatsForMedia(media, rules = INSTAGRAM_GENRE_RULES) {
+  const list = Array.isArray(media) ? media : [];
   const groups = new Map();
-  for (const post of media) {
+  for (const post of list) {
     if (!post) {
       continue;
     }
@@ -205,4 +322,14 @@ export function instagramGenreStats(detail, rules = INSTAGRAM_GENRE_RULES) {
         : null,
     }))
     .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count);
+}
+
+// The rollup over the snapshot's full recent-media list; the tab
+// narrows the list with filterMediaByPeriod first when a period
+// window is selected.
+export function instagramGenreStats(detail, rules = INSTAGRAM_GENRE_RULES) {
+  const media = Array.isArray(detail?.instagram?.recent_media)
+    ? detail.instagram.recent_media
+    : [];
+  return genreStatsForMedia(media, rules);
 }

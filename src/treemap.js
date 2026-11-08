@@ -191,3 +191,50 @@ export function channelTreemap(detail, gaTotals, historyRows) {
   });
   return { tiles, legend: channels };
 }
+
+// Genre treemap for the Instagram / blog genre sections: the
+// same look as the channel map, one tile per genre row. `pick`
+// maps a stat row to { name, total, avgText } — the tile area is
+// the total (Instagram: total views; blog: total page views) and
+// avgText is the per-item average line ("平均再生 1,234" /
+// "1記事あたり 56"). Tiles exist only for positive totals; the
+// legend lists every row, in the rows' order, so a genre whose
+// total is zero or missing still reads there.
+export function genreTreemap(rows, pick) {
+  const entries = (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const picked = row ? pick(row) : null;
+      return picked
+        ? {
+            name: picked.name,
+            total: isNum(picked.total) ? picked.total : null,
+            avgText: picked.avgText ?? "",
+          }
+        : null;
+    })
+    .filter(Boolean);
+  const byIndex = new Map(entries.map((entry, index) => [index, entry]));
+  const tiles = squarifiedLayout(
+    entries
+      .map((entry, index) => ({ id: index, value: entry.total }))
+      .filter((item) => isNum(item.value) && item.value > 0),
+    100,
+    100,
+  ).map((rect) => {
+    const entry = byIndex.get(rect.id);
+    return {
+      ...entry,
+      totalLabel: formatCount(entry.total),
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+      labelRoom: hasLabelRoom(rect),
+    };
+  });
+  const legend = entries.map((entry) => ({
+    ...entry,
+    totalLabel: formatCount(entry.total),
+  }));
+  return { tiles, legend };
+}

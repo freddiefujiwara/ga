@@ -3,6 +3,7 @@ import {
   channelAudiences,
   channelTreemap,
   deltaTone,
+  genreTreemap,
   hasLabelRoom,
   squarifiedLayout,
 } from "../src/treemap.js";
@@ -241,5 +242,44 @@ describe("deltaTone / hasLabelRoom", () => {
     expect(hasLabelRoom({ w: 11, h: 8 })).toBe(false);
     expect(hasLabelRoom({ w: 5, h: 90 })).toBe(false);
     expect(hasLabelRoom(null)).toBe(false);
+  });
+});
+
+describe("genreTreemap", () => {
+  const rows = [
+    { genre: "グルメ", totalViews: 3000, avgViews: 1000 },
+    { genre: "カフェ・スイーツ", totalViews: 1000, avgViews: 1000 },
+    { genre: "日常・その他", totalViews: 0, avgViews: null },
+  ];
+  const pick = (row) => ({
+    name: row.genre,
+    total: row.totalViews,
+    avgText: `平均再生 ${row.avgViews ?? "—"}`,
+  });
+
+  it("lays tiles out with areas proportional to the totals", () => {
+    const { tiles } = genreTreemap(rows, pick);
+    expect(tiles.map((t) => t.name)).toEqual(["グルメ", "カフェ・スイーツ"]);
+    const gourmet = tiles.find((t) => t.name === "グルメ");
+    const cafe = tiles.find((t) => t.name === "カフェ・スイーツ");
+    expect((gourmet.w * gourmet.h) / (cafe.w * cafe.h)).toBeCloseTo(3, 5);
+    expect(gourmet.totalLabel).toBe("3,000");
+    expect(gourmet.avgText).toBe("平均再生 1000");
+  });
+
+  it("keeps zero-total rows in the legend only", () => {
+    const { tiles, legend } = genreTreemap(rows, pick);
+    expect(tiles.map((t) => t.name)).not.toContain("日常・その他");
+    expect(legend.map((e) => e.name)).toEqual([
+      "グルメ",
+      "カフェ・スイーツ",
+      "日常・その他",
+    ]);
+    expect(legend[2]).toMatchObject({ total: 0, totalLabel: "0" });
+  });
+
+  it("tolerates junk input", () => {
+    expect(genreTreemap(null, pick)).toEqual({ tiles: [], legend: [] });
+    expect(genreTreemap([], pick)).toEqual({ tiles: [], legend: [] });
   });
 });
