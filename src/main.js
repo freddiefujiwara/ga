@@ -44,7 +44,7 @@ import {
   formatRate,
 } from "./genres.js";
 import { tabFromHash, hashWithTab } from "./tabs.js";
-import { channelTreemap, genreTreemap } from "./treemap.js";
+import { channelBars, genreTreemap } from "./treemap.js";
 import {
   parseShareToken,
   buildShareUrl,
@@ -547,90 +547,58 @@ function renderTopPosts() {
   }
 }
 
-// The channel-size treemap at the top of the overview: one tile
-// per channel, area = audience size, colour = change since the
-// previous collection. Tiles too small for text stay blank; the
-// legend under the map lists every channel's exact numbers.
-function renderChannelTreemap() {
-  const mapEl = document.getElementById("channel-treemap");
-  const legendEl = document.getElementById("channel-legend");
-  const { tiles, legend } = channelTreemap(
+// The channel sizes at the top of the overview, as horizontal
+// bars: bar length = the channel's audience, the fill colour and
+// the change line follow the change since the previous
+// collection (up = green, down = red). Threads shows as a
+// "集計待ち" row with an empty bar until its followers arrive.
+function renderChannelBars() {
+  const wrap = document.getElementById("channel-bars");
+  wrap.innerHTML = "";
+  const bars = channelBars(
     overviewState.detail,
     overviewState.gaTotals,
     overviewState.historyRows,
   );
-  mapEl.innerHTML = "";
-  if (!tiles.length) {
-    const p = document.createElement("p");
-    p.className = "meta";
-    p.textContent = "—";
-    mapEl.appendChild(p);
-  }
-  for (const tile of tiles) {
-    const div = document.createElement("div");
-    div.className = `treemap-tile ${tile.tone}`;
-    div.style.left = `${tile.x}%`;
-    div.style.top = `${tile.y}%`;
-    div.style.width = `${tile.w}%`;
-    div.style.height = `${tile.h}%`;
-    div.title = `${tile.name}：${tile.metricLabel} ${tile.valueLabel}`;
-    if (tile.labelRoom) {
-      const name = document.createElement("div");
-      name.className = "treemap-tile-name";
-      name.textContent = tile.name;
-      const metric = document.createElement("div");
-      metric.className = "treemap-tile-metric";
-      metric.textContent = tile.metricLabel;
-      const value = document.createElement("div");
-      value.className = "treemap-tile-value";
-      value.textContent = tile.valueLabel;
-      div.appendChild(name);
-      div.appendChild(metric);
-      div.appendChild(value);
-      if (tile.deltaLabel) {
-        const delta = document.createElement("div");
-        delta.className = "treemap-tile-delta";
-        delta.textContent = `前回比 ${tile.deltaLabel}`;
-        div.appendChild(delta);
-      }
-    }
-    mapEl.appendChild(div);
-  }
-  legendEl.innerHTML = "";
-  for (const entry of legend) {
-    const li = document.createElement("li");
+  for (const bar of bars) {
+    const row = document.createElement("div");
+    row.className = "demo-bar";
+    const label = document.createElement("span");
+    label.className = "demo-bar-label";
     const name = document.createElement("span");
-    name.className = "channel-legend-name";
-    name.textContent = entry.name;
-    li.appendChild(name);
+    name.className = "channel-bar-name";
+    name.textContent = bar.name;
     const metric = document.createElement("span");
-    metric.className = "channel-legend-metric";
-    metric.textContent = entry.metricLabel;
-    li.appendChild(metric);
-    if (entry.note) {
-      const note = document.createElement("span");
-      note.className = "channel-legend-note";
-      note.textContent = entry.note;
-      li.appendChild(note);
-    } else {
-      const value = document.createElement("span");
-      value.className = "channel-legend-value";
-      value.textContent = entry.valueLabel;
-      li.appendChild(value);
-      if (entry.deltaLabel) {
-        const delta = document.createElement("span");
-        delta.className =
-          "kpi-delta" + (entry.delta > 0 ? " up" : entry.delta < 0 ? " down" : "");
-        delta.textContent = `前回比 ${entry.deltaLabel}`;
-        li.appendChild(delta);
-      }
-    }
-    legendEl.appendChild(li);
+    metric.className = "channel-bar-metric";
+    metric.textContent = bar.metricLabel;
+    label.appendChild(name);
+    label.appendChild(document.createTextNode(" "));
+    label.appendChild(metric);
+    row.appendChild(label);
+    const track = document.createElement("div");
+    track.className = "demo-bar-track";
+    const fill = document.createElement("div");
+    fill.className =
+      "demo-bar-fill" + (bar.tone !== "neutral" ? ` ${bar.tone}` : "");
+    fill.style.width = `${bar.pct}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    const value = document.createElement("span");
+    value.className = "demo-bar-value";
+    value.textContent = bar.note ?? bar.valueLabel;
+    row.appendChild(value);
+    const delta = document.createElement("span");
+    delta.className =
+      "kpi-delta channel-bar-delta" +
+      (bar.delta > 0 ? " up" : bar.delta < 0 ? " down" : "");
+    delta.textContent = bar.deltaLabel ? `前回比 ${bar.deltaLabel}` : "";
+    row.appendChild(delta);
+    wrap.appendChild(row);
   }
 }
 
 function renderOverview() {
-  renderChannelTreemap();
+  renderChannelBars();
   fillKpiBoxes(
     overviewKpis(
       overviewState.detail,

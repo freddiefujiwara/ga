@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   channelAudiences,
-  channelTreemap,
+  channelBars,
   deltaTone,
   genreTreemap,
   hasLabelRoom,
@@ -173,58 +173,56 @@ describe("channelAudiences", () => {
   });
 });
 
-describe("channelTreemap", () => {
-  it("tiles only the channels with a positive audience", () => {
-    const { tiles, legend } = channelTreemap(DETAIL, GA_TOTALS, HISTORY2);
-    expect(tiles.map((tile) => tile.id).sort()).toEqual(["blog", "instagram", "youtube"]);
-    expect(legend.map((entry) => entry.id)).toEqual(["instagram", "blog", "youtube", "threads"]);
-    // The tiles together cover the whole map.
-    const total = tiles.reduce((sum, tile) => sum + area(tile), 0);
-    expect(total).toBeCloseTo(10000, 6);
+describe("channelBars", () => {
+  it("scales bar lengths to the largest channel, in fixed order", () => {
+    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
+    expect(bars.map((bar) => bar.id)).toEqual([
+      "instagram",
+      "blog",
+      "youtube",
+      "threads",
+    ]);
+    const byId = Object.fromEntries(bars.map((bar) => [bar.id, bar]));
+    expect(byId.instagram.pct).toBe(100);
+    expect(byId.blog.pct).toBeCloseTo((678 / 1991) * 100, 1);
+    expect(byId.youtube.pct).toBeCloseTo((9 / 1991) * 100, 1);
+    expect(byId.instagram.valueLabel).toBe("1,991");
   });
 
-  it("gives Instagram the largest tile and colours changes by direction", () => {
-    const { tiles } = channelTreemap(DETAIL, GA_TOTALS, HISTORY2);
-    const biggest = [...tiles].sort((a, b) => area(b) - area(a))[0];
-    expect(biggest.id).toBe("instagram");
-    const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
+  it("colours bars by the direction of the change", () => {
+    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
+    const byId = Object.fromEntries(bars.map((bar) => [bar.id, bar]));
     expect(byId.instagram.tone).toBe("up");
     expect(byId.youtube.tone).toBe("up");
     // The blog has no history, so it stays neutral.
     expect(byId.blog.tone).toBe("neutral");
-  });
 
-  it("colours a shrinking channel red", () => {
     const shrinking = [
       HISTORY2[0],
       { ...HISTORY2[1], ig_followers: 1980, youtube_subscribers: 9 },
     ];
-    const { tiles } = channelTreemap(DETAIL, GA_TOTALS, shrinking);
-    const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
-    expect(byId.instagram.tone).toBe("down");
-    expect(byId.youtube.tone).toBe("neutral");
+    const shrunk = channelBars(DETAIL, GA_TOTALS, shrinking);
+    const shrunkById = Object.fromEntries(shrunk.map((bar) => [bar.id, bar]));
+    expect(shrunkById.instagram.tone).toBe("down");
+    expect(shrunkById.youtube.tone).toBe("neutral");
   });
 
-  it("includes Threads as a tile once its followers are collected", () => {
+  it("keeps Threads as an empty 集計待ち bar until followers arrive", () => {
+    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
+    const threads = bars.find((bar) => bar.id === "threads");
+    expect(threads).toMatchObject({ value: null, pct: 0, note: "集計待ち" });
+
     const detail = { ...DETAIL, threads: { followers: 500 } };
-    const { tiles, legend } = channelTreemap(detail, GA_TOTALS, HISTORY2);
-    expect(tiles.map((tile) => tile.id)).toContain("threads");
-    const threads = legend.find((entry) => entry.id === "threads");
-    expect(threads).toMatchObject({ value: 500, valueLabel: "500", note: null });
+    const withThreads = channelBars(detail, GA_TOTALS, HISTORY2);
+    const joined = withThreads.find((bar) => bar.id === "threads");
+    expect(joined).toMatchObject({ value: 500, valueLabel: "500", note: null });
+    expect(joined.pct).toBeCloseTo((500 / 1991) * 100, 1);
   });
 
-  it("keeps zero-audience channels in the legend but out of the map", () => {
-    const detail = { ...DETAIL, youtube: { subscribers: 0 } };
-    const { tiles, legend } = channelTreemap(detail, GA_TOTALS, HISTORY2);
-    expect(tiles.map((tile) => tile.id)).not.toContain("youtube");
-    const youtube = legend.find((entry) => entry.id === "youtube");
-    expect(youtube).toMatchObject({ value: 0, valueLabel: "0" });
-  });
-
-  it("returns no tiles when nothing has been collected yet", () => {
-    const { tiles, legend } = channelTreemap(null, null, null);
-    expect(tiles).toEqual([]);
-    expect(legend).toHaveLength(4);
+  it("returns empty bars when nothing has been collected yet", () => {
+    const bars = channelBars(null, null, null);
+    expect(bars).toHaveLength(4);
+    expect(bars.every((bar) => bar.pct === 0)).toBe(true);
   });
 });
 

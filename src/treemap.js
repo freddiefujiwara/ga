@@ -1,17 +1,20 @@
-// Channel-size treemap for the overview tab.
+// Channel sizes for the overview tab, plus the genre treemap.
 //
-// Each channel contributes one tile whose area is proportional to
-// its audience size. The metrics differ per channel (followers for
-// Instagram / Threads, subscribers for YouTube, the blog's last-28
-// -days users from GA), so every tile and legend row names its
-// metric alongside the number. Tile colour follows the change
-// since the previous SNS collection, where the history offers one:
-// up = green, down = red, flat or unknown = neutral. The blog has
-// no history, so it is always neutral.
+// Each channel contributes one entry whose size is its audience.
+// The metrics differ per channel (followers for Instagram /
+// Threads, subscribers for YouTube, the blog's last-28-days
+// users from GA), so every entry names its metric alongside the
+// number. The overview shows the sizes as horizontal bars — the
+// channels differ by orders of magnitude, which a treemap's
+// tiles squeezed into unreadable slivers. Bar / tile colour
+// follows the change since the previous SNS collection, where
+// the history offers one: up = green, down = red, flat or
+// unknown = neutral. The blog has no history, so it is always
+// neutral.
 //
-// The layout is the squarified treemap algorithm, computed in an
-// abstract 100x100 box; the renderer turns the coordinates into
-// percentages, so the map rescales with the screen width.
+// The genre sections reuse the squarified treemap layout below:
+// genre totals sit within an order of magnitude of each other,
+// so tiles stay readable there.
 
 import { formatCount, formatDelta, historyDelta } from "./api.js";
 
@@ -163,33 +166,28 @@ export function hasLabelRoom(rect) {
   return Boolean(rect) && rect.w >= 10 && rect.h >= 16;
 }
 
-// Everything the overview needs: { tiles, legend }. Tiles are the
-// channels with a positive audience, laid out over the 100x100
-// box and enriched with their legend data, tone and label room.
-// The legend lists every channel (including zero / uncollected
-// ones) in the fixed channel order.
-export function channelTreemap(detail, gaTotals, historyRows) {
+// Bar rows for the overview's channel sizes: the channel
+// audiences in their fixed order, each with pct (the bar length,
+// scaled so the largest channel is 100) and tone (the colour of
+// the change since the previous collection). A channel without a
+// value yet — Threads while its followers are not collected —
+// gets an empty bar (pct 0) and keeps its "集計待ち" note; once a
+// value arrives it takes its place among the bars.
+export function channelBars(detail, gaTotals, historyRows) {
   const channels = channelAudiences(detail, gaTotals, historyRows);
-  const byId = new Map(channels.map((channel) => [channel.id, channel]));
-  const tiles = squarifiedLayout(
-    channels
-      .filter((channel) => isNum(channel.value) && channel.value > 0)
-      .map((channel) => ({ id: channel.id, value: channel.value })),
-    100,
-    100,
-  ).map((rect) => {
-    const channel = byId.get(rect.id);
-    return {
-      ...channel,
-      x: rect.x,
-      y: rect.y,
-      w: rect.w,
-      h: rect.h,
-      tone: deltaTone(channel.delta),
-      labelRoom: hasLabelRoom(rect),
-    };
-  });
-  return { tiles, legend: channels };
+  const max = channels.reduce(
+    (biggest, channel) =>
+      isNum(channel.value) && channel.value > biggest ? channel.value : biggest,
+    0,
+  );
+  return channels.map((channel) => ({
+    ...channel,
+    pct:
+      isNum(channel.value) && max > 0
+        ? Math.round((channel.value / max) * 1000) / 10
+        : 0,
+    tone: deltaTone(channel.delta),
+  }));
 }
 
 // Genre treemap for the Instagram / blog genre sections: the
