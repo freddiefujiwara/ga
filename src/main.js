@@ -241,11 +241,12 @@ async function loadDashboard() {
 }
 
 // --- Genre visuals (Instagram / blog genre sections) ---
-// Both genre sections summarise their stat rows the same way the
-// overview summarises channels: a treemap whose tile area is the
-// genre's total, and a bar chart comparing the per-genre average.
-// Tiles too small for text stay blank; the legend under the map
-// lists every genre's total and average.
+// Both genre sections lead with the visuals, in the same order:
+// a treemap whose tile area is the genre's per-item average, the
+// legend directly under the tiles, then a bar chart comparing
+// the same average; the full table follows below. Tiles too
+// small for text stay blank; the legend under the map lists
+// every genre's average and total.
 
 function renderGenreTreemap(mapEl, legendEl, map) {
   mapEl.innerHTML = "";
@@ -262,20 +263,20 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     div.style.top = `${tile.y}%`;
     div.style.width = `${tile.w}%`;
     div.style.height = `${tile.h}%`;
-    div.title = `${tile.name}：合計 ${tile.totalLabel}、${tile.avgText}`;
+    div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
     if (tile.labelRoom) {
       const name = document.createElement("div");
       name.className = "treemap-tile-name";
       name.textContent = tile.name;
       const value = document.createElement("div");
       value.className = "treemap-tile-value";
-      value.textContent = tile.totalLabel;
-      const avg = document.createElement("div");
-      avg.className = "treemap-tile-sub";
-      avg.textContent = tile.avgText;
+      value.textContent = tile.avgLabel;
+      const total = document.createElement("div");
+      total.className = "treemap-tile-sub";
+      total.textContent = tile.totalText;
       div.appendChild(name);
       div.appendChild(value);
-      div.appendChild(avg);
+      div.appendChild(total);
     }
     mapEl.appendChild(div);
   }
@@ -288,17 +289,17 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     li.appendChild(name);
     const value = document.createElement("span");
     value.className = "channel-legend-value";
-    value.textContent = `合計 ${entry.totalLabel}`;
+    value.textContent = entry.avgText;
     li.appendChild(value);
-    const avg = document.createElement("span");
-    avg.className = "channel-legend-note";
-    avg.textContent = entry.avgText;
-    li.appendChild(avg);
+    const total = document.createElement("span");
+    total.className = "channel-legend-note";
+    total.textContent = entry.totalText;
+    li.appendChild(total);
     legendEl.appendChild(li);
   }
 }
 
-function buildGenreTreemap(map) {
+function buildGenreTreemap(map, noteText) {
   const frag = document.createDocumentFragment();
   const mapEl = document.createElement("div");
   mapEl.className = "treemap";
@@ -307,6 +308,12 @@ function buildGenreTreemap(map) {
   renderGenreTreemap(mapEl, legendEl, map);
   frag.appendChild(mapEl);
   frag.appendChild(legendEl);
+  if (noteText) {
+    const note = document.createElement("p");
+    note.className = "meta";
+    note.textContent = noteText;
+    frag.appendChild(note);
+  }
   return frag;
 }
 
@@ -394,15 +401,17 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     wrap.appendChild(p);
     return;
   }
-  // The tiles (area = total views) and the average bars summarise
-  // the same rows the table below lists in full.
+  // The tiles (area = views per article) and the average bars
+  // summarise the same rows the table below lists in full.
   wrap.appendChild(
     buildGenreTreemap(
       genreTreemap(rows, (row) => ({
         name: row.tag,
-        total: row.totalViews,
+        avg: row.perArticle,
         avgText: `1記事あたり ${formatCount(row.perArticle)}`,
+        totalText: `合計 ${formatCount(row.totalViews)}`,
       })),
+      "タイルの面積は1記事あたり表示回数の大きさです。",
     ),
   );
   wrap.appendChild(
@@ -807,8 +816,9 @@ function renderGenreTable(detail) {
     document.getElementById("sns-genre-legend"),
     genreTreemap(rows, (row) => ({
       name: row.genre,
-      total: row.totalViews,
+      avg: row.avgViews,
       avgText: `平均再生 ${formatCount(row.avgViews)}`,
+      totalText: `合計 ${formatCount(row.totalViews)}`,
     })),
   );
   renderGenreBars(

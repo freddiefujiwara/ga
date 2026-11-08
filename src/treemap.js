@@ -12,9 +12,10 @@
 // unknown = neutral. The blog has no history, so it is always
 // neutral.
 //
-// The genre sections reuse the squarified treemap layout below:
-// genre totals sit within an order of magnitude of each other,
-// so tiles stay readable there.
+// The genre sections reuse the squarified treemap layout below,
+// sized by each genre's per-item average: averages sit within
+// an order of magnitude of each other, so tiles stay readable
+// there, and the average is the axis the owner compares on.
 
 import { formatCount, formatDelta, historyDelta } from "./api.js";
 
@@ -192,12 +193,16 @@ export function channelBars(detail, gaTotals, historyRows) {
 
 // Genre treemap for the Instagram / blog genre sections: the
 // same look as the channel map, one tile per genre row. `pick`
-// maps a stat row to { name, total, avgText } — the tile area is
-// the total (Instagram: total views; blog: total page views) and
-// avgText is the per-item average line ("平均再生 1,234" /
-// "1記事あたり 56"). Tiles exist only for positive totals; the
-// legend lists every row, in the rows' order, so a genre whose
-// total is zero or missing still reads there.
+// maps a stat row to { name, avg, avgText, totalText } — the
+// tile area is the per-item average (Instagram: avg views per
+// post; blog: views per article), because the average is the
+// axis genres are compared on; the total rides along as the
+// tile's sub line and the legend's second figure. avgText is
+// the worded average line ("平均再生 1,234" / "1記事あたり 56")
+// and totalText the total line ("合計 12,345"). Tiles exist
+// only for positive averages; the legend lists every row, in
+// the rows' order, so a genre whose average is zero or missing
+// still reads there.
 export function genreTreemap(rows, pick) {
   const entries = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -205,8 +210,9 @@ export function genreTreemap(rows, pick) {
       return picked
         ? {
             name: picked.name,
-            total: isNum(picked.total) ? picked.total : null,
+            avg: isNum(picked.avg) ? picked.avg : null,
             avgText: picked.avgText ?? "",
+            totalText: picked.totalText ?? "",
           }
         : null;
     })
@@ -214,7 +220,7 @@ export function genreTreemap(rows, pick) {
   const byIndex = new Map(entries.map((entry, index) => [index, entry]));
   const tiles = squarifiedLayout(
     entries
-      .map((entry, index) => ({ id: index, value: entry.total }))
+      .map((entry, index) => ({ id: index, value: entry.avg }))
       .filter((item) => isNum(item.value) && item.value > 0),
     100,
     100,
@@ -222,7 +228,7 @@ export function genreTreemap(rows, pick) {
     const entry = byIndex.get(rect.id);
     return {
       ...entry,
-      totalLabel: formatCount(entry.total),
+      avgLabel: formatCount(entry.avg),
       x: rect.x,
       y: rect.y,
       w: rect.w,
@@ -232,7 +238,7 @@ export function genreTreemap(rows, pick) {
   });
   const legend = entries.map((entry) => ({
     ...entry,
-    totalLabel: formatCount(entry.total),
+    avgLabel: formatCount(entry.avg),
   }));
   return { tiles, legend };
 }
