@@ -5,11 +5,34 @@
 // caption carries them). The rules live in one ordered array so
 // the owner can retune them in a single place: the first rule
 // whose keywords appear in the caption wins, and a caption that
-// matches nothing lands in the fallback genre. Rule order is the
-// priority order — specific signals (cycling, barber/relaxation,
-// music) come before the broad food words, and cafe/sweets comes
-// before general gourmet because cafe captions routinely carry
-// gourmet hashtags too.
+// matches nothing lands in the fallback genre.
+//
+// Classification runs in two stages. Stage 1 looks at the
+// caption's hashtags only: a hashtag is the author's own
+// declaration of what the post is, so it outranks every word in
+// the body. Stage 2 is the keyword rules below, the fallback
+// for the older posts that carry no genre hashtag.
+//
+// The stage-2 priority order is "the shop (destination) wins" —
+// the owner's call, so a post about riding a bicycle TO a shop
+// is counted as that shop's genre, not as cycling:
+// - Shop words for concrete dishes/venues (カレー, ラーメン,
+//   ランチ, …) sit BEFORE the cycling rule: a ride to a curry
+//   shop is グルメ.
+// - The generic food words (グルメ, 料理, 食べ歩き) sit AFTER
+//   cycling: a long ride whose caption merely mentions eating
+//   something at the destination (a fair, say) stays サイクリング
+//   instead of being dragged into グルメ.
+// - 街歩き・スポット is split in two. The early rule carries the
+//   outing words themselves (散歩, まつり, トランポリン, …);
+//   places that often appear only in passing — the park a ride
+//   starts from, a museum along the route — sit in the late rule,
+//   after cycling, so they cannot mis-bucket a ride. A post that
+//   introduces a museum still lands in 街歩き・スポット via the
+//   散歩-style hashtags in its caption tail.
+// - Two rules may share one genre name on purpose: the rollup
+//   (genreStatsForMedia) groups by genre name, so the split
+//   rules add up into a single row.
 
 import { captionHead, formatCount, mediaTypeLabel } from "./api.js";
 
@@ -17,20 +40,33 @@ const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 
 export const INSTAGRAM_FALLBACK_GENRE = "日常・その他";
 
+// Stage 1: hashtag → genre, in priority order. Matching is per
+// hashtag and exact (case-insensitive): the bare word in the
+// body does not count, and a longer tag that merely starts with
+// one of these (#川口グルメ巡り) does not match either. 音楽
+// comes first because a song post routinely carries other tags
+// alongside #Suno.
+export const INSTAGRAM_HASHTAG_GENRES = [
+  { genre: "音楽", tags: ["suno"] },
+  { genre: "グルメ", tags: ["川口グルメ"] },
+  { genre: "カフェ・スイーツ", tags: ["川口カフェ"] },
+  { genre: "街歩き・スポット", tags: ["川口散歩"] },
+  { genre: "サイクリング", tags: ["サイクリング", "川口サイクリング"] },
+];
+
+// The hashtags of a caption, lowercased, without the "#".
+const captionHashtags = (caption) => {
+  const found = new Set();
+  for (const match of String(caption ?? "").matchAll(/#([^\s#]+)/g)) {
+    found.add(match[1].toLowerCase());
+  }
+  return found;
+};
+
 export const INSTAGRAM_GENRE_RULES = [
   {
     genre: "音楽",
     keywords: ["音楽", "Suno", "リリック", "歌", "曲"],
-  },
-  {
-    genre: "サイクリング",
-    keywords: [
-      "サイクリング",
-      "自転車",
-      "ポタリング",
-      "HELLO CYCLING",
-      "ハローサイクリング",
-    ],
   },
   {
     genre: "理容・リラクゼーション",
@@ -69,9 +105,10 @@ export const INSTAGRAM_GENRE_RULES = [
     ],
   },
   {
+    // グルメ (venues/dishes): before cycling, so a ride whose
+    // destination is a shop counts as the shop's genre.
     genre: "グルメ",
     keywords: [
-      "グルメ",
       "ランチ",
       "ディナー",
       "食堂",
@@ -81,36 +118,68 @@ export const INSTAGRAM_GENRE_RULES = [
       "カレー",
       "寿司",
       "焼肉",
-      "料理",
       "定食",
-      "食べ歩き",
     ],
   },
   {
+    // 街歩き・スポット (outings): the outing words themselves.
+    // まち歩き/まつり cover the hiragana spellings, トランポリン
+    // the trampoline-park posts.
     genre: "街歩き・スポット",
     keywords: [
       "街歩き",
+      "まち歩き",
       "散歩",
       "祭り",
+      "まつり",
       "花火",
-      "公園",
       "神社",
       "お寺",
       "銭湯",
       "温泉",
-      "商店街",
-      "市場",
       "スポット",
+      "トランポリン",
     ],
+  },
+  {
+    genre: "サイクリング",
+    keywords: [
+      "サイクリング",
+      "自転車",
+      "ポタリング",
+      "HELLO CYCLING",
+      "ハローサイクリング",
+    ],
+  },
+  {
+    // グルメ (generic): after cycling, so a ride that only
+    // mentions food in passing is not dragged into グルメ.
+    genre: "グルメ",
+    keywords: ["グルメ", "料理", "食べ歩き"],
+  },
+  {
+    // 街歩き・スポット (places): after cycling — these places
+    // often appear only in passing (the park a ride starts
+    // from, a museum along the route).
+    genre: "街歩き・スポット",
+    keywords: ["公園", "商店街", "市場", "博物館", "美術館"],
   },
 ];
 
-// The genre of one post: the first rule (in array order) with a
-// keyword appearing in the caption. Matching is a plain substring
-// test, case-insensitive so the latin keywords ("Suno",
-// "HELLO CYCLING") work in any casing. A missing caption matches
-// nothing and falls back like any other unmatched caption.
+// The genre of one post. Stage 1: an exact hashtag match from
+// INSTAGRAM_HASHTAG_GENRES wins outright. Stage 2: the first
+// rule (in array order) with a keyword appearing in the caption.
+// Keyword matching is a plain substring test, case-insensitive
+// so the latin keywords ("Suno", "HELLO CYCLING") work in any
+// casing. A missing caption matches nothing and falls back like
+// any other unmatched caption.
 export function classifyCaption(caption, rules = INSTAGRAM_GENRE_RULES) {
+  const hashtags = captionHashtags(caption);
+  for (const entry of INSTAGRAM_HASHTAG_GENRES) {
+    if (entry.tags.some((tag) => hashtags.has(tag))) {
+      return entry.genre;
+    }
+  }
   const text = String(caption ?? "").toLowerCase();
   for (const rule of rules) {
     const hit = (rule.keywords || []).some((keyword) =>

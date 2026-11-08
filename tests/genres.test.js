@@ -41,9 +41,11 @@ describe("classifyCaption", () => {
         "今川焼き専門店がオープン。粒あんがぎっしり。#川口市 #今川焼き #浅草グルメ",
       ),
     ).toBe("カフェ・スイーツ");
+    // (Body words only: a #川口グルメ hashtag would end the
+    // classification at stage 1 — see the hashtag tests below.)
     expect(
       classifyCaption(
-        "相談処カフェで、朝のモーニングをいただきました。#川口市 #モーニング #カフェ巡り #川口グルメ",
+        "相談処カフェで、朝のモーニングをいただきました。川口グルメな朝。#川口市 #モーニング #カフェ巡り",
       ),
     ).toBe("カフェ・スイーツ");
   });
@@ -59,6 +61,80 @@ describe("classifyCaption", () => {
       "街歩き・スポット",
     );
     expect(classifyCaption("近所の銭湯で朝風呂。")).toBe("街歩き・スポット");
+  });
+
+  it("prefers the destination shop over cycling (店優先)", () => {
+    // A ride to a curry shop is the shop's genre, not cycling:
+    // the dish/venue words sit before the cycling rule.
+    expect(
+      classifyCaption("川口から自転車で約74分。神保町の人気カレー店に行ってきました"),
+    ).toBe("グルメ");
+    // The generic food words sit after cycling, so a ride that
+    // only mentions eating at the destination stays cycling.
+    expect(
+      classifyCaption("川口から自転車で2時間。着いた先はフェア。現地の料理を食べた"),
+    ).toBe("サイクリング");
+    // With no ride involved, the generic words still bucket food.
+    expect(classifyCaption("西川口の山東料理の店へ友人とごはん")).toBe("グルメ");
+  });
+
+  it("does not let passing places mis-bucket a ride", () => {
+    // 公園 (the park a ride starts from) is in the late spot
+    // rule, after cycling.
+    expect(classifyCaption("川口市から自転車で何分？ 沼田公園から出発")).toBe(
+      "サイクリング",
+    );
+    // A museum introduced as a spot still lands in 街歩き・スポット
+    // via the 散歩 hashtag in the caption tail (early spot rule).
+    expect(
+      classifyCaption("川口に万華鏡の博物館があります … #川口散歩"),
+    ).toBe("街歩き・スポット");
+  });
+
+  it("catches the outing spellings the account actually uses", () => {
+    // The trampoline park is a spot even though the caption
+    // mentions サイクリング as an aside.
+    expect(
+      classifyCaption(
+        "川口のトランポリンパークで跳んできました。運動は街歩きとサイクリングだけ",
+      ),
+    ).toBe("街歩き・スポット");
+    // Hiragana まつり, not just 祭り.
+    expect(classifyCaption("今日は鳩ヶ谷商工まつりに行ってきました")).toBe(
+      "街歩き・スポット",
+    );
+  });
+
+  it("lets a genre hashtag override the body words", () => {
+    // The body alone would say サイクリング (自転車, 公園); the
+    // author's own hashtag wins.
+    expect(
+      classifyCaption("自転車で沼田公園から出発。帰りに町中華へ寄り道 #川口グルメ"),
+    ).toBe("グルメ");
+    expect(
+      classifyCaption("自転車で公園のそばを通って、住宅街の店へ #川口カフェ"),
+    ).toBe("カフェ・スイーツ");
+    // #Suno outranks the other genre tags: a song post carries
+    // several tags at once.
+    expect(
+      classifyCaption("新曲を公開。自転車の帰りにカレー店へ #川口グルメ #Suno"),
+    ).toBe("音楽");
+  });
+
+  it("matches hashtags exactly, never as bare body words", () => {
+    // A different city's グルメ tag is not #川口グルメ: the body
+    // rules decide (今川焼き → カフェ・スイーツ).
+    expect(classifyCaption("浅草の今川焼き専門店 #浅草グルメ")).toBe(
+      "カフェ・スイーツ",
+    );
+    // A longer tag that merely starts with a known one does not
+    // match either; the body (自転車) decides.
+    expect(classifyCaption("今日は自転車で出発 #川口グルメ巡り")).toBe(
+      "サイクリング",
+    );
+    // The word Suno without "#" does not fire stage 1; it is
+    // the stage-2 keyword rules that bucket this one as 音楽.
+    expect(classifyCaption("Sunoで作った曲です")).toBe("音楽");
   });
 
   it("falls back to 日常・その他 when nothing matches", () => {
