@@ -110,6 +110,24 @@
                     <tbody id="sns-media-body"></tbody>
                   </table>
                 </div>
+                <h3 class="subsection-title">ジャンル別（直近の投稿）</h3>
+                <div class="table-scroll">
+                  <table class="data-table" id="sns-genre-table">
+                    <thead>
+                      <tr>
+                        <th>ジャンル</th>
+                        <th class="num">投稿数</th>
+                        <th class="num">再生合計</th>
+                        <th class="num">平均再生</th>
+                        <th class="num">保存率</th>
+                        <th class="num">いいね率</th>
+                        <th>再生トップ</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sns-genre-body"></tbody>
+                  </table>
+                </div>
+                <p class="meta">ジャンルはキャプションのキーワードで振り分けています。保存率・いいね率は、投稿ごとの率（保存÷再生、いいね÷再生）の平均です。</p>
                 <div id="sns-notes"></div>
               </div>
             </section>
@@ -137,6 +155,11 @@
             <section class="table-wrap">
               <h2 class="section-title">ページ別 上位10件</h2>
               <ol id="top-pages" class="ranking"></ol>
+            </section>
+            <section class="table-wrap">
+              <h2 class="section-title">ジャンル（タグ）別</h2>
+              <div id="blog-genres"></div>
+              <p class="meta">記事のタグごとに、直近28日間の表示回数を集計しています。タグが複数ある記事は、それぞれのタグに数えます。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">参照元 上位8件</h2>

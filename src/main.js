@@ -11,6 +11,8 @@ import {
   dimensionRanking,
   fetchArticleTitles,
   pageRanking,
+  fetchBlogMeta,
+  blogGenreStats,
   fetchSnsDetail,
   fetchSnsHistory,
   snsHistoryRows,
@@ -33,6 +35,7 @@ import {
   snsErrorNotes,
 } from "./api.js";
 import { buildLineChartSvg, tooltipText } from "./chart.js";
+import { instagramGenreStats, formatRate } from "./genres.js";
 import { tabFromHash, hashWithTab } from "./tabs.js";
 import { channelTreemap } from "./treemap.js";
 import {
@@ -141,6 +144,9 @@ async function loadDashboard() {
   // Article titles come from the blog RSS feed; fetched in parallel
   // and never allowed to block (or break) the numbers.
   const titlesPromise = fetchArticleTitles(CONFIG.BLOG_RSS_URL);
+  // The article tag map comes from the blog API's titles payload;
+  // same treatment: parallel, tolerant, display-only.
+  const metaPromise = fetchBlogMeta(CONFIG.BLOG_TITLES_URL);
   const [totals, daily, pages, sources] = await Promise.all([
     fetchReport(CONFIG.GAS_ENDPOINT, auth(), { dimensions: "" }),
     fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
@@ -209,6 +215,11 @@ async function loadDashboard() {
     li.appendChild(span);
     pageList.appendChild(li);
   }
+  // The per-genre rollup joins the page rows with the tag map. It
+  // renders only when the map actually arrived; blogGenreStats
+  // returns nothing without one and the section says why instead.
+  const meta = await metaPromise;
+  renderBlogGenres(pages, meta, titles);
   renderRanking("top-sources", sources, 8);
   gateEl.hidden = true;
   expiredEl.hidden = true;
@@ -220,6 +231,97 @@ async function loadDashboard() {
   loadSns();
   loadSnsHistory();
   return true;
+}
+
+// --- Blog genre rollup (blog tab) ---
+// Joins the GA page rows with the blog's article tag map. Without
+// the map there is nothing honest to group by: the section then
+// carries a short note instead of a table.
+
+function renderBlogGenres(pagesResponse, meta, rssTitles) {
+  const wrap = document.getElementById("blog-genres");
+  wrap.innerHTML = "";
+  if (!meta || !meta.tags || meta.tags.size === 0) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent =
+      "記事のタグ情報を取得できなかったため、ジャンル別は表示していません。";
+    wrap.appendChild(p);
+    return;
+  }
+  // The RSS titles win; the titles payload fills any gap.
+  const titles = new Map(meta.titles);
+  for (const [id, title] of rssTitles) {
+    titles.set(id, title);
+  }
+  const rows = blogGenreStats(
+    pagesResponse,
+    meta.tags,
+    titles,
+    CONFIG.SITE_ORIGIN,
+  );
+  if (!rows.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "—";
+    wrap.appendChild(p);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "data-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const [text, numeric] of [
+    ["タグ", false],
+    ["記事数", true],
+    ["表示回数 合計", true],
+    ["1記事あたり", true],
+    ["最も読まれた記事", false],
+  ]) {
+    const th = document.createElement("th");
+    if (numeric) {
+      th.className = "num";
+    }
+    th.textContent = text;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const tagTd = document.createElement("td");
+    tagTd.textContent = row.tag;
+    tr.appendChild(tagTd);
+    for (const value of [row.count, row.totalViews, row.perArticle]) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = formatCount(value);
+      tr.appendChild(td);
+    }
+    const topTd = document.createElement("td");
+    if (row.top) {
+      const link = document.createElement("a");
+      link.href = row.top.href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = row.top.title;
+      topTd.appendChild(link);
+      const span = document.createElement("span");
+      span.className = "rank-value";
+      span.textContent = formatCount(row.top.views);
+      topTd.appendChild(span);
+    } else {
+      topTd.textContent = "—";
+    }
+    tr.appendChild(topTd);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  const scroll = document.createElement("div");
+  scroll.className = "table-scroll";
+  scroll.appendChild(table);
+  wrap.appendChild(scroll);
 }
 
 // --- Overview tab ---
@@ -518,6 +620,63 @@ function wireMediaSort() {
     });
 }
 
+// Per-genre rollup of the recent posts: one row per genre that
+// has at least one post, biggest total views first. The top post
+// links out to Instagram.
+function renderGenreTable(detail) {
+  const tbody = document.getElementById("sns-genre-body");
+  tbody.innerHTML = "";
+  const rows = instagramGenreStats(detail);
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  const numCell = (text) => {
+    const td = document.createElement("td");
+    td.className = "num";
+    td.textContent = text;
+    return td;
+  };
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const genreTd = document.createElement("td");
+    genreTd.className = "nowrap";
+    genreTd.textContent = row.genre;
+    tr.appendChild(genreTd);
+    tr.appendChild(numCell(formatCount(row.count)));
+    tr.appendChild(numCell(formatCount(row.totalViews)));
+    tr.appendChild(numCell(formatCount(row.avgViews)));
+    tr.appendChild(numCell(formatRate(row.saveRate)));
+    tr.appendChild(numCell(formatRate(row.likeRate)));
+    const topTd = document.createElement("td");
+    if (row.top) {
+      if (row.top.permalink) {
+        const link = document.createElement("a");
+        link.href = row.top.permalink;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = row.top.title;
+        topTd.appendChild(link);
+      } else {
+        topTd.textContent = row.top.title;
+      }
+      const span = document.createElement("span");
+      span.className = "rank-value";
+      span.textContent = formatCount(row.top.views);
+      topTd.appendChild(span);
+    } else {
+      topTd.textContent = "—";
+    }
+    tr.appendChild(topTd);
+    tbody.appendChild(tr);
+  }
+}
+
 function renderYoutube(detail) {
   fillTotalBoxes("sns-youtube-totals", youtubeTotals(detail));
   const tbody = document.getElementById("sns-youtube-body");
@@ -653,6 +812,7 @@ function renderSns(detail) {
     : [];
   wireMediaSort();
   renderMediaTable();
+  renderGenreTable(detail);
   renderYoutube(detail);
   const notes = document.getElementById("sns-notes");
   notes.innerHTML = "";
