@@ -18,7 +18,10 @@
 // is counted as that shop's genre, not as cycling:
 // - Shop words for concrete dishes/venues (カレー, ラーメン,
 //   ランチ, …) sit BEFORE the cycling rule: a ride to a curry
-//   shop is グルメ.
+//   shop is グルメ. The cafe/sweets words (カフェ, ケーキ,
+//   モーニング, …) are in that same グルメ rule: the old
+//   カフェ・スイーツ genre was merged into グルメ, and its
+//   stage-1 hashtag #川口カフェ maps to グルメ as well.
 // - The generic food words (グルメ, 料理, 食べ歩き) sit AFTER
 //   cycling: a long ride whose caption merely mentions eating
 //   something at the destination (a fair, say) stays サイクリング
@@ -48,8 +51,10 @@ export const INSTAGRAM_FALLBACK_GENRE = "日常・その他";
 // alongside #Suno.
 export const INSTAGRAM_HASHTAG_GENRES = [
   { genre: "音楽", tags: ["suno"] },
-  { genre: "グルメ", tags: ["川口グルメ"] },
-  { genre: "カフェ・スイーツ", tags: ["川口カフェ"] },
+  // #川口カフェ maps to グルメ too: the former カフェ・スイーツ
+  // genre was merged into グルメ, so the tag stays on as a
+  // グルメ signal rather than being dropped.
+  { genre: "グルメ", tags: ["川口グルメ", "川口カフェ"] },
   { genre: "街歩き・スポット", tags: ["川口散歩"] },
   { genre: "サイクリング", tags: ["サイクリング", "川口サイクリング"] },
 ];
@@ -87,8 +92,23 @@ export const INSTAGRAM_GENRE_RULES = [
     ],
   },
   {
-    genre: "カフェ・スイーツ",
+    // グルメ (venues/dishes): before cycling, so a ride whose
+    // destination is a shop counts as the shop's genre. The
+    // cafe/sweets words live in this rule too — the former
+    // カフェ・スイーツ genre was merged into グルメ (owner's
+    // call), so no separate cafe rule remains.
+    genre: "グルメ",
     keywords: [
+      "ランチ",
+      "ディナー",
+      "食堂",
+      "レストラン",
+      "居酒屋",
+      "ラーメン",
+      "カレー",
+      "寿司",
+      "焼肉",
+      "定食",
       "カフェ",
       "スイーツ",
       "ケーキ",
@@ -102,23 +122,6 @@ export const INSTAGRAM_GENRE_RULES = [
       "パン屋",
       "ベーカリー",
       "甘味",
-    ],
-  },
-  {
-    // グルメ (venues/dishes): before cycling, so a ride whose
-    // destination is a shop counts as the shop's genre.
-    genre: "グルメ",
-    keywords: [
-      "ランチ",
-      "ディナー",
-      "食堂",
-      "レストラン",
-      "居酒屋",
-      "ラーメン",
-      "カレー",
-      "寿司",
-      "焼肉",
-      "定食",
     ],
   },
   {

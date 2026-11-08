@@ -287,11 +287,11 @@ describe("tileLabelLevel", () => {
 
 describe("genreTreemap", () => {
   // The totals and the averages rank these rows differently on
-  // purpose: グルメ has the bigger total, カフェ・スイーツ the
+  // purpose: グルメ has the bigger total, 音楽 the
   // bigger average, so the tile areas prove which one they use.
   const rows = [
     { genre: "グルメ", totalViews: 3000, avgViews: 1000 },
-    { genre: "カフェ・スイーツ", totalViews: 2000, avgViews: 2000 },
+    { genre: "音楽", totalViews: 2000, avgViews: 2000 },
     { genre: "日常・その他", totalViews: 0, avgViews: null },
   ];
   const pick = (row) => ({
@@ -303,14 +303,14 @@ describe("genreTreemap", () => {
 
   it("lays tiles out with areas proportional to the averages", () => {
     const { tiles } = genreTreemap(rows, pick);
-    expect(tiles.map((t) => t.name)).toEqual(["カフェ・スイーツ", "グルメ"]);
+    expect(tiles.map((t) => t.name)).toEqual(["音楽", "グルメ"]);
     const gourmet = tiles.find((t) => t.name === "グルメ");
-    const cafe = tiles.find((t) => t.name === "カフェ・スイーツ");
-    expect((cafe.w * cafe.h) / (gourmet.w * gourmet.h)).toBeCloseTo(2, 5);
+    const music = tiles.find((t) => t.name === "音楽");
+    expect((music.w * music.h) / (gourmet.w * gourmet.h)).toBeCloseTo(2, 5);
     expect(gourmet.avgLabel).toBe("1,000");
     expect(gourmet.avgText).toBe("平均再生 1000");
     expect(gourmet.totalText).toBe("合計 3000");
-    expect(cafe.avgLabel).toBe("2,000");
+    expect(music.avgLabel).toBe("2,000");
   });
 
   it("keeps rows without an average in the legend only", () => {
@@ -318,7 +318,7 @@ describe("genreTreemap", () => {
     expect(tiles.map((t) => t.name)).not.toContain("日常・その他");
     expect(legend.map((e) => e.name)).toEqual([
       "グルメ",
-      "カフェ・スイーツ",
+      "音楽",
       "日常・その他",
     ]);
     expect(legend[0]).toMatchObject({
