@@ -15,6 +15,8 @@ import {
   fetchSnsHistory,
   snsHistoryRows,
   snsHistorySeries,
+  overviewKpis,
+  topMedia,
   formatCount,
   formatSeconds,
   formatJstDateTime,
@@ -31,6 +33,7 @@ import {
   snsErrorNotes,
 } from "./api.js";
 import { buildLineChartSvg, tooltipText } from "./chart.js";
+import { tabFromHash, hashWithTab } from "./tabs.js";
 import {
   parseShareToken,
   buildShareUrl,
@@ -79,6 +82,44 @@ themeBtn.addEventListener("click", () => {
 
 const auth = () => ({ idToken, shareToken });
 
+// --- Dashboard tabs ---
+// The selected tab lives in the URL hash as a "tab=" part, next to
+// the share token, so a reload restores it. Switching tabs uses
+// replaceState (no extra history entries, no scroll jump).
+
+const tabButtons = [...document.querySelectorAll("#tabs .tab-button")];
+const tabPanels = {
+  overview: document.getElementById("tab-overview"),
+  instagram: document.getElementById("tab-instagram"),
+  blog: document.getElementById("tab-blog"),
+  youtube: document.getElementById("tab-youtube"),
+};
+
+function activateTab(tabId, updateHash = true) {
+  for (const btn of tabButtons) {
+    const active = btn.dataset.tab === tabId;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", String(active));
+  }
+  for (const [id, panel] of Object.entries(tabPanels)) {
+    panel.hidden = id !== tabId;
+  }
+  if (updateHash) {
+    const next = hashWithTab(window.location.hash, tabId);
+    if (next !== window.location.hash) {
+      window.history.replaceState(null, "", next);
+    }
+  }
+}
+
+for (const btn of tabButtons) {
+  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+}
+window.addEventListener("hashchange", () => {
+  activateTab(tabFromHash(window.location.hash), false);
+});
+activateTab(tabFromHash(window.location.hash), false);
+
 function showGate() {
   gateEl.hidden = false;
   dashboardEl.hidden = true;
@@ -124,6 +165,8 @@ async function loadDashboard() {
     return false;
   }
   const t = totalsOf(totals);
+  overviewState.gaTotals = t;
+  renderOverview();
   document.getElementById("total-views").textContent = t.views.toLocaleString();
   document.getElementById("total-users").textContent = t.users.toLocaleString();
   document.getElementById("total-sessions").textContent =
@@ -176,6 +219,87 @@ async function loadDashboard() {
   loadSns();
   loadSnsHistory();
   return true;
+}
+
+// --- Overview tab ---
+// The overview pulls its numbers from three independent loads (GA
+// totals, the SNS snapshot, the SNS history). Each loader stores
+// its result here and re-renders; whatever has not arrived yet
+// shows as "—" and carries no change line.
+
+const overviewState = { gaTotals: null, detail: null, historyRows: null };
+
+function fillKpiBoxes(items) {
+  const wrap = document.getElementById("kpi-cards");
+  wrap.innerHTML = "";
+  for (const item of items) {
+    const box = document.createElement("div");
+    box.className = "total-box";
+    const label = document.createElement("div");
+    label.className = "total-label";
+    label.textContent = item.label;
+    const value = document.createElement("div");
+    value.className = "total-value";
+    value.textContent = item.value;
+    box.appendChild(label);
+    box.appendChild(value);
+    if (item.delta) {
+      const delta = document.createElement("div");
+      delta.className =
+        "kpi-delta" +
+        (item.delta.startsWith("+")
+          ? " up"
+          : item.delta.startsWith("-")
+            ? " down"
+            : "");
+      delta.textContent = `前回比 ${item.delta}`;
+      box.appendChild(delta);
+    }
+    wrap.appendChild(box);
+  }
+}
+
+function renderTopPosts() {
+  const list = document.getElementById("top-posts");
+  list.innerHTML = "";
+  const posts = topMedia(overviewState.detail, 5);
+  if (!posts.length) {
+    const li = document.createElement("li");
+    li.textContent = "—";
+    list.appendChild(li);
+    return;
+  }
+  for (const media of posts) {
+    const li = document.createElement("li");
+    const label =
+      captionHead(media.caption) || mediaTypeLabel(media.type) || "投稿";
+    if (media.permalink) {
+      const link = document.createElement("a");
+      link.href = media.permalink;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = label;
+      li.appendChild(link);
+    } else {
+      li.textContent = label;
+    }
+    const span = document.createElement("span");
+    span.className = "rank-value";
+    span.textContent = formatCount(media.views);
+    li.appendChild(span);
+    list.appendChild(li);
+  }
+}
+
+function renderOverview() {
+  fillKpiBoxes(
+    overviewKpis(
+      overviewState.detail,
+      overviewState.gaTotals,
+      overviewState.historyRows,
+    ),
+  );
+  renderTopPosts();
 }
 
 // --- SNS section ---
@@ -353,7 +477,12 @@ function renderYoutube(detail) {
 }
 
 function renderSns(detail) {
+  overviewState.detail = detail;
+  renderOverview();
   snsStatusEl.textContent = detail.collected_at
+    ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
+    : "";
+  document.getElementById("youtube-status").textContent = detail.collected_at
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
   fillTotalBoxes("sns-overview", snsOverview(detail));
@@ -455,20 +584,26 @@ function renderSns(detail) {
 async function loadSns() {
   snsStatusEl.textContent = "読み込み中…";
   snsBodyEl.hidden = true;
+  const youtubeStatusEl = document.getElementById("youtube-status");
+  youtubeStatusEl.textContent = "読み込み中…";
+  renderYoutube(null);
   try {
     const detail = await fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
     if (!detail || !detail.ok) {
-      snsStatusEl.textContent =
+      const message =
         (detail && detail.error) || "SNSデータを取得できませんでした";
+      snsStatusEl.textContent = message;
+      youtubeStatusEl.textContent = message;
       return;
     }
     renderSns(detail);
   } catch {
     snsStatusEl.textContent = "SNSデータを取得できませんでした";
+    youtubeStatusEl.textContent = "SNSデータを取得できませんでした";
   }
 }
 
-// --- SNS trend charts (history rows behind sns_detail) ---
+// --- SNS trend charts (overview tab) ---
 
 function renderSnsHistory(response) {
   const wrap = document.getElementById("sns-history");
@@ -497,13 +632,18 @@ function renderSnsHistory(response) {
 
 // The history has its own load: empty or failed just shows the
 // empty-state line and never touches the rest of the SNS section.
+// Its rows also feed the overview KPI deltas.
 async function loadSnsHistory() {
   try {
     const response = await fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth());
-    renderSnsHistory(response && response.ok ? response : null);
+    const ok = response && response.ok ? response : null;
+    overviewState.historyRows = snsHistoryRows(ok);
+    renderSnsHistory(ok);
   } catch {
+    overviewState.historyRows = [];
     renderSnsHistory(null);
   }
+  renderOverview();
 }
 
 // --- Daily chart tooltip (hover on PC, tap on touch) ---

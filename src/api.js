@@ -495,6 +495,127 @@ export function snsErrorNotes(detail) {
     .filter((value) => typeof value === "string" && value.length > 0);
 }
 
+// --- Overview tab helpers ---
+
+// The change of one history metric between its two most recent
+// collections: rows are ordered by collected_at and collections
+// where the metric is missing (null) are skipped, exactly like the
+// trend series. Null when the metric has fewer than two numeric
+// points — with a single collection there is nothing to compare.
+export function historyDelta(rows, key) {
+  if (!Array.isArray(rows)) {
+    return null;
+  }
+  const points = rows
+    .filter(
+      (row) =>
+        row &&
+        typeof row.collected_at === "string" &&
+        row.collected_at &&
+        isNum(row[key]),
+    )
+    .slice()
+    .sort((a, b) =>
+      a.collected_at < b.collected_at ? -1 : a.collected_at > b.collected_at ? 1 : 0,
+    )
+    .map((row) => row[key]);
+  if (points.length < 2) {
+    return null;
+  }
+  const latest = points[points.length - 1];
+  const previous = points[points.length - 2];
+  return { latest, previous, delta: latest - previous };
+}
+
+// The signed change label: "+12" / "-3" / "±0". Null for anything
+// that is not a finite number, so callers can omit the line.
+export function formatDelta(delta) {
+  if (!isNum(delta)) {
+    return null;
+  }
+  if (delta > 0) {
+    return `+${formatCount(delta)}`;
+  }
+  if (delta < 0) {
+    return `-${formatCount(-delta)}`;
+  }
+  return "±0";
+}
+
+// KPI cards for the overview tab: the headline numbers of every
+// network plus the blog, each carrying the change since the
+// previous collection wherever the SNS history offers two points
+// to compare. The blog numbers come from the GA totals object
+// ({ views, users, sessions }); no history exists for them, so
+// they never carry a delta. Every input tolerates being missing:
+// values fall back to "—" and deltas to null.
+export function overviewKpis(detail, gaTotals, historyRows) {
+  const ig = detail?.instagram ?? {};
+  const yt = detail?.youtube ?? {};
+  const deltaFor = (key) => {
+    const change = historyDelta(historyRows, key);
+    return change ? formatDelta(change.delta) : null;
+  };
+  return [
+    {
+      label: "SNS延べフォロワー数",
+      value: formatCount(snsTotalFollowers(detail)),
+      delta: deltaFor("total_followers"),
+    },
+    {
+      label: "Instagram フォロワー",
+      value: formatCount(ig.freddiefujiwara),
+      delta: deltaFor("ig_followers"),
+    },
+    {
+      label: "YouTube 登録者",
+      value: formatCount(yt.subscribers),
+      delta: deltaFor("youtube_subscribers"),
+    },
+    {
+      label: "ブログ 表示回数（直近28日）",
+      value: gaTotals ? formatCount(gaTotals.views) : "—",
+      delta: null,
+    },
+    {
+      label: "ブログ ユーザー（直近28日）",
+      value: gaTotals ? formatCount(gaTotals.users) : "—",
+      delta: null,
+    },
+    {
+      label: "再生回数（過去30日）",
+      value: formatCount(ig.views_30d),
+      delta: deltaFor("views_30d"),
+    },
+    {
+      label: "投稿数",
+      value: formatCount(ig.media_count),
+      delta: deltaFor("media_count"),
+    },
+    {
+      label: "フォロー（過去30日）",
+      value: formatCount(ig.follows_30d),
+      delta: deltaFor("follows_30d"),
+    },
+    {
+      label: "フォロー解除（過去30日）",
+      value: formatCount(ig.unfollows_30d),
+      delta: deltaFor("unfollows_30d"),
+    },
+  ];
+}
+
+// The most-watched recent posts, most views first; posts without
+// a view count sink to the bottom, as in the media table. The
+// returned rows are the raw recent-media objects (permalink,
+// caption, views, …), ready to render as links.
+export function topMedia(detail, limit = 5) {
+  const rows = Array.isArray(detail?.instagram?.recent_media)
+    ? detail.instagram.recent_media
+    : [];
+  return sortMedia(rows, "views", "desc").slice(0, limit);
+}
+
 // --- Report shaping helpers (pure, unit-tested) ---
 
 export function rowsOf(response) {
