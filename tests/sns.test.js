@@ -350,22 +350,68 @@ describe("totals and overview", () => {
 });
 
 describe("demographics", () => {
-  it("ageGenderLabel expands the F./M. keys", () => {
-    expect(ageGenderLabel("F.25-34")).toBe("女性 25-34歳");
-    expect(ageGenderLabel("M.18-24")).toBe("男性 18-24歳");
-    expect(ageGenderLabel("U.65+")).toBe("不明 65+歳");
+  it("ageGenderLabel expands both key formats, age first", () => {
+    expect(ageGenderLabel("F.25-34")).toBe("25-34歳 女性");
+    expect(ageGenderLabel("M.18-24")).toBe("18-24歳 男性");
+    expect(ageGenderLabel("U.65+")).toBe("65歳以上 不明");
+    expect(ageGenderLabel("45-54/M")).toBe("45-54歳 男性");
+    expect(ageGenderLabel("45-54/F")).toBe(ageGenderLabel("F.45-54"));
+    expect(ageGenderLabel("65+/M")).toBe("65歳以上 男性");
     expect(ageGenderLabel("something-else")).toBe("something-else");
     expect(ageGenderLabel(null)).toBe("");
   });
 
-  it("demographicsBars sorts, drops nulls and scales to the max", () => {
+  it("demographicsBars orders by age band, drops nulls and scales to the max", () => {
     expect(demographicsBars(DETAIL)).toEqual([
-      { key: "M.35-44", label: "男性 35-44歳", value: 800, pct: 100 },
-      { key: "F.25-34", label: "女性 25-34歳", value: 400, pct: 50 },
-      { key: "M.25-34", label: "男性 25-34歳", value: 200, pct: 25 },
+      { key: "M.25-34", label: "25-34歳 男性", value: 200, pct: 25 },
+      { key: "F.25-34", label: "25-34歳 女性", value: 400, pct: 50 },
+      { key: "M.35-44", label: "35-44歳 男性", value: 800, pct: 100 },
     ]);
     expect(demographicsBars(null)).toEqual([]);
     expect(demographicsBars({ instagram: { demographics: {} } })).toEqual([]);
+  });
+
+  it("demographicsBars orders scrambled mixed-format keys, unknown last", () => {
+    const detail = {
+      instagram: {
+        demographics: {
+          age_gender: [
+            { key: "45-54/U", value: 10 },
+            { key: "unknown-key", value: 999 },
+            { key: "M.18-24", value: 30 },
+            { key: "25-34/F", value: 20 },
+            { key: "U.13-17", value: 5 },
+            { key: "18-24/F", value: 40 },
+            { key: "M.25-34", value: 25 },
+            { key: "65+/M", value: 15 },
+          ],
+        },
+      },
+    };
+    const rows = demographicsBars(detail);
+    expect(rows.map((r) => r.key)).toEqual([
+      "U.13-17",
+      "M.18-24",
+      "18-24/F",
+      "M.25-34",
+      "25-34/F",
+      "45-54/U",
+      "65+/M",
+      "unknown-key",
+    ]);
+    expect(rows.map((r) => r.label)).toEqual([
+      "13-17歳 不明",
+      "18-24歳 男性",
+      "18-24歳 女性",
+      "25-34歳 男性",
+      "25-34歳 女性",
+      "45-54歳 不明",
+      "65歳以上 男性",
+      "unknown-key",
+    ]);
+    // Bars still scale to the largest value, unknown rows included.
+    expect(rows[rows.length - 1].pct).toBe(100);
+    expect(rows[0].pct).toBe(1);
   });
 
   it("topDemographics sorts descending and applies the limit", () => {
