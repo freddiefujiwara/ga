@@ -303,6 +303,11 @@ textarea:disabled {
 .treemap-tile-name {
   font-weight: 700;
   font-size: 14px;
+  /* One line only: a long genre name is cut with an ellipsis
+     rather than wrapping onto the figures below it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .treemap-tile-metric {
@@ -314,6 +319,7 @@ textarea:disabled {
   font-size: clamp(18px, 3vw, 30px);
   font-weight: 700;
   line-height: 1.25;
+  white-space: nowrap;
 }
 
 .treemap-tile-delta {
@@ -324,6 +330,7 @@ textarea:disabled {
 .treemap-tile-sub {
   font-size: 12px;
   opacity: 0.85;
+  white-space: nowrap;
 }
 
 .channel-legend {

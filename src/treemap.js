@@ -167,6 +167,36 @@ export function hasLabelRoom(rect) {
   return Boolean(rect) && rect.w >= 10 && rect.h >= 16;
 }
 
+// How much of its text a genre tile may carry, decided from the
+// tile's own size so nothing is drawn that cannot fit: "full"
+// (name + average + total), "value" (name + average), "name"
+// (name only) or "none" (blank tile; the legend speaks for it).
+// Coordinates are percentages of the map box, which is 5:2 with
+// a 180px floor height. The thresholds come from the text stack
+// at that floor: the tile's vertical padding is 16px, a name line
+// ~21px, the big average figure ~30px and the small total line
+// ~18px, so the full stack needs ~85px (~47% of 180) and even the
+// name alone ~37px (~21%). The width floors keep the average
+// figure (up to six glyphs, ~75px on a phone-width map) on one
+// line. The checks run widest-and-tallest first; the map only
+// grows past the floor on wider screens, so a level granted here
+// still fits there, where the fonts cap out.
+export function tileLabelLevel(rect) {
+  if (!rect || !isNum(rect.w) || !isNum(rect.h)) {
+    return "none";
+  }
+  if (rect.w >= 24 && rect.h >= 42) {
+    return "full";
+  }
+  if (rect.w >= 22 && rect.h >= 30) {
+    return "value";
+  }
+  if (rect.w >= 14 && rect.h >= 20) {
+    return "name";
+  }
+  return "none";
+}
+
 // Bar rows for the overview's channel sizes: the channel
 // audiences in their fixed order, each with pct (the bar length,
 // scaled so the largest channel is 100) and tone (the colour of
@@ -200,9 +230,12 @@ export function channelBars(detail, gaTotals, historyRows) {
 // tile's sub line and the legend's second figure. avgText is
 // the worded average line ("平均再生 1,234" / "1記事あたり 56")
 // and totalText the total line ("合計 12,345"). Tiles exist
-// only for positive averages; the legend lists every row, in
-// the rows' order, so a genre whose average is zero or missing
-// still reads there.
+// only for positive averages; each carries a labelLevel from
+// tileLabelLevel, and the renderer draws only the lines that
+// level allows, so no text is squeezed into a tile it cannot
+// fit. The legend lists every row, in the rows' order, so a
+// genre whose average is zero or missing — or whose tile is
+// too small for its figures — still reads there.
 export function genreTreemap(rows, pick) {
   const entries = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -226,6 +259,7 @@ export function genreTreemap(rows, pick) {
     100,
   ).map((rect) => {
     const entry = byIndex.get(rect.id);
+    const labelLevel = tileLabelLevel(rect);
     return {
       ...entry,
       avgLabel: formatCount(entry.avg),
@@ -233,7 +267,8 @@ export function genreTreemap(rows, pick) {
       y: rect.y,
       w: rect.w,
       h: rect.h,
-      labelRoom: hasLabelRoom(rect),
+      labelLevel,
+      labelRoom: labelLevel !== "none",
     };
   });
   const legend = entries.map((entry) => ({
