@@ -37,19 +37,19 @@ describe("classifyCaption", () => {
     ).toBe("理容・リラクゼーション");
   });
 
-  it("prefers カフェ・スイーツ over グルメ when both match", () => {
+  it("buckets cafe/sweets words as グルメ (カフェ・スイーツ merged in)", () => {
     expect(
       classifyCaption(
         "今川焼き専門店がオープン。粒あんがぎっしり。#川口市 #今川焼き #浅草グルメ",
       ),
-    ).toBe("カフェ・スイーツ");
+    ).toBe("グルメ");
     // (Body words only: a #川口グルメ hashtag would end the
     // classification at stage 1 — see the hashtag tests below.)
     expect(
       classifyCaption(
         "相談処カフェで、朝のモーニングをいただきました。川口グルメな朝。#川口市 #モーニング #カフェ巡り",
       ),
-    ).toBe("カフェ・スイーツ");
+    ).toBe("グルメ");
   });
 
   it("buckets cycling, music and spot posts", () => {
@@ -115,7 +115,13 @@ describe("classifyCaption", () => {
     ).toBe("グルメ");
     expect(
       classifyCaption("自転車で公園のそばを通って、住宅街の店へ #川口カフェ"),
-    ).toBe("カフェ・スイーツ");
+    ).toBe("グルメ");
+    // #川口カフェ is a グルメ tag in its own right (the former
+    // カフェ・スイーツ bucket merged into グルメ): it fires
+    // even when the body carries no food words at all.
+    expect(classifyCaption("住宅街を歩いて、新しい店へ #川口カフェ")).toBe(
+      "グルメ",
+    );
     // #Suno outranks the other genre tags: a song post carries
     // several tags at once.
     expect(
@@ -125,9 +131,9 @@ describe("classifyCaption", () => {
 
   it("matches hashtags exactly, never as bare body words", () => {
     // A different city's グルメ tag is not #川口グルメ: the body
-    // rules decide (今川焼き → カフェ・スイーツ).
+    // rules decide (今川焼き → グルメ).
     expect(classifyCaption("浅草の今川焼き専門店 #浅草グルメ")).toBe(
-      "カフェ・スイーツ",
+      "グルメ",
     );
     // A longer tag that merely starts with a known one does not
     // match either; the body (自転車) decides.
@@ -202,33 +208,23 @@ describe("instagramGenreStats", () => {
         post("今日の空", null, 3, 1),
       ]),
     );
-    expect(rows.map((r) => r.genre)).toEqual([
-      "カフェ・スイーツ",
-      "グルメ",
-      "日常・その他",
-    ]);
-    const cafe = rows[0];
-    expect(cafe.count).toBe(1);
-    expect(cafe.totalViews).toBe(2000);
-    expect(cafe.avgViews).toBe(2000);
-    expect(cafe.saveRate).toBeCloseTo(0.005);
-    expect(cafe.likeRate).toBeCloseTo(0.02);
-    expect(cafe.top.views).toBe(2000);
-
-    const gourmet = rows[1];
-    expect(gourmet.count).toBe(3);
-    expect(gourmet.totalViews).toBe(1500);
+    // The cafe post (カフェでモーニング) lands in グルメ too:
+    // カフェ・スイーツ was merged into グルメ.
+    expect(rows.map((r) => r.genre)).toEqual(["グルメ", "日常・その他"]);
+    const gourmet = rows[0];
+    expect(gourmet.count).toBe(4);
+    expect(gourmet.totalViews).toBe(3500);
     // The zero-view post counts toward the average but not the rates.
-    expect(gourmet.avgViews).toBe(500);
-    expect(gourmet.saveRate).toBeCloseTo(0.05);
-    expect(gourmet.likeRate).toBeCloseTo(0.075);
+    expect(gourmet.avgViews).toBe(875);
+    expect(gourmet.saveRate).toBeCloseTo(0.035);
+    expect(gourmet.likeRate).toBeCloseTo(0.0567);
     expect(gourmet.top).toEqual({
-      title: "インド料理のランチ #グルメ",
-      views: 1000,
-      permalink: "https://www.instagram.com/reel/a/",
+      title: "カフェでモーニング",
+      views: 2000,
+      permalink: "https://www.instagram.com/reel/x/",
     });
 
-    const daily = rows[2];
+    const daily = rows[1];
     expect(daily.count).toBe(1);
     expect(daily.totalViews).toBe(0);
     expect(daily.avgViews).toBeNull();
@@ -275,11 +271,12 @@ describe("mediaGenreOptions / filterMediaByGenre", () => {
   ];
 
   it("lists only the genres that have posts, with their counts", () => {
-    // Order follows the rollup: total views, biggest first.
+    // Order follows the rollup: total views, biggest first. The
+    // cafe post lands in グルメ since カフェ・スイーツ was merged
+    // into it (ga #24), so グルメ leads with 3 posts / 3,500 views.
     expect(mediaGenreOptions(media)).toEqual([
+      { genre: "グルメ", count: 3 },
       { genre: "サイクリング", count: 1 },
-      { genre: "カフェ・スイーツ", count: 1 },
-      { genre: "グルメ", count: 2 },
       { genre: "日常・その他", count: 1 },
     ]);
     expect(mediaGenreOptions(null)).toEqual([]);
@@ -302,9 +299,11 @@ describe("mediaGenreOptions / filterMediaByGenre", () => {
 
   it("keeps only the posts of the chosen genre", () => {
     const gourmet = filterMediaByGenre(media, "グルメ");
+    // "カフェでモーニング" is グルメ too since the merge (ga #24).
     expect(gourmet.map((p) => p.caption)).toEqual([
       "インド料理のランチ #グルメ",
       "カレーの店に行った",
+      "カフェでモーニング",
     ]);
     expect(filterMediaByGenre(media, "サイクリング")).toHaveLength(1);
     expect(filterMediaByGenre(media, "音楽")).toEqual([]);
@@ -376,18 +375,18 @@ describe("mediaDateRange", () => {
 describe("sortGenreRows", () => {
   const rows = [
     { genre: "グルメ", count: 3, totalViews: 1500, avgViews: 500, saveRate: 0.05, likeRate: null, top: { title: "a", views: 1000 } },
-    { genre: "カフェ・スイーツ", count: 1, totalViews: 2000, avgViews: 2000, saveRate: 0.005, likeRate: 0.02, top: { title: "b", views: 2000 } },
+    { genre: "音楽", count: 1, totalViews: 2000, avgViews: 2000, saveRate: 0.005, likeRate: 0.02, top: { title: "b", views: 2000 } },
     { genre: "日常・その他", count: 1, totalViews: 0, avgViews: null, saveRate: null, likeRate: null, top: null },
   ];
 
   it("sorts numeric columns in both directions", () => {
     expect(sortGenreRows(rows, "totalViews", "desc").map((r) => r.genre)).toEqual([
-      "カフェ・スイーツ",
+      "音楽",
       "グルメ",
       "日常・その他",
     ]);
     expect(sortGenreRows(rows, "count", "asc").map((r) => r.genre)).toEqual([
-      "カフェ・スイーツ",
+      "音楽",
       "日常・その他",
       "グルメ",
     ]);
@@ -395,16 +394,16 @@ describe("sortGenreRows", () => {
 
   it("sorts the name column as text", () => {
     expect(sortGenreRows(rows, "genre", "asc").map((r) => r.genre)).toEqual([
-      "カフェ・スイーツ",
       "グルメ",
       "日常・その他",
+      "音楽",
     ]);
   });
 
   it("sorts the top column by the top post's views, missing tops last", () => {
     expect(sortGenreRows(rows, "top", "asc").map((r) => r.genre)).toEqual([
       "グルメ",
-      "カフェ・スイーツ",
+      "音楽",
       "日常・その他",
     ]);
   });
@@ -413,7 +412,7 @@ describe("sortGenreRows", () => {
     expect(sortGenreRows(rows, "avgViews", "asc").at(-1).genre).toBe("日常・その他");
     expect(sortGenreRows(rows, "avgViews", "desc").at(-1).genre).toBe("日常・その他");
     expect(sortGenreRows(rows, "likeRate", "desc").map((r) => r.genre)).toEqual([
-      "カフェ・スイーツ",
+      "音楽",
       "グルメ",
       "日常・その他",
     ]);
@@ -432,13 +431,13 @@ describe("genreAverageBars", () => {
     const bars = genreAverageBars(
       [
         { genre: "グルメ", avgViews: 500 },
-        { genre: "カフェ・スイーツ", avgViews: 2000 },
+        { genre: "音楽", avgViews: 2000 },
         { genre: "日常・その他", avgViews: null },
       ],
       "avgViews",
     );
     expect(bars.map((b) => b.name)).toEqual([
-      "カフェ・スイーツ",
+      "音楽",
       "グルメ",
       "日常・その他",
     ]);
