@@ -254,6 +254,11 @@ function parseAgeGenderKey(key) {
 const ageRank = (age) => parseInt(age, 10);
 const GENDER_RANK = { M: 0, F: 1, U: 2 };
 
+// The full age x gender grid. The API only reports buckets that
+// have followers, so the display zero-fills every missing cell.
+const AGE_BANDS = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+const GENDERS = ["M", "F", "U"];
+
 // "45-54/M" -> "45-54歳 男性"; "U.65+" -> "65歳以上 不明";
 // unknown shapes pass through as-is.
 export function ageGenderLabel(key) {
@@ -270,41 +275,82 @@ export function ageGenderLabel(key) {
 
 // Age/gender rows for the bar list, ordered by age band ascending
 // and then male / female / unknown within a band, with each bar's
-// width as a percentage of the largest value. Keys in an unknown
-// shape keep their raw label and sink to the bottom. No row cap by
-// default: with age ordering, a cap would drop whole age bands.
+// width as a percentage of the largest value. Every cell of the
+// age x gender grid is shown: buckets missing from the data (bands
+// with no followers) are zero-filled with an empty bar, so the full
+// age range is always visible once any demographics exist. Keys in
+// an unknown shape keep their raw label and sink to the bottom. No
+// row cap by default: with age ordering, a cap would drop whole
+// age bands.
 export function demographicsBars(detail, limit = Infinity) {
   const list = detail?.instagram?.demographics?.age_gender;
   if (!Array.isArray(list)) {
     return [];
   }
-  const rows = list
-    .filter((entry) => entry && isNum(entry.value))
-    .map((entry) => ({ entry, parsed: parseAgeGenderKey(entry.key) }))
+  const entries = list.filter((entry) => entry && isNum(entry.value));
+  if (!entries.length) {
+    return [];
+  }
+  // Merge entries by age/gender cell (both wire formats can name
+  // the same cell); keep the first-seen raw key for the row.
+  const cells = new Map();
+  const unknown = [];
+  for (const entry of entries) {
+    const parsed = parseAgeGenderKey(entry.key);
+    if (!parsed) {
+      unknown.push(entry);
+      continue;
+    }
+    const id = `${parsed.age}/${parsed.gender}`;
+    const cell = cells.get(id);
+    if (cell) {
+      cell.value += entry.value;
+    } else {
+      cells.set(id, { key: entry.key, value: entry.value });
+    }
+  }
+  const known = [];
+  for (const age of AGE_BANDS) {
+    for (const gender of GENDERS) {
+      const cell = cells.get(`${age}/${gender}`);
+      const key = `${age}/${gender}`;
+      known.push({
+        key: cell ? cell.key : key,
+        label: ageGenderLabel(key),
+        value: cell ? cell.value : 0,
+      });
+    }
+  }
+  // Parseable keys in a non-standard band are kept too, ordered by
+  // band and gender after the standard grid.
+  const extra = [...cells.entries()]
+    .filter(([id]) => !AGE_BANDS.includes(id.split("/")[0]))
+    .map(([id, cell]) => ({ id, ...cell, parsed: parseAgeGenderKey(id) }))
     .sort((a, b) => {
-      if (a.parsed && b.parsed) {
-        const byAge = ageRank(a.parsed.age) - ageRank(b.parsed.age);
-        if (byAge !== 0) {
-          return byAge;
-        }
-        return GENDER_RANK[a.parsed.gender] - GENDER_RANK[b.parsed.gender];
+      const byAge = ageRank(a.parsed.age) - ageRank(b.parsed.age);
+      if (byAge !== 0) {
+        return byAge;
       }
-      if (a.parsed) {
-        return -1;
-      }
-      if (b.parsed) {
-        return 1;
-      }
-      return 0;
+      return GENDER_RANK[a.parsed.gender] - GENDER_RANK[b.parsed.gender];
     })
-    .slice(0, limit)
-    .map(({ entry }) => entry);
-  const max = rows.reduce((m, entry) => Math.max(m, entry.value), 0);
-  return rows.map((entry) => ({
-    key: entry.key,
-    label: ageGenderLabel(entry.key),
-    value: entry.value,
-    pct: max > 0 ? Math.round((entry.value / max) * 100) : 0,
+    .map(({ key, value }) => ({
+      key,
+      label: ageGenderLabel(key),
+      value,
+    }));
+  const rows = [
+    ...known,
+    ...extra,
+    ...unknown.map((entry) => ({
+      key: entry.key,
+      label: ageGenderLabel(entry.key),
+      value: entry.value,
+    })),
+  ].slice(0, limit);
+  const max = rows.reduce((m, row) => Math.max(m, row.value), 0);
+  return rows.map((row) => ({
+    ...row,
+    pct: max > 0 ? Math.round((row.value / max) * 100) : 0,
   }));
 }
 
