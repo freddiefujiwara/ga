@@ -12,6 +12,9 @@ import {
   fetchArticleTitles,
   pageRanking,
   fetchSnsDetail,
+  fetchSnsHistory,
+  snsHistoryRows,
+  snsHistorySeries,
   formatCount,
   formatSeconds,
   formatJstDateTime,
@@ -171,6 +174,7 @@ async function loadDashboard() {
   // The SNS section loads on its own: a failure there must not take
   // the GA dashboard down with it.
   loadSns();
+  loadSnsHistory();
   return true;
 }
 
@@ -416,6 +420,44 @@ async function loadSns() {
     renderSns(detail);
   } catch {
     snsStatusEl.textContent = "SNSデータを取得できませんでした";
+  }
+}
+
+// --- SNS trend charts (history rows behind sns_detail) ---
+
+function renderSnsHistory(response) {
+  const wrap = document.getElementById("sns-history");
+  wrap.innerHTML = "";
+  const series = snsHistorySeries(snsHistoryRows(response));
+  if (!series.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "履歴はまだありません（取得のたびに貯まっていきます）";
+    wrap.appendChild(p);
+    return;
+  }
+  for (const item of series) {
+    const head = document.createElement("p");
+    head.className = "meta";
+    head.textContent =
+      `${item.label}：最新 ${formatCount(item.latest)}` +
+      `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+    const chart = document.createElement("div");
+    chart.className = "chart-wrap";
+    chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+    wrap.appendChild(head);
+    wrap.appendChild(chart);
+  }
+}
+
+// The history has its own load: empty or failed just shows the
+// empty-state line and never touches the rest of the SNS section.
+async function loadSnsHistory() {
+  try {
+    const response = await fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth());
+    renderSnsHistory(response && response.ok ? response : null);
+  } catch {
+    renderSnsHistory(null);
   }
 }
 

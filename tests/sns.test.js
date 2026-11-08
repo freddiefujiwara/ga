@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   fetchSnsDetail,
+  fetchSnsHistory,
+  snsHistoryRows,
+  snsHistorySeries,
+  jstDateKey,
+  formatTapsCount,
   formatCount,
   formatPercent,
   formatSeconds,
@@ -125,6 +130,141 @@ describe("fetchSnsDetail", () => {
     expect(url.searchParams.get("action")).toBe("sns_detail");
     expect(url.searchParams.get("share_token")).toBe("tok");
     expect(url.searchParams.get("id_token")).toBeNull();
+  });
+});
+
+describe("fetchSnsHistory", () => {
+  it("requests the sns_history action with the id token", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, rows: [] }));
+    const response = await fetchSnsHistory(ENDPOINT, { idToken: "idt" }, fetchImpl);
+    const url = new URL(fetchImpl.mock.calls[0][0]);
+    expect(url.searchParams.get("action")).toBe("sns_history");
+    expect(url.searchParams.get("id_token")).toBe("idt");
+    expect(response.rows).toEqual([]);
+  });
+
+  it("requests the sns_history action with a share token", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, rows: [] }));
+    await fetchSnsHistory(ENDPOINT, { shareToken: "tok" }, fetchImpl);
+    const url = new URL(fetchImpl.mock.calls[0][0]);
+    expect(url.searchParams.get("action")).toBe("sns_history");
+    expect(url.searchParams.get("share_token")).toBe("tok");
+    expect(url.searchParams.get("id_token")).toBeNull();
+  });
+});
+
+describe("sns history series", () => {
+  // Rows as the sns_history action serves them: ascending, with
+  // nulls where a collection missed a number. The first row is
+  // 2026/11/8 19:00 UTC = 2026/11/9 04:00 JST.
+  const ROWS = [
+    {
+      collected_at: "2026-11-08T19:00:00.000Z",
+      total_followers: 2000,
+      views_30d: 576645,
+      media_count: 2420,
+    },
+    {
+      collected_at: "2026-11-09T01:00:00.000Z",
+      total_followers: 2005,
+      views_30d: null,
+      media_count: 2421,
+    },
+    {
+      collected_at: "2026-11-09T07:00:00.000Z",
+      total_followers: null,
+      views_30d: 580000,
+      media_count: 2421,
+    },
+  ];
+
+  it("snsHistoryRows passes rows through and tolerates junk", () => {
+    expect(snsHistoryRows({ ok: true, rows: ROWS })).toEqual(ROWS);
+    expect(snsHistoryRows(null)).toEqual([]);
+    expect(snsHistoryRows({ ok: false, rows: ROWS })).toEqual([]);
+    expect(snsHistoryRows({ ok: true })).toEqual([]);
+    expect(snsHistoryRows({ ok: true, rows: "nope" })).toEqual([]);
+  });
+
+  it("jstDateKey takes the JST calendar day", () => {
+    expect(jstDateKey("2026-11-08T19:25:52.088Z")).toBe("20261109");
+    expect(jstDateKey("2026-11-09T01:00:00.000Z")).toBe("20261109");
+    expect(jstDateKey(null)).toBeNull();
+    expect(jstDateKey("not-a-date")).toBeNull();
+  });
+
+  it("shapes rows into the three chart series, skipping missing values", () => {
+    const series = snsHistorySeries(ROWS);
+    expect(series.map((s) => s.key)).toEqual([
+      "total_followers",
+      "views_30d",
+      "media_count",
+    ]);
+    const followers = series[0];
+    expect(followers.label).toBe("SNS延べフォロワー数");
+    expect(followers.points).toEqual([
+      { date: "20261109", views: 2000 },
+      { date: "20261109", views: 2005 },
+    ]);
+    expect(followers.latest).toBe(2005);
+    expect(followers.firstAt).toBe("2026-11-08T19:00:00.000Z");
+    expect(followers.lastAt).toBe("2026-11-09T07:00:00.000Z");
+    // The null in the middle row is skipped, not zero-filled.
+    expect(series[1].points).toEqual([
+      { date: "20261109", views: 576645 },
+      { date: "20261109", views: 580000 },
+    ]);
+    expect(series[1].latest).toBe(580000);
+    expect(series[2].latest).toBe(2421);
+  });
+
+  it("sorts out-of-order rows and drops series without any number", () => {
+    const shuffled = [ROWS[2], ROWS[0], ROWS[1]];
+    const series = snsHistorySeries(shuffled);
+    expect(series[0].points.map((p) => p.views)).toEqual([2000, 2005]);
+    const onlyFollowers = snsHistorySeries([
+      { collected_at: "2026-11-09T00:00:00.000Z", total_followers: 2000 },
+    ]);
+    expect(onlyFollowers.map((s) => s.key)).toEqual(["total_followers"]);
+  });
+
+  it("empty or junk history yields no series (the empty state)", () => {
+    expect(snsHistorySeries([])).toEqual([]);
+    expect(snsHistorySeries(null)).toEqual([]);
+    expect(snsHistorySeries("nope")).toEqual([]);
+    expect(snsHistorySeries([{ total_followers: 2000 }])).toEqual([]);
+    expect(
+      snsHistorySeries([
+        { collected_at: "2026-11-09T00:00:00.000Z", total_followers: null },
+      ]),
+    ).toEqual([]);
+  });
+});
+
+describe("profile links taps card", () => {
+  it("formatTapsCount dashes the API's 0 and shows real numbers as-is", () => {
+    expect(formatTapsCount(0)).toBe("—");
+    expect(formatTapsCount(46)).toBe("46");
+    expect(formatTapsCount(null)).toBe("—");
+    expect(formatTapsCount(undefined)).toBe("—");
+  });
+
+  it("snsOverview dashes the taps card when the API returns 0", () => {
+    const detail = {
+      ...DETAIL,
+      instagram: { ...DETAIL.instagram, profile_links_taps_30d: 0 },
+    };
+    const cards = Object.fromEntries(
+      snsOverview(detail).map((c) => [c.label, c.value]),
+    );
+    expect(cards["プロフィールのリンク（過去30日）"]).toBe("—");
+  });
+
+  it("snsOverview shows a non-zero taps count as-is", () => {
+    const cards = Object.fromEntries(
+      snsOverview(DETAIL).map((c) => [c.label, c.value]),
+    );
+    expect(cards["プロフィールのリンク（過去30日）"]).toBe("46");
   });
 });
 

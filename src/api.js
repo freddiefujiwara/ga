@@ -54,6 +54,92 @@ export async function fetchSnsDetail(endpoint, auth, fetchImpl = fetch) {
   return getJson(endpoint, auth, { action: "sns_detail" }, fetchImpl);
 }
 
+// --- SNS history (ga-gas action=sns_history) ---
+//
+// The account rows ga-gas appends to its history spreadsheet on
+// every collection, oldest first: { ok: true, rows: [{ collected_at,
+// ig_followers, ..., views_30d, ... }] } with nulls wherever a
+// collection could not get a number. Same auth as sns_detail.
+
+export async function fetchSnsHistory(endpoint, auth, fetchImpl = fetch) {
+  return getJson(endpoint, auth, { action: "sns_history" }, fetchImpl);
+}
+
+export function snsHistoryRows(response) {
+  return response && response.ok && Array.isArray(response.rows)
+    ? response.rows
+    : [];
+}
+
+const jstDayKeyFormat = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// "2026-11-08T19:25:52.088Z" -> "20261109" (the JST calendar day),
+// the date shape the line-chart builder takes. Null when unparsable.
+export function jstDateKey(iso) {
+  const date = iso ? new Date(iso) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return jstDayKeyFormat.format(date).replace(/-/g, "");
+}
+
+// The three trend series of the SNS section, in display order.
+export const SNS_HISTORY_SERIES = [
+  { key: "total_followers", label: "SNS延べフォロワー数" },
+  { key: "views_30d", label: "再生回数（過去30日）" },
+  { key: "media_count", label: "投稿数" },
+];
+
+// Shape history rows into one chart series per metric: points are
+// { date, views } for buildLineChartSvg (views is just the value),
+// skipping the collections where that metric is missing. Each
+// series also carries its latest value and the covered period
+// (first/last collected_at, ISO). Series with no numeric point at
+// all are dropped, and an empty history yields an empty list.
+export function snsHistorySeries(rows) {
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  const sorted = rows
+    .filter(
+      (row) => row && typeof row.collected_at === "string" && row.collected_at,
+    )
+    .slice()
+    .sort((a, b) =>
+      a.collected_at < b.collected_at ? -1 : a.collected_at > b.collected_at ? 1 : 0,
+    );
+  if (!sorted.length) {
+    return [];
+  }
+  const firstAt = sorted[0].collected_at;
+  const lastAt = sorted[sorted.length - 1].collected_at;
+  return SNS_HISTORY_SERIES.map(({ key, label }) => {
+    const points = [];
+    for (const row of sorted) {
+      const date = isNum(row[key]) ? jstDateKey(row.collected_at) : null;
+      if (date) {
+        points.push({ date, views: row[key] });
+      }
+    }
+    if (!points.length) {
+      return null;
+    }
+    return {
+      key,
+      label,
+      points,
+      latest: points[points.length - 1].views,
+      firstAt,
+      lastAt,
+    };
+  }).filter(Boolean);
+}
+
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 
 export function formatCount(value) {
@@ -113,6 +199,14 @@ export function snsTotalFollowers(detail) {
   return parts.length ? parts.reduce((sum, v) => sum + v, 0) : null;
 }
 
+// The profile-links-taps card: the official API returns 0 for this
+// metric even when the Instagram app shows real taps (measured on
+// 2026-11-09), so a 0 is displayed as "—" instead of a fake count.
+// Any other number is shown as-is.
+export function formatTapsCount(value) {
+  return value === 0 ? "—" : formatCount(value);
+}
+
 // Overview cards for the SNS section: [{ label, value }] with the
 // values already formatted ("—" for anything missing).
 export function snsOverview(detail) {
@@ -130,7 +224,7 @@ export function snsOverview(detail) {
     { label: "リーチ（過去30日）", value: formatCount(ig.reach_30d) },
     { label: "反応した人数（過去30日）", value: formatCount(ig.accounts_engaged_30d) },
     { label: "反応の合計（過去30日）", value: formatCount(interactions.total) },
-    { label: "プロフィールのリンク（過去30日）", value: formatCount(ig.profile_links_taps_30d) },
+    { label: "プロフィールのリンク（過去30日）", value: formatTapsCount(ig.profile_links_taps_30d) },
     { label: "フォロワー以外（過去30日）", value: formatPercent(ig.non_follower_pct) },
     { label: "フォロー（過去30日）", value: formatCount(ig.follows_30d) },
     { label: "フォロー解除（過去30日）", value: formatCount(ig.unfollows_30d) },
