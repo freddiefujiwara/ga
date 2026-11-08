@@ -321,6 +321,11 @@ textarea:disabled {
   opacity: 0.85;
 }
 
+.treemap-tile-sub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
 .channel-legend {
   list-style: none;
   margin: 8px 0;
@@ -472,6 +477,47 @@ textarea:disabled {
   flex: 0 0 64px;
   text-align: right;
   font-weight: 600;
+}
+
+/* Genre average bars: genre names run longer than the demo
+   labels, so the label column gets more room. */
+.genre-bars .demo-bar-label {
+  flex: 0 0 9.5em;
+}
+
+/* Channel-size bars (overview tab): the fill takes the change
+   tone (up = green, down = red), and the label column fits the
+   channel name plus its metric. */
+.demo-bar-fill.up {
+  background: var(--up);
+}
+
+.demo-bar-fill.down {
+  background: var(--error);
+}
+
+.channel-bars .demo-bar-label {
+  flex: 0 0 11em;
+  white-space: normal;
+}
+
+.channel-bar-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.channel-bar-metric {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channel-bars .demo-bar-value {
+  flex: 0 0 5em;
+}
+
+.channel-bar-delta {
+  flex: 0 0 6.5em;
+  margin-top: 0;
 }
 
 /* Age/gender pyramid: male bars extend left from the center age

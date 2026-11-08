@@ -6,6 +6,7 @@ import {
   blogGenreStats,
   UNTAGGED_LABEL,
 } from "../src/api.js";
+import { sortGenreRows } from "../src/genres.js";
 
 const ORIGIN = "https://freddiefujiwara.com";
 
@@ -168,5 +169,21 @@ describe("blogGenreStats", () => {
     expect(blogGenreStats(pages, new Map(), TITLES, ORIGIN)).toEqual([]);
     expect(blogGenreStats(pages, null, TITLES, ORIGIN)).toEqual([]);
     expect(blogGenreStats(pages, undefined, TITLES, ORIGIN)).toEqual([]);
+  });
+
+  it("blog rows sort by every column through sortGenreRows", () => {
+    const rows = blogGenreStats(pages, TAGS, TITLES, ORIGIN);
+    expect(sortGenreRows(rows, "perArticle", "asc").map((r) => r.tag)).toEqual([
+      UNTAGGED_LABEL,
+      "川口",
+      "中国語",
+      "技術",
+      "運営",
+    ]);
+    expect(sortGenreRows(rows, "top", "desc").at(0).tag).toBe("運営");
+    expect(sortGenreRows(rows, "count", "desc").at(0)).toMatchObject({
+      tag: "運営",
+      count: 2,
+    });
   });
 });

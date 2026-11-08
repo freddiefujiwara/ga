@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   INSTAGRAM_GENRE_RULES,
   classifyCaption,
+  filterMediaByPeriod,
   formatRate,
+  genreAverageBars,
+  genreStatsForMedia,
   instagramGenreStats,
+  mediaDateRange,
+  sortGenreRows,
 } from "../src/genres.js";
 
 // Captions in the shape of the account's real posts (shortened),
@@ -165,5 +170,162 @@ describe("instagramGenreStats", () => {
     expect(instagramGenreStats({})).toEqual([]);
     expect(instagramGenreStats(detail([]))).toEqual([]);
     expect(instagramGenreStats(detail([null]))).toEqual([]);
+  });
+
+  it("genreStatsForMedia rolls up a caller-supplied list the same way", () => {
+    const media = [
+      post("インド料理のランチ #グルメ", 1000, 100, 50),
+      post("カフェでモーニング", 2000, 40, 10),
+    ];
+    expect(genreStatsForMedia(media)).toEqual(
+      instagramGenreStats(detail(media)),
+    );
+    expect(genreStatsForMedia(null)).toEqual([]);
+    expect(genreStatsForMedia(undefined)).toEqual([]);
+  });
+});
+
+describe("filterMediaByPeriod", () => {
+  const now = new Date("2026-11-09T12:00:00+09:00");
+  const media = [
+    { posted_at: "2026-11-08T10:00:00+09:00", caption: "昨日" },
+    { posted_at: "2026-11-03T10:00:00+09:00", caption: "6日前" },
+    { posted_at: "2026-10-20T10:00:00+09:00", caption: "20日前" },
+    { posted_at: "2026-10-01T10:00:00+09:00", caption: "39日前" },
+    { caption: "日付なし" },
+  ];
+
+  it("keeps everything for 取得分すべて and unknown keys", () => {
+    expect(filterMediaByPeriod(media, "all", now)).toHaveLength(5);
+    expect(filterMediaByPeriod(media, "bogus", now)).toHaveLength(5);
+  });
+
+  it("keeps only the posts inside the 30-day window", () => {
+    const kept = filterMediaByPeriod(media, "30d", now);
+    expect(kept.map((p) => p.caption)).toEqual(["昨日", "6日前", "20日前"]);
+  });
+
+  it("keeps only the posts inside the 7-day window", () => {
+    const kept = filterMediaByPeriod(media, "7d", now);
+    expect(kept.map((p) => p.caption)).toEqual(["昨日", "6日前"]);
+  });
+
+  it("tolerates missing input", () => {
+    expect(filterMediaByPeriod(null, "7d", now)).toEqual([]);
+    expect(filterMediaByPeriod(undefined, "all", now)).toEqual([]);
+  });
+});
+
+describe("mediaDateRange", () => {
+  it("returns the oldest and newest post dates", () => {
+    expect(
+      mediaDateRange([
+        { posted_at: "2026-11-08T10:00:00+09:00" },
+        { posted_at: "2026-10-20T10:00:00+09:00" },
+        { posted_at: "2026-11-01T10:00:00+09:00" },
+      ]),
+    ).toEqual({
+      from: "2026-10-20T10:00:00+09:00",
+      to: "2026-11-08T10:00:00+09:00",
+    });
+  });
+
+  it("ignores posts without a usable date", () => {
+    expect(mediaDateRange([{ caption: "x" }, { posted_at: "junk" }])).toBeNull();
+    expect(mediaDateRange([])).toBeNull();
+    expect(mediaDateRange(null)).toBeNull();
+  });
+});
+
+describe("sortGenreRows", () => {
+  const rows = [
+    { genre: "グルメ", count: 3, totalViews: 1500, avgViews: 500, saveRate: 0.05, likeRate: null, top: { title: "a", views: 1000 } },
+    { genre: "カフェ・スイーツ", count: 1, totalViews: 2000, avgViews: 2000, saveRate: 0.005, likeRate: 0.02, top: { title: "b", views: 2000 } },
+    { genre: "日常・その他", count: 1, totalViews: 0, avgViews: null, saveRate: null, likeRate: null, top: null },
+  ];
+
+  it("sorts numeric columns in both directions", () => {
+    expect(sortGenreRows(rows, "totalViews", "desc").map((r) => r.genre)).toEqual([
+      "カフェ・スイーツ",
+      "グルメ",
+      "日常・その他",
+    ]);
+    expect(sortGenreRows(rows, "count", "asc").map((r) => r.genre)).toEqual([
+      "カフェ・スイーツ",
+      "日常・その他",
+      "グルメ",
+    ]);
+  });
+
+  it("sorts the name column as text", () => {
+    expect(sortGenreRows(rows, "genre", "asc").map((r) => r.genre)).toEqual([
+      "カフェ・スイーツ",
+      "グルメ",
+      "日常・その他",
+    ]);
+  });
+
+  it("sorts the top column by the top post's views, missing tops last", () => {
+    expect(sortGenreRows(rows, "top", "asc").map((r) => r.genre)).toEqual([
+      "グルメ",
+      "カフェ・スイーツ",
+      "日常・その他",
+    ]);
+  });
+
+  it("sinks missing values to the bottom in both directions", () => {
+    expect(sortGenreRows(rows, "avgViews", "asc").at(-1).genre).toBe("日常・その他");
+    expect(sortGenreRows(rows, "avgViews", "desc").at(-1).genre).toBe("日常・その他");
+    expect(sortGenreRows(rows, "likeRate", "desc").map((r) => r.genre)).toEqual([
+      "カフェ・スイーツ",
+      "グルメ",
+      "日常・その他",
+    ]);
+  });
+
+  it("tolerates junk input and does not mutate the rows", () => {
+    expect(sortGenreRows(null)).toEqual([]);
+    const before = rows.map((r) => r.genre);
+    sortGenreRows(rows, "count", "asc");
+    expect(rows.map((r) => r.genre)).toEqual(before);
+  });
+});
+
+describe("genreAverageBars", () => {
+  it("scales bars to the biggest average and sorts by it", () => {
+    const bars = genreAverageBars(
+      [
+        { genre: "グルメ", avgViews: 500 },
+        { genre: "カフェ・スイーツ", avgViews: 2000 },
+        { genre: "日常・その他", avgViews: null },
+      ],
+      "avgViews",
+    );
+    expect(bars.map((b) => b.name)).toEqual([
+      "カフェ・スイーツ",
+      "グルメ",
+      "日常・その他",
+    ]);
+    expect(bars[0]).toMatchObject({ value: 2000, valueLabel: "2,000", pct: 100 });
+    expect(bars[1].pct).toBe(25);
+    expect(bars[2]).toMatchObject({ value: null, valueLabel: "—", pct: 0 });
+  });
+
+  it("reads the blog flavour's tag and perArticle", () => {
+    const bars = genreAverageBars(
+      [
+        { tag: "運営", perArticle: 120 },
+        { tag: "川口", perArticle: 60 },
+      ],
+      "perArticle",
+    );
+    expect(bars.map((b) => b.name)).toEqual(["運営", "川口"]);
+    expect(bars[0].pct).toBe(100);
+    expect(bars[1].pct).toBe(50);
+  });
+
+  it("tolerates junk input", () => {
+    expect(genreAverageBars(null, "avgViews")).toEqual([]);
+    expect(genreAverageBars([], "avgViews")).toEqual([]);
   });
 });

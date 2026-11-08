@@ -35,9 +35,16 @@ import {
   snsErrorNotes,
 } from "./api.js";
 import { buildLineChartSvg, tooltipText } from "./chart.js";
-import { instagramGenreStats, formatRate } from "./genres.js";
+import {
+  genreStatsForMedia,
+  filterMediaByPeriod,
+  mediaDateRange,
+  sortGenreRows,
+  genreAverageBars,
+  formatRate,
+} from "./genres.js";
 import { tabFromHash, hashWithTab } from "./tabs.js";
-import { channelTreemap } from "./treemap.js";
+import { channelBars, genreTreemap } from "./treemap.js";
 import {
   parseShareToken,
   buildShareUrl,
@@ -233,12 +240,133 @@ async function loadDashboard() {
   return true;
 }
 
+// --- Genre visuals (Instagram / blog genre sections) ---
+// Both genre sections summarise their stat rows the same way the
+// overview summarises channels: a treemap whose tile area is the
+// genre's total, and a bar chart comparing the per-genre average.
+// Tiles too small for text stay blank; the legend under the map
+// lists every genre's total and average.
+
+function renderGenreTreemap(mapEl, legendEl, map) {
+  mapEl.innerHTML = "";
+  if (!map.tiles.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "—";
+    mapEl.appendChild(p);
+  }
+  for (const tile of map.tiles) {
+    const div = document.createElement("div");
+    div.className = "treemap-tile";
+    div.style.left = `${tile.x}%`;
+    div.style.top = `${tile.y}%`;
+    div.style.width = `${tile.w}%`;
+    div.style.height = `${tile.h}%`;
+    div.title = `${tile.name}：合計 ${tile.totalLabel}、${tile.avgText}`;
+    if (tile.labelRoom) {
+      const name = document.createElement("div");
+      name.className = "treemap-tile-name";
+      name.textContent = tile.name;
+      const value = document.createElement("div");
+      value.className = "treemap-tile-value";
+      value.textContent = tile.totalLabel;
+      const avg = document.createElement("div");
+      avg.className = "treemap-tile-sub";
+      avg.textContent = tile.avgText;
+      div.appendChild(name);
+      div.appendChild(value);
+      div.appendChild(avg);
+    }
+    mapEl.appendChild(div);
+  }
+  legendEl.innerHTML = "";
+  for (const entry of map.legend) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "channel-legend-name";
+    name.textContent = entry.name;
+    li.appendChild(name);
+    const value = document.createElement("span");
+    value.className = "channel-legend-value";
+    value.textContent = `合計 ${entry.totalLabel}`;
+    li.appendChild(value);
+    const avg = document.createElement("span");
+    avg.className = "channel-legend-note";
+    avg.textContent = entry.avgText;
+    li.appendChild(avg);
+    legendEl.appendChild(li);
+  }
+}
+
+function buildGenreTreemap(map) {
+  const frag = document.createDocumentFragment();
+  const mapEl = document.createElement("div");
+  mapEl.className = "treemap";
+  const legendEl = document.createElement("ul");
+  legendEl.className = "channel-legend";
+  renderGenreTreemap(mapEl, legendEl, map);
+  frag.appendChild(mapEl);
+  frag.appendChild(legendEl);
+  return frag;
+}
+
+function renderGenreBars(barsEl, bars) {
+  barsEl.innerHTML = "";
+  for (const bar of bars) {
+    const row = document.createElement("div");
+    row.className = "demo-bar";
+    const label = document.createElement("span");
+    label.className = "demo-bar-label";
+    label.textContent = bar.name;
+    const track = document.createElement("div");
+    track.className = "demo-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "demo-bar-fill";
+    fill.style.width = `${bar.pct}%`;
+    track.appendChild(fill);
+    const value = document.createElement("span");
+    value.className = "demo-bar-value";
+    value.textContent = bar.valueLabel;
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(value);
+    barsEl.appendChild(row);
+  }
+}
+
+function buildGenreBars(bars, labelText) {
+  const frag = document.createDocumentFragment();
+  const label = document.createElement("p");
+  label.className = "meta";
+  label.textContent = labelText;
+  const barsEl = document.createElement("div");
+  barsEl.className = "demo-bars genre-bars";
+  renderGenreBars(barsEl, bars);
+  frag.appendChild(label);
+  frag.appendChild(barsEl);
+  return frag;
+}
+
 // --- Blog genre rollup (blog tab) ---
 // Joins the GA page rows with the blog's article tag map. Without
 // the map there is nothing honest to group by: the section then
-// carries a short note instead of a table.
+// carries a short note instead of a table. Column headers sort
+// the rows, like the Instagram tables; the last render's inputs
+// are kept so a header click can re-render in the new order.
+
+let blogGenreSort = { key: "totalViews", dir: "desc" };
+let blogGenreContext = null;
+
+const BLOG_GENRE_COLUMNS = [
+  { key: "tag", label: "タグ", numeric: false },
+  { key: "count", label: "記事数", numeric: true },
+  { key: "totalViews", label: "表示回数 合計", numeric: true },
+  { key: "perArticle", label: "1記事あたり", numeric: true },
+  { key: "top", label: "最も読まれた記事", numeric: false },
+];
 
 function renderBlogGenres(pagesResponse, meta, rssTitles) {
+  blogGenreContext = { pagesResponse, meta, rssTitles };
   const wrap = document.getElementById("blog-genres");
   wrap.innerHTML = "";
   if (!meta || !meta.tags || meta.tags.size === 0) {
@@ -254,11 +382,10 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
   for (const [id, title] of rssTitles) {
     titles.set(id, title);
   }
-  const rows = blogGenreStats(
-    pagesResponse,
-    meta.tags,
-    titles,
-    CONFIG.SITE_ORIGIN,
+  const rows = sortGenreRows(
+    blogGenreStats(pagesResponse, meta.tags, titles, CONFIG.SITE_ORIGIN),
+    blogGenreSort.key,
+    blogGenreSort.dir,
   );
   if (!rows.length) {
     const p = document.createElement("p");
@@ -267,22 +394,48 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     wrap.appendChild(p);
     return;
   }
+  // The tiles (area = total views) and the average bars summarise
+  // the same rows the table below lists in full.
+  wrap.appendChild(
+    buildGenreTreemap(
+      genreTreemap(rows, (row) => ({
+        name: row.tag,
+        total: row.totalViews,
+        avgText: `1記事あたり ${formatCount(row.perArticle)}`,
+      })),
+    ),
+  );
+  wrap.appendChild(
+    buildGenreBars(genreAverageBars(rows, "perArticle"), "1記事あたり表示回数"),
+  );
   const table = document.createElement("table");
   table.className = "data-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const [text, numeric] of [
-    ["タグ", false],
-    ["記事数", true],
-    ["表示回数 合計", true],
-    ["1記事あたり", true],
-    ["最も読まれた記事", false],
-  ]) {
+  for (const column of BLOG_GENRE_COLUMNS) {
     const th = document.createElement("th");
-    if (numeric) {
-      th.className = "num";
-    }
-    th.textContent = text;
+    th.className = (column.numeric ? "num " : "") + "sortable";
+    const active = blogGenreSort.key === column.key;
+    th.textContent =
+      column.label +
+      (active ? (blogGenreSort.dir === "desc" ? " ↓" : " ↑") : "");
+    th.addEventListener("click", () => {
+      if (blogGenreSort.key === column.key) {
+        blogGenreSort = {
+          key: column.key,
+          dir: blogGenreSort.dir === "desc" ? "asc" : "desc",
+        };
+      } else {
+        blogGenreSort = { key: column.key, dir: "desc" };
+      }
+      if (blogGenreContext) {
+        renderBlogGenres(
+          blogGenreContext.pagesResponse,
+          blogGenreContext.meta,
+          blogGenreContext.rssTitles,
+        );
+      }
+    });
     headRow.appendChild(th);
   }
   thead.appendChild(headRow);
@@ -394,90 +547,58 @@ function renderTopPosts() {
   }
 }
 
-// The channel-size treemap at the top of the overview: one tile
-// per channel, area = audience size, colour = change since the
-// previous collection. Tiles too small for text stay blank; the
-// legend under the map lists every channel's exact numbers.
-function renderChannelTreemap() {
-  const mapEl = document.getElementById("channel-treemap");
-  const legendEl = document.getElementById("channel-legend");
-  const { tiles, legend } = channelTreemap(
+// The channel sizes at the top of the overview, as horizontal
+// bars: bar length = the channel's audience, the fill colour and
+// the change line follow the change since the previous
+// collection (up = green, down = red). Threads shows as a
+// "集計待ち" row with an empty bar until its followers arrive.
+function renderChannelBars() {
+  const wrap = document.getElementById("channel-bars");
+  wrap.innerHTML = "";
+  const bars = channelBars(
     overviewState.detail,
     overviewState.gaTotals,
     overviewState.historyRows,
   );
-  mapEl.innerHTML = "";
-  if (!tiles.length) {
-    const p = document.createElement("p");
-    p.className = "meta";
-    p.textContent = "—";
-    mapEl.appendChild(p);
-  }
-  for (const tile of tiles) {
-    const div = document.createElement("div");
-    div.className = `treemap-tile ${tile.tone}`;
-    div.style.left = `${tile.x}%`;
-    div.style.top = `${tile.y}%`;
-    div.style.width = `${tile.w}%`;
-    div.style.height = `${tile.h}%`;
-    div.title = `${tile.name}：${tile.metricLabel} ${tile.valueLabel}`;
-    if (tile.labelRoom) {
-      const name = document.createElement("div");
-      name.className = "treemap-tile-name";
-      name.textContent = tile.name;
-      const metric = document.createElement("div");
-      metric.className = "treemap-tile-metric";
-      metric.textContent = tile.metricLabel;
-      const value = document.createElement("div");
-      value.className = "treemap-tile-value";
-      value.textContent = tile.valueLabel;
-      div.appendChild(name);
-      div.appendChild(metric);
-      div.appendChild(value);
-      if (tile.deltaLabel) {
-        const delta = document.createElement("div");
-        delta.className = "treemap-tile-delta";
-        delta.textContent = `前回比 ${tile.deltaLabel}`;
-        div.appendChild(delta);
-      }
-    }
-    mapEl.appendChild(div);
-  }
-  legendEl.innerHTML = "";
-  for (const entry of legend) {
-    const li = document.createElement("li");
+  for (const bar of bars) {
+    const row = document.createElement("div");
+    row.className = "demo-bar";
+    const label = document.createElement("span");
+    label.className = "demo-bar-label";
     const name = document.createElement("span");
-    name.className = "channel-legend-name";
-    name.textContent = entry.name;
-    li.appendChild(name);
+    name.className = "channel-bar-name";
+    name.textContent = bar.name;
     const metric = document.createElement("span");
-    metric.className = "channel-legend-metric";
-    metric.textContent = entry.metricLabel;
-    li.appendChild(metric);
-    if (entry.note) {
-      const note = document.createElement("span");
-      note.className = "channel-legend-note";
-      note.textContent = entry.note;
-      li.appendChild(note);
-    } else {
-      const value = document.createElement("span");
-      value.className = "channel-legend-value";
-      value.textContent = entry.valueLabel;
-      li.appendChild(value);
-      if (entry.deltaLabel) {
-        const delta = document.createElement("span");
-        delta.className =
-          "kpi-delta" + (entry.delta > 0 ? " up" : entry.delta < 0 ? " down" : "");
-        delta.textContent = `前回比 ${entry.deltaLabel}`;
-        li.appendChild(delta);
-      }
-    }
-    legendEl.appendChild(li);
+    metric.className = "channel-bar-metric";
+    metric.textContent = bar.metricLabel;
+    label.appendChild(name);
+    label.appendChild(document.createTextNode(" "));
+    label.appendChild(metric);
+    row.appendChild(label);
+    const track = document.createElement("div");
+    track.className = "demo-bar-track";
+    const fill = document.createElement("div");
+    fill.className =
+      "demo-bar-fill" + (bar.tone !== "neutral" ? ` ${bar.tone}` : "");
+    fill.style.width = `${bar.pct}%`;
+    track.appendChild(fill);
+    row.appendChild(track);
+    const value = document.createElement("span");
+    value.className = "demo-bar-value";
+    value.textContent = bar.note ?? bar.valueLabel;
+    row.appendChild(value);
+    const delta = document.createElement("span");
+    delta.className =
+      "kpi-delta channel-bar-delta" +
+      (bar.delta > 0 ? " up" : bar.delta < 0 ? " down" : "");
+    delta.textContent = bar.deltaLabel ? `前回比 ${bar.deltaLabel}` : "";
+    row.appendChild(delta);
+    wrap.appendChild(row);
   }
 }
 
 function renderOverview() {
-  renderChannelTreemap();
+  renderChannelBars();
   fillKpiBoxes(
     overviewKpis(
       overviewState.detail,
@@ -620,13 +741,83 @@ function wireMediaSort() {
     });
 }
 
-// Per-genre rollup of the recent posts: one row per genre that
-// has at least one post, biggest total views first. The top post
+// --- Instagram genre rollup ---
+// The genre stats are computed over a period window of the
+// fetched posts (all of them, or the last 30 / 7 days), chosen
+// with the period selector; the section header states the exact
+// dates the current window covers. Column headers sort the rows,
+// and the tiles / average bars follow the same rows.
+
+let snsDetail = null;
+let genreSort = { key: "totalViews", dir: "desc" };
+let genrePeriod = "all";
+let genreControlsWired = false;
+
+function updateGenreHeaders() {
+  document.querySelectorAll("#sns-genre-table th.sortable").forEach((th) => {
+    const active = th.dataset.sortKey === genreSort.key;
+    th.textContent =
+      th.dataset.label + (active ? (genreSort.dir === "desc" ? " ↓" : " ↑") : "");
+  });
+}
+
+function wireGenreControls() {
+  if (genreControlsWired) {
+    return;
+  }
+  genreControlsWired = true;
+  document.querySelectorAll("#sns-genre-table th.sortable").forEach((th) => {
+    th.dataset.label = th.textContent;
+    th.addEventListener("click", () => {
+      const key = th.dataset.sortKey;
+      if (genreSort.key === key) {
+        genreSort = { key, dir: genreSort.dir === "desc" ? "asc" : "desc" };
+      } else {
+        genreSort = { key, dir: "desc" };
+      }
+      renderGenreTable(snsDetail);
+    });
+  });
+  const select = document.getElementById("sns-genre-period");
+  select.addEventListener("change", () => {
+    genrePeriod = select.value;
+    renderGenreTable(snsDetail);
+  });
+}
+
+// Per-genre rollup of the posts in the selected period window:
+// one row per genre that has at least one post. The top post
 // links out to Instagram.
 function renderGenreTable(detail) {
+  const media = filterMediaByPeriod(snsMediaRows, genrePeriod);
+  const rows = sortGenreRows(
+    genreStatsForMedia(media),
+    genreSort.key,
+    genreSort.dir,
+  );
+  const rangeEl = document.getElementById("sns-genre-range");
+  const range = mediaDateRange(media);
+  rangeEl.textContent = !media.length
+    ? "この期間の投稿はありません"
+    : range
+      ? `対象：${formatJstDate(range.from)}〜${formatJstDate(range.to)}の投稿（全${media.length}件）`
+      : "";
+  renderGenreTreemap(
+    document.getElementById("sns-genre-treemap"),
+    document.getElementById("sns-genre-legend"),
+    genreTreemap(rows, (row) => ({
+      name: row.genre,
+      total: row.totalViews,
+      avgText: `平均再生 ${formatCount(row.avgViews)}`,
+    })),
+  );
+  renderGenreBars(
+    document.getElementById("sns-genre-bars"),
+    genreAverageBars(rows, "avgViews"),
+  );
+  updateGenreHeaders();
   const tbody = document.getElementById("sns-genre-body");
   tbody.innerHTML = "";
-  const rows = instagramGenreStats(detail);
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -810,8 +1001,14 @@ function renderSns(detail) {
   snsMediaRows = Array.isArray(detail?.instagram?.recent_media)
     ? detail.instagram.recent_media
     : [];
+  snsDetail = detail;
+  const mediaRange = mediaDateRange(snsMediaRows);
+  document.getElementById("sns-media-range").textContent = mediaRange
+    ? `対象：${formatJstDate(mediaRange.from)}〜${formatJstDate(mediaRange.to)}の投稿（全${snsMediaRows.length}件）`
+    : "";
   wireMediaSort();
   renderMediaTable();
+  wireGenreControls();
   renderGenreTable(detail);
   renderYoutube(detail);
   const notes = document.getElementById("sns-notes");
