@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   INSTAGRAM_GENRE_RULES,
   classifyCaption,
+  filterMediaByGenre,
   filterMediaByPeriod,
   formatRate,
   genreAverageBars,
   genreStatsForMedia,
   instagramGenreStats,
   mediaDateRange,
+  mediaGenreOptions,
   sortGenreRows,
 } from "../src/genres.js";
 
@@ -258,6 +260,64 @@ describe("instagramGenreStats", () => {
     );
     expect(genreStatsForMedia(null)).toEqual([]);
     expect(genreStatsForMedia(undefined)).toEqual([]);
+  });
+});
+
+describe("mediaGenreOptions / filterMediaByGenre", () => {
+  const post = (caption, views) => ({ type: "REELS", caption, views });
+  const media = [
+    post("インド料理のランチ #グルメ", 1000),
+    post("カレーの店に行った", 500),
+    post("カフェでモーニング", 2000),
+    post("川口から御茶ノ水まで、自転車で何分？", 3000),
+    post("今日の空", 100),
+    null,
+  ];
+
+  it("lists only the genres that have posts, with their counts", () => {
+    // Order follows the rollup: total views, biggest first.
+    expect(mediaGenreOptions(media)).toEqual([
+      { genre: "サイクリング", count: 1 },
+      { genre: "カフェ・スイーツ", count: 1 },
+      { genre: "グルメ", count: 2 },
+      { genre: "日常・その他", count: 1 },
+    ]);
+    expect(mediaGenreOptions(null)).toEqual([]);
+    expect(mediaGenreOptions([])).toEqual([]);
+  });
+
+  it("counts add up to the number of usable posts", () => {
+    const total = mediaGenreOptions(media).reduce(
+      (sum, option) => sum + option.count,
+      0,
+    );
+    expect(total).toBe(5);
+  });
+
+  it("a null genre keeps every usable post (the すべて filter)", () => {
+    expect(filterMediaByGenre(media, null)).toHaveLength(5);
+    expect(filterMediaByGenre(media, undefined)).toHaveLength(5);
+    expect(filterMediaByGenre(null, null)).toEqual([]);
+  });
+
+  it("keeps only the posts of the chosen genre", () => {
+    const gourmet = filterMediaByGenre(media, "グルメ");
+    expect(gourmet.map((p) => p.caption)).toEqual([
+      "インド料理のランチ #グルメ",
+      "カレーの店に行った",
+    ]);
+    expect(filterMediaByGenre(media, "サイクリング")).toHaveLength(1);
+    expect(filterMediaByGenre(media, "音楽")).toEqual([]);
+  });
+
+  it("classifies through the hashtag stage too", () => {
+    // No body keyword for グルメ here: the #川口グルメ hashtag
+    // alone puts the post in グルメ, so the filter must see it.
+    const tagged = [post("新しい店がオープン #川口グルメ", 10)];
+    expect(filterMediaByGenre(tagged, "グルメ")).toHaveLength(1);
+    expect(mediaGenreOptions(tagged)).toEqual([
+      { genre: "グルメ", count: 1 },
+    ]);
   });
 });
 

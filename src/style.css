@@ -258,6 +258,17 @@ textarea:disabled {
   font-weight: 600;
 }
 
+/* Per-post genre filter: the same pills as the dashboard tabs,
+   a touch smaller, above the media table. */
+.genre-filter {
+  margin-bottom: 12px;
+}
+
+.genre-filter-button {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
 /* Overview KPI change line ("前回比 +N"). */
 .kpi-delta {
   font-size: 12px;
