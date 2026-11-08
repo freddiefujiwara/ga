@@ -244,28 +244,34 @@ describe("deltaTone / hasLabelRoom", () => {
 });
 
 describe("genreTreemap", () => {
+  // The totals and the averages rank these rows differently on
+  // purpose: グルメ has the bigger total, カフェ・スイーツ the
+  // bigger average, so the tile areas prove which one they use.
   const rows = [
     { genre: "グルメ", totalViews: 3000, avgViews: 1000 },
-    { genre: "カフェ・スイーツ", totalViews: 1000, avgViews: 1000 },
+    { genre: "カフェ・スイーツ", totalViews: 2000, avgViews: 2000 },
     { genre: "日常・その他", totalViews: 0, avgViews: null },
   ];
   const pick = (row) => ({
     name: row.genre,
-    total: row.totalViews,
+    avg: row.avgViews,
     avgText: `平均再生 ${row.avgViews ?? "—"}`,
+    totalText: `合計 ${row.totalViews}`,
   });
 
-  it("lays tiles out with areas proportional to the totals", () => {
+  it("lays tiles out with areas proportional to the averages", () => {
     const { tiles } = genreTreemap(rows, pick);
-    expect(tiles.map((t) => t.name)).toEqual(["グルメ", "カフェ・スイーツ"]);
+    expect(tiles.map((t) => t.name)).toEqual(["カフェ・スイーツ", "グルメ"]);
     const gourmet = tiles.find((t) => t.name === "グルメ");
     const cafe = tiles.find((t) => t.name === "カフェ・スイーツ");
-    expect((gourmet.w * gourmet.h) / (cafe.w * cafe.h)).toBeCloseTo(3, 5);
-    expect(gourmet.totalLabel).toBe("3,000");
+    expect((cafe.w * cafe.h) / (gourmet.w * gourmet.h)).toBeCloseTo(2, 5);
+    expect(gourmet.avgLabel).toBe("1,000");
     expect(gourmet.avgText).toBe("平均再生 1000");
+    expect(gourmet.totalText).toBe("合計 3000");
+    expect(cafe.avgLabel).toBe("2,000");
   });
 
-  it("keeps zero-total rows in the legend only", () => {
+  it("keeps rows without an average in the legend only", () => {
     const { tiles, legend } = genreTreemap(rows, pick);
     expect(tiles.map((t) => t.name)).not.toContain("日常・その他");
     expect(legend.map((e) => e.name)).toEqual([
@@ -273,7 +279,12 @@ describe("genreTreemap", () => {
       "カフェ・スイーツ",
       "日常・その他",
     ]);
-    expect(legend[2]).toMatchObject({ total: 0, totalLabel: "0" });
+    expect(legend[0]).toMatchObject({
+      avg: 1000,
+      avgLabel: "1,000",
+      totalText: "合計 3000",
+    });
+    expect(legend[2]).toMatchObject({ avg: null, avgLabel: "—" });
   });
 
   it("tolerates junk input", () => {
