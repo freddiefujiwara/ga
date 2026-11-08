@@ -11,6 +11,21 @@ import {
   dimensionRanking,
   fetchArticleTitles,
   pageRanking,
+  fetchSnsDetail,
+  formatCount,
+  formatSeconds,
+  formatJstDateTime,
+  formatJstDate,
+  snsOverview,
+  snsInteractions,
+  demographicsBars,
+  topDemographics,
+  sortMedia,
+  captionHead,
+  mediaTypeLabel,
+  youtubeVideos,
+  youtubeTotals,
+  snsErrorNotes,
 } from "./api.js";
 import { buildLineChartSvg, tooltipText } from "./chart.js";
 import {
@@ -153,7 +168,255 @@ async function loadDashboard() {
   dashboardEl.hidden = false;
   logoutBtn.hidden = !idToken;
   shareCardEl.hidden = !idToken;
+  // The SNS section loads on its own: a failure there must not take
+  // the GA dashboard down with it.
+  loadSns();
   return true;
+}
+
+// --- SNS section ---
+
+const snsStatusEl = document.getElementById("sns-status");
+const snsBodyEl = document.getElementById("sns-body");
+
+let snsMediaRows = [];
+// The media table starts sorted by views, most-watched first.
+let snsSort = { key: "views", dir: "desc" };
+let snsSortWired = false;
+
+function fillTotalBoxes(elId, items) {
+  const wrap = document.getElementById(elId);
+  wrap.innerHTML = "";
+  for (const item of items) {
+    const box = document.createElement("div");
+    box.className = "total-box";
+    const label = document.createElement("div");
+    label.className = "total-label";
+    label.textContent = item.label;
+    const value = document.createElement("div");
+    value.className = "total-value";
+    value.textContent = item.value;
+    box.appendChild(label);
+    box.appendChild(value);
+    wrap.appendChild(box);
+  }
+}
+
+function fillDemoRanking(elId, items) {
+  const list = document.getElementById(elId);
+  list.innerHTML = "";
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.textContent = "—";
+    list.appendChild(li);
+    return;
+  }
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.textContent = item.name;
+    const span = document.createElement("span");
+    span.className = "rank-value";
+    span.textContent = formatCount(item.value);
+    li.appendChild(span);
+    list.appendChild(li);
+  }
+}
+
+function renderMediaTable() {
+  const tbody = document.getElementById("sns-media-body");
+  tbody.innerHTML = "";
+  const rows = sortMedia(snsMediaRows, snsSort.key, snsSort.dir);
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 11;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  const numCell = (value, format = formatCount) => {
+    const td = document.createElement("td");
+    td.className = "num";
+    td.textContent = format(value);
+    return td;
+  };
+  for (const media of rows) {
+    const tr = document.createElement("tr");
+    const dateTd = document.createElement("td");
+    dateTd.className = "nowrap";
+    dateTd.textContent = formatJstDateTime(media.posted_at);
+    tr.appendChild(dateTd);
+    const captionTd = document.createElement("td");
+    captionTd.className = "caption-cell";
+    captionTd.textContent = captionHead(media.caption);
+    tr.appendChild(captionTd);
+    const typeTd = document.createElement("td");
+    typeTd.className = "nowrap";
+    typeTd.textContent = mediaTypeLabel(media.type);
+    tr.appendChild(typeTd);
+    tr.appendChild(numCell(media.views));
+    tr.appendChild(numCell(media.reach));
+    tr.appendChild(numCell(media.likes));
+    tr.appendChild(numCell(media.comments));
+    tr.appendChild(numCell(media.shares));
+    tr.appendChild(numCell(media.saves));
+    tr.appendChild(numCell(media.avg_watch_sec, formatSeconds));
+    const linkTd = document.createElement("td");
+    if (media.permalink) {
+      const link = document.createElement("a");
+      link.href = media.permalink;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "開く";
+      linkTd.appendChild(link);
+    } else {
+      linkTd.textContent = "—";
+    }
+    tr.appendChild(linkTd);
+    tbody.appendChild(tr);
+  }
+  document
+    .querySelectorAll("#sns-media-table th.sortable")
+    .forEach((th) => {
+      const active = th.dataset.sortKey === snsSort.key;
+      th.textContent =
+        th.dataset.label + (active ? (snsSort.dir === "desc" ? " ↓" : " ↑") : "");
+    });
+}
+
+function wireMediaSort() {
+  if (snsSortWired) {
+    return;
+  }
+  snsSortWired = true;
+  document
+    .querySelectorAll("#sns-media-table th.sortable")
+    .forEach((th) => {
+      th.dataset.label = th.textContent;
+      th.addEventListener("click", () => {
+        const key = th.dataset.sortKey;
+        if (snsSort.key === key) {
+          snsSort = { key, dir: snsSort.dir === "desc" ? "asc" : "desc" };
+        } else {
+          snsSort = { key, dir: "desc" };
+        }
+        renderMediaTable();
+      });
+    });
+}
+
+function renderYoutube(detail) {
+  fillTotalBoxes("sns-youtube-totals", youtubeTotals(detail));
+  const tbody = document.getElementById("sns-youtube-body");
+  tbody.innerHTML = "";
+  const videos = youtubeVideos(detail);
+  if (!videos.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  for (const video of videos) {
+    const tr = document.createElement("tr");
+    const titleTd = document.createElement("td");
+    if (video.url) {
+      const link = document.createElement("a");
+      link.href = video.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = video.title || "—";
+      titleTd.appendChild(link);
+    } else {
+      titleTd.textContent = video.title || "—";
+    }
+    tr.appendChild(titleTd);
+    const dateTd = document.createElement("td");
+    dateTd.className = "nowrap";
+    dateTd.textContent = formatJstDate(video.published_at);
+    tr.appendChild(dateTd);
+    for (const value of [video.views, video.likes, video.comments]) {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = formatCount(value);
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+function renderSns(detail) {
+  snsStatusEl.textContent = detail.collected_at
+    ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
+    : "";
+  fillTotalBoxes("sns-overview", snsOverview(detail));
+  fillTotalBoxes("sns-interactions", snsInteractions(detail));
+  const bars = document.getElementById("sns-age-gender");
+  bars.innerHTML = "";
+  const barRows = demographicsBars(detail);
+  if (!barRows.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "—";
+    bars.appendChild(p);
+  }
+  for (const row of barRows) {
+    const div = document.createElement("div");
+    div.className = "demo-bar";
+    const label = document.createElement("span");
+    label.className = "demo-bar-label";
+    label.textContent = row.label;
+    const track = document.createElement("div");
+    track.className = "demo-bar-track";
+    const fill = document.createElement("div");
+    fill.className = "demo-bar-fill";
+    fill.style.width = `${row.pct}%`;
+    track.appendChild(fill);
+    const value = document.createElement("span");
+    value.className = "demo-bar-value";
+    value.textContent = formatCount(row.value);
+    div.appendChild(label);
+    div.appendChild(track);
+    div.appendChild(value);
+    bars.appendChild(div);
+  }
+  const demo = detail?.instagram?.demographics ?? {};
+  fillDemoRanking("sns-cities", topDemographics(demo.top_cities));
+  fillDemoRanking("sns-countries", topDemographics(demo.top_countries));
+  snsMediaRows = Array.isArray(detail?.instagram?.recent_media)
+    ? detail.instagram.recent_media
+    : [];
+  wireMediaSort();
+  renderMediaTable();
+  renderYoutube(detail);
+  const notes = document.getElementById("sns-notes");
+  notes.innerHTML = "";
+  for (const note of snsErrorNotes(detail)) {
+    const p = document.createElement("p");
+    p.className = "meta sns-note";
+    p.textContent = `※ ${note}`;
+    notes.appendChild(p);
+  }
+  snsBodyEl.hidden = false;
+}
+
+async function loadSns() {
+  snsStatusEl.textContent = "読み込み中…";
+  snsBodyEl.hidden = true;
+  try {
+    const detail = await fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
+    if (!detail || !detail.ok) {
+      snsStatusEl.textContent =
+        (detail && detail.error) || "SNSデータを取得できませんでした";
+      return;
+    }
+    renderSns(detail);
+  } catch {
+    snsStatusEl.textContent = "SNSデータを取得できませんでした";
+  }
 }
 
 // --- Daily chart tooltip (hover on PC, tap on touch) ---
