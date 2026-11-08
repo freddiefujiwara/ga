@@ -12,6 +12,7 @@
   --link: #93c5fd;
   --link-active: #ffffff;
   --error: #fca5a5;
+  --up: #4ade80;
 }
 
 :root[data-theme="light"] {
@@ -25,6 +26,7 @@
   --link: #1d4ed8;
   --link-active: #0f172a;
   --error: #b91c1c;
+  --up: #059669;
 }
 
 * {
@@ -223,6 +225,54 @@ textarea:disabled {
 }
 
 /* ga dashboard blocks */
+/* Dashboard tabs: pill buttons; the selected tab is filled with
+   the primary color. Panels are plain divs toggled via hidden. */
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.tab-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.tab-button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Overview KPI change line ("前回比 +N"). */
+.kpi-delta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.kpi-delta.up {
+  color: var(--up);
+}
+
+.kpi-delta.down {
+  color: var(--error);
+}
+
 .totals-row {
   display: flex;
   gap: 12px;
