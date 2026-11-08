@@ -5,7 +5,6 @@ import {
   snsHistoryRows,
   snsHistorySeries,
   jstDateKey,
-  formatTapsCount,
   formatCount,
   formatPercent,
   formatSeconds,
@@ -242,29 +241,21 @@ describe("sns history series", () => {
 });
 
 describe("profile links taps card", () => {
-  it("formatTapsCount dashes the API's 0 and shows real numbers as-is", () => {
-    expect(formatTapsCount(0)).toBe("—");
-    expect(formatTapsCount(46)).toBe("46");
-    expect(formatTapsCount(null)).toBe("—");
-    expect(formatTapsCount(undefined)).toBe("—");
-  });
-
-  it("snsOverview dashes the taps card when the API returns 0", () => {
+  // The official API cannot return this metric (it answers 0 in
+  // every shape, measured on 2026-11-09), so the card is not
+  // rendered at all, whatever the snapshot happens to carry.
+  it("snsOverview has no profile-links card when the API returns 0", () => {
     const detail = {
       ...DETAIL,
       instagram: { ...DETAIL.instagram, profile_links_taps_30d: 0 },
     };
-    const cards = Object.fromEntries(
-      snsOverview(detail).map((c) => [c.label, c.value]),
-    );
-    expect(cards["プロフィールのリンク（過去30日）"]).toBe("—");
+    const labels = snsOverview(detail).map((c) => c.label);
+    expect(labels).not.toContain("プロフィールのリンク（過去30日）");
   });
 
-  it("snsOverview shows a non-zero taps count as-is", () => {
-    const cards = Object.fromEntries(
-      snsOverview(DETAIL).map((c) => [c.label, c.value]),
-    );
-    expect(cards["プロフィールのリンク（過去30日）"]).toBe("46");
+  it("snsOverview has no profile-links card for a non-zero value either", () => {
+    const labels = snsOverview(DETAIL).map((c) => c.label);
+    expect(labels).not.toContain("プロフィールのリンク（過去30日）");
   });
 });
 
@@ -333,9 +324,9 @@ describe("totals and overview", () => {
 
   it("snsOverview tolerates a missing response", () => {
     const cards = snsOverview(null);
-    expect(cards).toHaveLength(13);
+    expect(cards).toHaveLength(12);
     expect(cards.every((c) => c.value === "—")).toBe(true);
-    expect(snsOverview({ ok: false })).toHaveLength(13);
+    expect(snsOverview({ ok: false })).toHaveLength(12);
   });
 
   it("snsInteractions splits the four kinds", () => {
