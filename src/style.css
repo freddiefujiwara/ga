@@ -299,6 +299,128 @@ textarea:disabled {
   margin-left: 8px;
 }
 
+/* SNS section blocks */
+.subsection-title {
+  margin: 20px 0 8px;
+  font-size: 1rem;
+}
+
+.demo-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.demo-bar-label {
+  flex: 0 0 118px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.demo-bar-track {
+  flex: 1 1 auto;
+  background: var(--surface-elevated);
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.demo-bar-fill {
+  background: var(--primary);
+  height: 100%;
+}
+
+.demo-bar-value {
+  flex: 0 0 64px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.demo-lists {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.demo-list {
+  min-width: 200px;
+}
+
+.demo-list-title {
+  margin: 8px 0 4px;
+  font-size: 0.9rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th.num,
+.data-table td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table td.nowrap {
+  white-space: nowrap;
+}
+
+.data-table td.caption-cell {
+  min-width: 180px;
+  word-break: break-word;
+}
+
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.data-table th.sortable:hover {
+  color: var(--primary);
+}
+
+.data-table a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.data-table a:visited {
+  color: var(--link);
+}
+
+.data-table a:hover {
+  color: var(--link-active);
+  text-decoration: underline;
+}
+
+.sns-note {
+  font-size: 12px;
+  margin: 4px 0;
+}
+
 /* Ranking links keep the theme link color even after visiting:
    the browser default visited purple is unreadable on the dark
    background. */

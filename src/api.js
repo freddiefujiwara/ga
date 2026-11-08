@@ -40,6 +40,230 @@ export async function shareAction(endpoint, idToken, action, fetchImpl = fetch) 
   return getJson(endpoint, { idToken }, { action }, fetchImpl);
 }
 
+// --- SNS detail (ga-gas action=sns_detail) ---
+//
+// The SNS snapshot ga-gas collects every six hours: per-network
+// follower counts, the Instagram account's last-30-days insights,
+// follower demographics, recent media with per-post insights, and
+// the YouTube channel totals with its latest videos. Same auth as
+// the GA report (id_token or share_token query parameters). Every
+// number in the response can be null; the shaping helpers below are
+// written to tolerate that (and a missing response altogether).
+
+export async function fetchSnsDetail(endpoint, auth, fetchImpl = fetch) {
+  return getJson(endpoint, auth, { action: "sns_detail" }, fetchImpl);
+}
+
+const isNum = (value) => typeof value === "number" && Number.isFinite(value);
+
+export function formatCount(value) {
+  return isNum(value) ? value.toLocaleString("ja-JP") : "—";
+}
+
+export function formatPercent(value) {
+  return isNum(value) ? `${value}%` : "—";
+}
+
+export function formatSeconds(value) {
+  if (!isNum(value)) {
+    return "—";
+  }
+  return `${Math.round(value * 10) / 10}秒`;
+}
+
+const jstDateTime = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const jstDate = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+});
+
+export function formatJstDateTime(iso) {
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? jstDateTime.format(date) : "—";
+}
+
+export function formatJstDate(iso) {
+  const date = iso ? new Date(iso) : null;
+  return date && !Number.isNaN(date.getTime()) ? jstDate.format(date) : "—";
+}
+
+// The combined follower total shown on the top page: the main
+// Instagram account, Threads and YouTube. The secondary Instagram
+// account (@anemone_cancer) is deliberately not part of the sum.
+// Null when not a single network reported a number.
+export function snsTotalFollowers(detail) {
+  if (!detail || typeof detail !== "object") {
+    return null;
+  }
+  const parts = [
+    detail.instagram?.freddiefujiwara,
+    detail.threads?.followers,
+    detail.youtube?.subscribers,
+  ].filter(isNum);
+  return parts.length ? parts.reduce((sum, v) => sum + v, 0) : null;
+}
+
+// Overview cards for the SNS section: [{ label, value }] with the
+// values already formatted ("—" for anything missing).
+export function snsOverview(detail) {
+  const ig = detail?.instagram ?? {};
+  const yt = detail?.youtube ?? {};
+  const th = detail?.threads ?? {};
+  const interactions = ig.interactions_30d ?? {};
+  return [
+    { label: "SNS延べフォロワー", value: formatCount(snsTotalFollowers(detail)) },
+    { label: "Instagram フォロワー", value: formatCount(ig.freddiefujiwara) },
+    { label: "YouTube 登録者", value: formatCount(yt.subscribers) },
+    { label: "Threads フォロワー", value: formatCount(th.followers) },
+    { label: "Instagram 投稿数", value: formatCount(ig.media_count) },
+    { label: "再生回数（過去30日）", value: formatCount(ig.views_30d) },
+    { label: "リーチ（過去30日）", value: formatCount(ig.reach_30d) },
+    { label: "反応した人数（過去30日）", value: formatCount(ig.accounts_engaged_30d) },
+    { label: "反応の合計（過去30日）", value: formatCount(interactions.total) },
+    { label: "プロフィールのリンク（過去30日）", value: formatCount(ig.profile_links_taps_30d) },
+    { label: "フォロワー以外（過去30日）", value: formatPercent(ig.non_follower_pct) },
+    { label: "フォロー（過去30日）", value: formatCount(ig.follows_30d) },
+    { label: "フォロー解除（過去30日）", value: formatCount(ig.unfollows_30d) },
+  ];
+}
+
+// The four-way split of the last 30 days of interactions.
+export function snsInteractions(detail) {
+  const it = detail?.instagram?.interactions_30d ?? {};
+  return [
+    { label: "いいね", value: formatCount(it.likes) },
+    { label: "コメント", value: formatCount(it.comments) },
+    { label: "シェア", value: formatCount(it.shares) },
+    { label: "保存", value: formatCount(it.saves) },
+  ];
+}
+
+// "F.25-34" -> "女性 25-34歳"; unknown shapes pass through as-is.
+export function ageGenderLabel(key) {
+  const match = /^([FMU])\.(.+)$/.exec(String(key ?? ""));
+  if (!match) {
+    return String(key ?? "");
+  }
+  const gender = { F: "女性", M: "男性", U: "不明" }[match[1]];
+  return `${gender} ${match[2]}歳`;
+}
+
+// Age/gender rows for the bar list, biggest first, with each bar's
+// width as a percentage of the largest value.
+export function demographicsBars(detail, limit = 13) {
+  const list = detail?.instagram?.demographics?.age_gender;
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  const rows = list
+    .filter((entry) => entry && isNum(entry.value))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+  const max = rows.reduce((m, entry) => Math.max(m, entry.value), 0);
+  return rows.map((entry) => ({
+    key: entry.key,
+    label: ageGenderLabel(entry.key),
+    value: entry.value,
+    pct: max > 0 ? Math.round((entry.value / max) * 100) : 0,
+  }));
+}
+
+// Top entries of a [{ key, value }] demographics list (cities,
+// countries), biggest first.
+export function topDemographics(list, limit = 5) {
+  if (!Array.isArray(list)) {
+    return [];
+  }
+  return list
+    .filter((entry) => entry && typeof entry.key === "string" && isNum(entry.value))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit)
+    .map((entry) => ({ name: entry.key, value: entry.value }));
+}
+
+const isMissing = (value) =>
+  value === null ||
+  value === undefined ||
+  (typeof value === "number" && !Number.isFinite(value));
+
+// Sort recent-media rows by a column. Missing values always sink to
+// the bottom, whichever direction is chosen. Returns a new array.
+export function sortMedia(rows, key = "views", dir = "desc") {
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = a ? a[key] : null;
+    const bv = b ? b[key] : null;
+    if (isMissing(av) && isMissing(bv)) {
+      return 0;
+    }
+    if (isMissing(av)) {
+      return 1;
+    }
+    if (isMissing(bv)) {
+      return -1;
+    }
+    const cmp =
+      isNum(av) && isNum(bv) ? av - bv : String(av).localeCompare(String(bv));
+    return cmp * sign;
+  });
+}
+
+export function captionHead(caption, max = 60) {
+  const text = String(caption ?? "").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+export function mediaTypeLabel(type) {
+  switch (type) {
+    case "REELS":
+    case "REEL":
+    case "VIDEO":
+      return "リール";
+    case "IMAGE":
+      return "写真";
+    case "CAROUSEL_ALBUM":
+      return "カルーセル";
+    default:
+      return type ? String(type) : "—";
+  }
+}
+
+export function youtubeVideos(detail) {
+  const list = detail?.youtube?.recent_videos;
+  return Array.isArray(list) ? list : [];
+}
+
+export function youtubeTotals(detail) {
+  const yt = detail?.youtube ?? {};
+  return [
+    { label: "登録者", value: formatCount(yt.subscribers) },
+    { label: "総再生回数", value: formatCount(yt.total_views) },
+    { label: "動画本数", value: formatCount(yt.video_count) },
+  ];
+}
+
+// Partial-collection notes ga-gas attaches to the snapshot (empty
+// in the normal case); shown as small print only when present.
+export function snsErrorNotes(detail) {
+  const ig = detail?.instagram ?? {};
+  return ["insights_error", "detail_error", "media_error"]
+    .map((key) => ig[key])
+    .filter((value) => typeof value === "string" && value.length > 0);
+}
+
 // --- Report shaping helpers (pure, unit-tested) ---
 
 export function rowsOf(response) {
