@@ -17,8 +17,8 @@
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/ga/staging/assets/index-Xu7zZHKz.js"></script>
-    <link rel="stylesheet" crossorigin href="/ga/staging/assets/index-isrRC8Gx.css">
+    <script type="module" crossorigin src="/ga/staging/assets/index-JMzceWQT.js"></script>
+    <link rel="stylesheet" crossorigin href="/ga/staging/assets/index-D0Jf6NQA.css">
   </head>
   <body>
     <div class="layout">
@@ -70,6 +70,65 @@
           <section class="table-wrap">
             <h2 class="section-title">参照元 上位8件</h2>
             <ol id="top-sources" class="ranking"></ol>
+          </section>
+          <section class="table-wrap" id="sns-section">
+            <h2 class="section-title">SNS</h2>
+            <p class="meta" id="sns-status">読み込み中…</p>
+            <div id="sns-body" hidden>
+              <div class="totals-row" id="sns-overview"></div>
+              <h3 class="subsection-title">反応の内訳（過去30日）</h3>
+              <div class="totals-row" id="sns-interactions"></div>
+              <h3 class="subsection-title">フォロワーの内訳</h3>
+              <div id="sns-age-gender" class="demo-bars"></div>
+              <div class="demo-lists">
+                <div class="demo-list">
+                  <h4 class="demo-list-title">多い市町村</h4>
+                  <ol id="sns-cities" class="ranking"></ol>
+                </div>
+                <div class="demo-list">
+                  <h4 class="demo-list-title">多い国</h4>
+                  <ol id="sns-countries" class="ranking"></ol>
+                </div>
+              </div>
+              <h3 class="subsection-title">投稿ごと（直近30件）</h3>
+              <div class="table-scroll">
+                <table class="data-table" id="sns-media-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort-key="posted_at">投稿日時</th>
+                      <th>キャプション</th>
+                      <th>種類</th>
+                      <th class="num sortable" data-sort-key="views">再生回数</th>
+                      <th class="num sortable" data-sort-key="reach">リーチ</th>
+                      <th class="num sortable" data-sort-key="likes">いいね</th>
+                      <th class="num sortable" data-sort-key="comments">コメント</th>
+                      <th class="num sortable" data-sort-key="shares">シェア</th>
+                      <th class="num sortable" data-sort-key="saves">保存</th>
+                      <th class="num sortable" data-sort-key="avg_watch_sec">平均再生</th>
+                      <th>リンク</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sns-media-body"></tbody>
+                </table>
+              </div>
+              <h3 class="subsection-title">YouTube</h3>
+              <div class="totals-row" id="sns-youtube-totals"></div>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>タイトル</th>
+                      <th>公開日</th>
+                      <th class="num">再生回数</th>
+                      <th class="num">いいね</th>
+                      <th class="num">コメント</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sns-youtube-body"></tbody>
+                </table>
+              </div>
+              <div id="sns-notes"></div>
+            </div>
           </section>
         </div>
         <section id="share-card" class="table-wrap" hidden>
