@@ -233,27 +233,72 @@ export function snsInteractions(detail) {
   ];
 }
 
-// "F.25-34" -> "女性 25-34歳"; unknown shapes pass through as-is.
-export function ageGenderLabel(key) {
-  const match = /^([FMU])\.(.+)$/.exec(String(key ?? ""));
-  if (!match) {
-    return String(key ?? "");
+// Age/gender keys arrive in either wire format: "45-54/M" or
+// "M.45-54". Parse both into { age, gender }; anything else returns
+// null and is treated as an unknown shape.
+function parseAgeGenderKey(key) {
+  const raw = String(key ?? "");
+  let match = /^(\d+-\d+|\d+\+)\/([FMU])$/.exec(raw);
+  if (match) {
+    return { age: match[1], gender: match[2] };
   }
-  const gender = { F: "女性", M: "男性", U: "不明" }[match[1]];
-  return `${gender} ${match[2]}歳`;
+  match = /^([FMU])\.(\d+-\d+|\d+\+)$/.exec(raw);
+  if (match) {
+    return { age: match[2], gender: match[1] };
+  }
+  return null;
 }
 
-// Age/gender rows for the bar list, biggest first, with each bar's
-// width as a percentage of the largest value.
-export function demographicsBars(detail, limit = 13) {
+// Sort ranks: age bands by their lower bound (13-17 < 18-24 < ... <
+// 65+), genders male, female, unknown within a band.
+const ageRank = (age) => parseInt(age, 10);
+const GENDER_RANK = { M: 0, F: 1, U: 2 };
+
+// "45-54/M" -> "45-54歳 男性"; "U.65+" -> "65歳以上 不明";
+// unknown shapes pass through as-is.
+export function ageGenderLabel(key) {
+  const parsed = parseAgeGenderKey(key);
+  if (!parsed) {
+    return String(key ?? "");
+  }
+  const gender = { F: "女性", M: "男性", U: "不明" }[parsed.gender];
+  const age = parsed.age.endsWith("+")
+    ? `${parsed.age.slice(0, -1)}歳以上`
+    : `${parsed.age}歳`;
+  return `${age} ${gender}`;
+}
+
+// Age/gender rows for the bar list, ordered by age band ascending
+// and then male / female / unknown within a band, with each bar's
+// width as a percentage of the largest value. Keys in an unknown
+// shape keep their raw label and sink to the bottom. No row cap by
+// default: with age ordering, a cap would drop whole age bands.
+export function demographicsBars(detail, limit = Infinity) {
   const list = detail?.instagram?.demographics?.age_gender;
   if (!Array.isArray(list)) {
     return [];
   }
   const rows = list
     .filter((entry) => entry && isNum(entry.value))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, limit);
+    .map((entry) => ({ entry, parsed: parseAgeGenderKey(entry.key) }))
+    .sort((a, b) => {
+      if (a.parsed && b.parsed) {
+        const byAge = ageRank(a.parsed.age) - ageRank(b.parsed.age);
+        if (byAge !== 0) {
+          return byAge;
+        }
+        return GENDER_RANK[a.parsed.gender] - GENDER_RANK[b.parsed.gender];
+      }
+      if (a.parsed) {
+        return -1;
+      }
+      if (b.parsed) {
+        return 1;
+      }
+      return 0;
+    })
+    .slice(0, limit)
+    .map(({ entry }) => entry);
   const max = rows.reduce((m, entry) => Math.max(m, entry.value), 0);
   return rows.map((entry) => ({
     key: entry.key,
