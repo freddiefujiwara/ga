@@ -273,6 +273,86 @@ textarea:disabled {
   color: var(--error);
 }
 
+/* Channel-size treemap (overview tab). Tiles are positioned in
+   percentages of the map box, so the layout holds at any width. */
+.treemap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5 / 2;
+  min-height: 180px;
+  margin: 12px 0 4px;
+}
+
+.treemap-tile {
+  position: absolute;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow: hidden;
+  background: var(--surface-elevated);
+}
+
+.treemap-tile.up {
+  background: color-mix(in srgb, var(--up) 30%, var(--surface-elevated));
+}
+
+.treemap-tile.down {
+  background: color-mix(in srgb, var(--error) 30%, var(--surface-elevated));
+}
+
+.treemap-tile-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.treemap-tile-metric {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.treemap-tile-value {
+  font-size: clamp(18px, 3vw, 30px);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.treemap-tile-delta {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.channel-legend {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+.channel-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 3px 0;
+}
+
+.channel-legend-name {
+  font-weight: 700;
+  min-width: 5.5em;
+}
+
+.channel-legend-metric {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.channel-legend-value {
+  font-weight: 700;
+}
+
+.channel-legend-note {
+  color: var(--muted);
+}
+
 .totals-row {
   display: flex;
   gap: 12px;
