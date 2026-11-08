@@ -15,6 +15,7 @@ import {
   snsInteractions,
   ageGenderLabel,
   demographicsBars,
+  demographicsPyramid,
   topDemographics,
   sortMedia,
   captionHead,
@@ -516,6 +517,138 @@ describe("demographics", () => {
     expect(rows[rows.length - 1].pct).toBe(100);
     expect(rows.find((r) => r.key === "U.13-17").pct).toBe(1);
     expect(rows[0].pct).toBe(0);
+  });
+
+  it("demographicsPyramid splits each band into left male, right female, unknown aside", () => {
+    const { bands, unknown } = demographicsPyramid(DETAIL);
+    expect(unknown).toEqual([]);
+    expect(bands.map((b) => b.age)).toEqual([
+      "13-17",
+      "18-24",
+      "25-34",
+      "35-44",
+      "45-54",
+      "55-64",
+      "65+",
+    ]);
+    expect(bands.map((b) => b.ageLabel)).toEqual([
+      "13-17歳",
+      "18-24歳",
+      "25-34歳",
+      "35-44歳",
+      "45-54歳",
+      "55-64歳",
+      "65歳以上",
+    ]);
+    const byAge = Object.fromEntries(bands.map((b) => [b.age, b]));
+    // Both sides scale to the shared maximum (M.35-44 = 800).
+    expect(byAge["25-34"]).toMatchObject({
+      male: { value: 200, pct: 25 },
+      female: { value: 400, pct: 50 },
+      unknown: 0,
+    });
+    // The null-valued F.35-44 is zero-filled on the female side.
+    expect(byAge["35-44"]).toMatchObject({
+      male: { value: 800, pct: 100 },
+      female: { value: 0, pct: 0 },
+      unknown: 0,
+    });
+    // Bands with no data at all still appear, fully zeroed.
+    expect(byAge["13-17"]).toMatchObject({
+      male: { value: 0, pct: 0 },
+      female: { value: 0, pct: 0 },
+      unknown: 0,
+    });
+  });
+
+  it("demographicsPyramid zero-fills every band from a single reported bucket", () => {
+    const detail = {
+      instagram: {
+        demographics: { age_gender: [{ key: "45-54/M", value: 263 }] },
+      },
+    };
+    const { bands, unknown } = demographicsPyramid(detail);
+    expect(unknown).toEqual([]);
+    expect(bands).toHaveLength(7);
+    const byAge = Object.fromEntries(bands.map((b) => [b.age, b]));
+    expect(byAge["45-54"]).toMatchObject({
+      male: { value: 263, pct: 100 },
+      female: { value: 0, pct: 0 },
+      unknown: 0,
+    });
+    expect(byAge["65+"]).toMatchObject({
+      ageLabel: "65歳以上",
+      male: { value: 0, pct: 0 },
+      female: { value: 0, pct: 0 },
+    });
+  });
+
+  it("demographicsPyramid separates the unknown gender and keeps unknown keys last", () => {
+    const detail = {
+      instagram: {
+        demographics: {
+          age_gender: [
+            { key: "45-54/U", value: 10 },
+            { key: "unknown-key", value: 999 },
+            { key: "M.18-24", value: 30 },
+            { key: "25-34/F", value: 20 },
+            { key: "U.13-17", value: 5 },
+            { key: "18-24/F", value: 40 },
+            { key: "M.25-34", value: 25 },
+            { key: "65+/M", value: 15 },
+          ],
+        },
+      },
+    };
+    const { bands, unknown } = demographicsPyramid(detail);
+    const byAge = Object.fromEntries(bands.map((b) => [b.age, b]));
+    expect(byAge["13-17"]).toMatchObject({
+      male: { value: 0 },
+      female: { value: 0 },
+      unknown: 5,
+    });
+    expect(byAge["18-24"]).toMatchObject({
+      male: { value: 30 },
+      female: { value: 40 },
+      unknown: 0,
+    });
+    expect(byAge["25-34"]).toMatchObject({
+      male: { value: 25 },
+      female: { value: 20 },
+      unknown: 0,
+    });
+    expect(byAge["45-54"]).toMatchObject({
+      male: { value: 0 },
+      female: { value: 0 },
+      unknown: 10,
+    });
+    expect(byAge["65+"]).toMatchObject({
+      male: { value: 15 },
+      female: { value: 0 },
+      unknown: 0,
+    });
+    // The unknown key stays a plain row, scaled on the shared max.
+    expect(unknown).toEqual([
+      { key: "unknown-key", label: "unknown-key", value: 999, pct: 100 },
+    ]);
+    expect(byAge["18-24"].female.pct).toBe(4);
+    expect(byAge["18-24"].male.pct).toBe(3);
+  });
+
+  it("demographicsPyramid generates no bands when there is no data", () => {
+    const empty = { bands: [], unknown: [] };
+    expect(demographicsPyramid(null)).toEqual(empty);
+    expect(demographicsPyramid({ instagram: { demographics: {} } })).toEqual(empty);
+    expect(
+      demographicsPyramid({ instagram: { demographics: { age_gender: [] } } }),
+    ).toEqual(empty);
+    expect(
+      demographicsPyramid({
+        instagram: {
+          demographics: { age_gender: [{ key: "M.25-34", value: null }] },
+        },
+      }),
+    ).toEqual(empty);
   });
 
   it("topDemographics sorts descending and applies the limit", () => {

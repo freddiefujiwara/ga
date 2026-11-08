@@ -259,6 +259,11 @@ const GENDER_RANK = { M: 0, F: 1, U: 2 };
 const AGE_BANDS = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
 const GENDERS = ["M", "F", "U"];
 
+// "65+" -> "65歳以上"; "45-54" -> "45-54歳".
+function ageBandLabel(age) {
+  return age.endsWith("+") ? `${age.slice(0, -1)}歳以上` : `${age}歳`;
+}
+
 // "45-54/M" -> "45-54歳 男性"; "U.65+" -> "65歳以上 不明";
 // unknown shapes pass through as-is.
 export function ageGenderLabel(key) {
@@ -267,10 +272,7 @@ export function ageGenderLabel(key) {
     return String(key ?? "");
   }
   const gender = { F: "女性", M: "男性", U: "不明" }[parsed.gender];
-  const age = parsed.age.endsWith("+")
-    ? `${parsed.age.slice(0, -1)}歳以上`
-    : `${parsed.age}歳`;
-  return `${age} ${gender}`;
+  return `${ageBandLabel(parsed.age)} ${gender}`;
 }
 
 // Age/gender rows for the bar list, ordered by age band ascending
@@ -352,6 +354,59 @@ export function demographicsBars(detail, limit = Infinity) {
     ...row,
     pct: max > 0 ? Math.round((row.value / max) * 100) : 0,
   }));
+}
+
+// The demographicsBars grid regrouped into population-pyramid
+// rows: one row per age band, ascending, with the male value on
+// the left of the band label and the female value on the right.
+// The unknown-gender count has no side to live on, so it stays a
+// plain number on the band row; it is never dropped. Band rows
+// inherit the grid's zero-fill: a band or gender missing from the
+// data shows 0 with an empty bar, the unknown count included. Bar
+// widths are percentages of one shared maximum across both
+// genders and the trailing rows. Keys in an unknown shape keep
+// their raw label and sink to the bottom as plain
+// { key, label, value, pct } rows. Empty or missing demographics
+// yield empty lists, so the caller can keep its empty display.
+export function demographicsPyramid(detail) {
+  const rows = demographicsBars(detail);
+  if (!rows.length) {
+    return { bands: [], unknown: [] };
+  }
+  const bandMap = new Map();
+  const unknownRows = [];
+  for (const row of rows) {
+    const parsed = parseAgeGenderKey(row.key);
+    if (!parsed) {
+      unknownRows.push(row);
+      continue;
+    }
+    let band = bandMap.get(parsed.age);
+    if (!band) {
+      band = { M: 0, F: 0, U: 0 };
+      bandMap.set(parsed.age, band);
+    }
+    band[parsed.gender] += row.value;
+  }
+  let max = 0;
+  for (const band of bandMap.values()) {
+    max = Math.max(max, band.M, band.F);
+  }
+  for (const row of unknownRows) {
+    max = Math.max(max, row.value);
+  }
+  const pct = (value) => (max > 0 ? Math.round((value / max) * 100) : 0);
+  const bands = [...bandMap.entries()]
+    .sort((a, b) => ageRank(a[0]) - ageRank(b[0]))
+    .map(([age, band]) => ({
+      age,
+      ageLabel: ageBandLabel(age),
+      male: { value: band.M, pct: pct(band.M) },
+      female: { value: band.F, pct: pct(band.F) },
+      unknown: band.U,
+    }));
+  const unknown = unknownRows.map((row) => ({ ...row, pct: pct(row.value) }));
+  return { bands, unknown };
 }
 
 // Top entries of a [{ key, value }] demographics list (cities,

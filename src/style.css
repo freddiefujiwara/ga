@@ -344,6 +344,68 @@ textarea:disabled {
   font-weight: 600;
 }
 
+/* Age/gender pyramid: male bars extend left from the center age
+   label, female bars right, both on one shared scale. The grid
+   keeps the label column a fixed width so the two bar areas line
+   up on every row, including on narrow screens. */
+.pyramid-row {
+  display: grid;
+  grid-template-columns: 3.4em 1fr 6.6em 1fr 3.4em;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.pyramid-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pyramid-head span:nth-child(2) {
+  text-align: right;
+}
+
+.pyramid-track {
+  display: flex;
+  background: var(--surface-elevated);
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.pyramid-track-left {
+  justify-content: flex-end;
+}
+
+.pyramid-fill {
+  background: var(--primary);
+  height: 100%;
+}
+
+.pyramid-value {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pyramid-value-left {
+  text-align: right;
+}
+
+.pyramid-value-right {
+  text-align: left;
+}
+
+.pyramid-age {
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pyramid-unknown {
+  display: block;
+  font-size: 11px;
+}
+
 .demo-lists {
   display: flex;
   gap: 32px;

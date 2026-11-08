@@ -21,7 +21,7 @@ import {
   formatJstDate,
   snsOverview,
   snsInteractions,
-  demographicsBars,
+  demographicsPyramid,
   topDemographics,
   sortMedia,
   captionHead,
@@ -360,14 +360,59 @@ function renderSns(detail) {
   fillTotalBoxes("sns-interactions", snsInteractions(detail));
   const bars = document.getElementById("sns-age-gender");
   bars.innerHTML = "";
-  const barRows = demographicsBars(detail);
-  if (!barRows.length) {
+  const pyramid = demographicsPyramid(detail);
+  if (!pyramid.bands.length && !pyramid.unknown.length) {
     const p = document.createElement("p");
     p.className = "meta";
     p.textContent = "—";
     bars.appendChild(p);
   }
-  for (const row of barRows) {
+  if (pyramid.bands.length) {
+    const head = document.createElement("div");
+    head.className = "pyramid-row pyramid-head";
+    for (const text of ["", "男性", "", "女性", ""]) {
+      const span = document.createElement("span");
+      span.textContent = text;
+      head.appendChild(span);
+    }
+    bars.appendChild(head);
+  }
+  for (const band of pyramid.bands) {
+    const div = document.createElement("div");
+    div.className = "pyramid-row";
+    const maleValue = document.createElement("span");
+    maleValue.className = "pyramid-value pyramid-value-left";
+    maleValue.textContent = formatCount(band.male.value);
+    const maleTrack = document.createElement("div");
+    maleTrack.className = "pyramid-track pyramid-track-left";
+    const maleFill = document.createElement("div");
+    maleFill.className = "pyramid-fill";
+    maleFill.style.width = `${band.male.pct}%`;
+    maleTrack.appendChild(maleFill);
+    const age = document.createElement("span");
+    age.className = "pyramid-age";
+    age.textContent = band.ageLabel;
+    const unknown = document.createElement("span");
+    unknown.className = "pyramid-unknown";
+    unknown.textContent = `不明 ${formatCount(band.unknown)}`;
+    age.appendChild(unknown);
+    const femaleTrack = document.createElement("div");
+    femaleTrack.className = "pyramid-track pyramid-track-right";
+    const femaleFill = document.createElement("div");
+    femaleFill.className = "pyramid-fill";
+    femaleFill.style.width = `${band.female.pct}%`;
+    femaleTrack.appendChild(femaleFill);
+    const femaleValue = document.createElement("span");
+    femaleValue.className = "pyramid-value pyramid-value-right";
+    femaleValue.textContent = formatCount(band.female.value);
+    div.appendChild(maleValue);
+    div.appendChild(maleTrack);
+    div.appendChild(age);
+    div.appendChild(femaleTrack);
+    div.appendChild(femaleValue);
+    bars.appendChild(div);
+  }
+  for (const row of pyramid.unknown) {
     const div = document.createElement("div");
     div.className = "demo-bar";
     const label = document.createElement("span");
