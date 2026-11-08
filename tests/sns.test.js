@@ -352,14 +352,96 @@ describe("demographics", () => {
     expect(ageGenderLabel(null)).toBe("");
   });
 
-  it("demographicsBars orders by age band, drops nulls and scales to the max", () => {
-    expect(demographicsBars(DETAIL)).toEqual([
-      { key: "M.25-34", label: "25-34歳 男性", value: 200, pct: 25 },
-      { key: "F.25-34", label: "25-34歳 女性", value: 400, pct: 50 },
-      { key: "M.35-44", label: "35-44歳 男性", value: 800, pct: 100 },
+  it("demographicsBars zero-fills the full grid in age order and scales to the max", () => {
+    const rows = demographicsBars(DETAIL);
+    expect(rows).toHaveLength(21);
+    expect(rows.map((r) => r.label)).toEqual([
+      "13-17歳 男性",
+      "13-17歳 女性",
+      "13-17歳 不明",
+      "18-24歳 男性",
+      "18-24歳 女性",
+      "18-24歳 不明",
+      "25-34歳 男性",
+      "25-34歳 女性",
+      "25-34歳 不明",
+      "35-44歳 男性",
+      "35-44歳 女性",
+      "35-44歳 不明",
+      "45-54歳 男性",
+      "45-54歳 女性",
+      "45-54歳 不明",
+      "55-64歳 男性",
+      "55-64歳 女性",
+      "55-64歳 不明",
+      "65歳以上 男性",
+      "65歳以上 女性",
+      "65歳以上 不明",
     ]);
+    const byLabel = Object.fromEntries(rows.map((r) => [r.label, r]));
+    // Present buckets keep their raw key, value and scaled pct.
+    expect(byLabel["25-34歳 男性"]).toMatchObject({
+      key: "M.25-34",
+      value: 200,
+      pct: 25,
+    });
+    expect(byLabel["25-34歳 女性"]).toMatchObject({
+      key: "F.25-34",
+      value: 400,
+      pct: 50,
+    });
+    expect(byLabel["35-44歳 男性"]).toMatchObject({
+      key: "M.35-44",
+      value: 800,
+      pct: 100,
+    });
+    // Missing buckets (including the null-valued F.35-44) are 0.
+    expect(byLabel["13-17歳 男性"]).toMatchObject({ value: 0, pct: 0 });
+    expect(byLabel["35-44歳 女性"]).toMatchObject({ value: 0, pct: 0 });
+    expect(byLabel["65歳以上 不明"]).toMatchObject({ value: 0, pct: 0 });
     expect(demographicsBars(null)).toEqual([]);
     expect(demographicsBars({ instagram: { demographics: {} } })).toEqual([]);
+  });
+
+  it("demographicsBars zero-fills from a single reported bucket", () => {
+    const detail = {
+      instagram: {
+        demographics: { age_gender: [{ key: "45-54/M", value: 263 }] },
+      },
+    };
+    const rows = demographicsBars(detail);
+    expect(rows).toHaveLength(21);
+    expect(rows[0]).toEqual({
+      key: "13-17/M",
+      label: "13-17歳 男性",
+      value: 0,
+      pct: 0,
+    });
+    expect(rows.find((r) => r.label === "45-54歳 男性")).toEqual({
+      key: "45-54/M",
+      label: "45-54歳 男性",
+      value: 263,
+      pct: 100,
+    });
+    expect(rows[rows.length - 1]).toEqual({
+      key: "65+/U",
+      label: "65歳以上 不明",
+      value: 0,
+      pct: 0,
+    });
+  });
+
+  it("demographicsBars does not zero-fill when there is no data", () => {
+    expect(demographicsBars({ instagram: { demographics: { age_gender: [] } } })).toEqual(
+      [],
+    );
+    expect(
+      demographicsBars({
+        instagram: {
+          demographics: { age_gender: [{ key: "M.25-34", value: null }] },
+        },
+      }),
+    ).toEqual([]);
   });
 
   it("demographicsBars orders scrambled mixed-format keys, unknown last", () => {
@@ -380,29 +462,60 @@ describe("demographics", () => {
       },
     };
     const rows = demographicsBars(detail);
+    // The full grid in age order (missing cells zero-filled with a
+    // canonical key), then the unknown key last with its raw label.
     expect(rows.map((r) => r.key)).toEqual([
+      "13-17/M",
+      "13-17/F",
       "U.13-17",
       "M.18-24",
       "18-24/F",
+      "18-24/U",
       "M.25-34",
       "25-34/F",
+      "25-34/U",
+      "35-44/M",
+      "35-44/F",
+      "35-44/U",
+      "45-54/M",
+      "45-54/F",
       "45-54/U",
+      "55-64/M",
+      "55-64/F",
+      "55-64/U",
       "65+/M",
+      "65+/F",
+      "65+/U",
       "unknown-key",
     ]);
     expect(rows.map((r) => r.label)).toEqual([
+      "13-17歳 男性",
+      "13-17歳 女性",
       "13-17歳 不明",
       "18-24歳 男性",
       "18-24歳 女性",
+      "18-24歳 不明",
       "25-34歳 男性",
       "25-34歳 女性",
+      "25-34歳 不明",
+      "35-44歳 男性",
+      "35-44歳 女性",
+      "35-44歳 不明",
+      "45-54歳 男性",
+      "45-54歳 女性",
       "45-54歳 不明",
+      "55-64歳 男性",
+      "55-64歳 女性",
+      "55-64歳 不明",
       "65歳以上 男性",
+      "65歳以上 女性",
+      "65歳以上 不明",
       "unknown-key",
     ]);
     // Bars still scale to the largest value, unknown rows included.
     expect(rows[rows.length - 1].pct).toBe(100);
-    expect(rows[0].pct).toBe(1);
+    expect(rows.find((r) => r.key === "U.13-17").pct).toBe(1);
+    expect(rows[0].pct).toBe(0);
   });
 
   it("topDemographics sorts descending and applies the limit", () => {
