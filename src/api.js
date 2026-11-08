@@ -760,3 +760,131 @@ export function pageRanking(response, titles, origin, limit = 10) {
     .sort((a, b) => b.views - a.views)
     .slice(0, limit);
 }
+
+// --- Blog article tags (blog-gas titles payload) ---
+//
+// The blog API's lightweight titles payload ({ ids, titles, tags })
+// carries the article id -> tag list map next to the titles: the
+// same public metadata the blog itself renders its tag pages from.
+// It is the only source of the path -> genre mapping for the blog
+// tab; when it cannot be fetched, the genre section stays hidden
+// instead of guessing genres from titles.
+
+export function parseBlogMeta(data) {
+  const tags = new Map();
+  const titles = new Map();
+  if (!data || typeof data !== "object") {
+    return { tags, titles };
+  }
+  if (data.titles && typeof data.titles === "object") {
+    for (const [id, title] of Object.entries(data.titles)) {
+      if (typeof title === "string" && title) {
+        titles.set(id, title);
+      }
+    }
+  }
+  if (data.tags && typeof data.tags === "object") {
+    for (const [id, list] of Object.entries(data.tags)) {
+      if (!Array.isArray(list)) {
+        continue;
+      }
+      const clean = [
+        ...new Set(
+          list
+            .filter((tag) => typeof tag === "string")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (clean.length) {
+        tags.set(id, clean);
+      }
+    }
+  }
+  return { tags, titles };
+}
+
+// Fetch the titles payload for its tag map. The blog-gas tag cache
+// can answer with every tag list empty while it is cold (the blog
+// front-end merges around the same quirk), so one retry is made
+// whenever the first attempt yields no tags at all. Any failure
+// resolves to empty maps, never a rejection.
+export async function fetchBlogMeta(url, fetchImpl = fetch) {
+  let meta = { tags: new Map(), titles: new Map() };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetchImpl(url);
+      meta = parseBlogMeta(await res.json());
+    } catch {
+      meta = { tags: new Map(), titles: new Map() };
+    }
+    if (meta.tags.size > 0) {
+      break;
+    }
+  }
+  return meta;
+}
+
+// Per-article view counts with the split paths merged, article
+// rows only: [{ id, views }]. Non-article pages (apps, the blog
+// top, …) are not articles and never appear here.
+const ARTICLE_KEY_PATTERN = /^\/blog\/([0-9][A-Za-z0-9_-]{24,})$/;
+
+export function articlePageViews(response) {
+  const merged = new Map();
+  for (const row of rowsOf(response)) {
+    const key = canonicalPageKey(row.dimensionValues[0].value);
+    const match = ARTICLE_KEY_PATTERN.exec(key);
+    if (!match) {
+      continue;
+    }
+    const views = Number(row.metricValues[0].value) || 0;
+    merged.set(match[1], (merged.get(match[1]) || 0) + views);
+  }
+  return [...merged.entries()].map(([id, views]) => ({ id, views }));
+}
+
+// Bucket label for articles the tag map does not cover.
+export const UNTAGGED_LABEL = "タグなし";
+
+// Per-tag rollup of the blog's article views:
+// [{ tag, count, totalViews, perArticle, top }] sorted by total
+// views, biggest first. An article counts once under each of its
+// tags (the blog's own tag index counts the same way). Articles
+// with no tags gather under UNTAGGED_LABEL so the genre totals
+// still account for every article view. Requires the tag map:
+// without it there is nothing honest to group by, so the result
+// is empty and the caller hides the section.
+export function blogGenreStats(response, tags, titles, origin) {
+  if (!tags || typeof tags.get !== "function" || tags.size === 0) {
+    return [];
+  }
+  const groups = new Map();
+  for (const { id, views } of articlePageViews(response)) {
+    const labels =
+      Array.isArray(tags.get(id)) && tags.get(id).length
+        ? tags.get(id)
+        : [UNTAGGED_LABEL];
+    const title = (titles && titles.get(id)) || id;
+    for (const label of labels) {
+      let group = groups.get(label);
+      if (!group) {
+        group = { tag: label, count: 0, totalViews: 0, top: null };
+        groups.set(label, group);
+      }
+      group.count += 1;
+      group.totalViews += views;
+      if (!group.top || views > group.top.views) {
+        group.top = { title, views, href: `${origin}/blog/${id}` };
+      }
+    }
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      perArticle: group.count
+        ? Math.round(group.totalViews / group.count)
+        : 0,
+    }))
+    .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count);
+}

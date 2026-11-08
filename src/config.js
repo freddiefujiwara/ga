@@ -20,5 +20,10 @@ export const CONFIG = {
   // so the production feed is used for both builds.
   BLOG_RSS_URL:
     "https://script.google.com/macros/s/AKfycbydcnw4yt5K8lz8Wf0PCbG6Q9yD3jf1W2lsGucOor2KII7duJr7qevcMiwNHJTe8GZH/exec?o=rss",
+  // The blog API's titles payload (blog-gas ?o=titles): carries the
+  // article id -> tag list map used for the blog tab's per-genre
+  // rollup. Same public-metadata treatment as the RSS feed.
+  BLOG_TITLES_URL:
+    "https://script.google.com/macros/s/AKfycbydcnw4yt5K8lz8Wf0PCbG6Q9yD3jf1W2lsGucOor2KII7duJr7qevcMiwNHJTe8GZH/exec?o=titles",
   SITE_ORIGIN: "https://freddiefujiwara.com",
 };
