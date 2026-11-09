@@ -17,8 +17,8 @@
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/social/staging/assets/index-IgVAIH5e.js"></script>
-    <link rel="stylesheet" crossorigin href="/social/staging/assets/index-LjrM_Jzj.css">
+    <script type="module" crossorigin src="/social/staging/assets/index-0gj-Jaue.js"></script>
+    <link rel="stylesheet" crossorigin href="/social/staging/assets/index-TJLg5L-K.css">
   </head>
   <body>
     <div class="layout">
@@ -32,7 +32,11 @@
         </div>
       </header>
       <main>
-        <section id="gate" class="table-wrap auth-gate">
+        <section id="boot-loading" class="table-wrap auth-gate" aria-busy="true">
+          <div class="spinner" aria-hidden="true"></div>
+          <p class="meta">読み込んでいます…</p>
+        </section>
+        <section id="gate" class="table-wrap auth-gate" hidden>
           <h2 class="section-title">Googleログインが必要です</h2>
           <p class="meta">許可されたアカウントでサインインしてください。</p>
           <div id="signin" class="google-login-button"></div>
@@ -44,6 +48,7 @@
         </section>
         <div id="dashboard" hidden>
           <p id="account" class="meta"></p>
+          <p id="data-asof" class="meta"></p>
           <nav class="tabs" id="tabs" aria-label="表示切替">
             <button type="button" class="tab-button" data-tab="overview">概要</button>
             <button type="button" class="tab-button" data-tab="instagram">Instagram</button>
