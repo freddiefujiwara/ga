@@ -9,6 +9,7 @@ export const TABS = [
   { id: "instagram", label: "Instagram" },
   { id: "blog", label: "ブログ" },
   { id: "youtube", label: "YouTube" },
+  { id: "threads", label: "Threads" },
 ];
 
 export const DEFAULT_TAB = "overview";

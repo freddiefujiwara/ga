@@ -9,12 +9,13 @@ import {
 import { parseShareToken } from "../src/share.js";
 
 describe("TABS", () => {
-  it("lists the four tabs in display order", () => {
+  it("lists the five tabs in display order", () => {
     expect(TABS).toEqual([
       { id: "overview", label: "概要" },
       { id: "instagram", label: "Instagram" },
       { id: "blog", label: "ブログ" },
       { id: "youtube", label: "YouTube" },
+      { id: "threads", label: "Threads" },
     ]);
     expect(DEFAULT_TAB).toBe("overview");
     expect(TABS.every((tab) => isTabId(tab.id))).toBe(true);
@@ -29,6 +30,7 @@ describe("tabFromHash", () => {
     expect(tabFromHash("#tab=instagram")).toBe("instagram");
     expect(tabFromHash("#tab=blog")).toBe("blog");
     expect(tabFromHash("#tab=youtube")).toBe("youtube");
+    expect(tabFromHash("#tab=threads")).toBe("threads");
   });
 
   it("coexists with the share token part, in either order", () => {
