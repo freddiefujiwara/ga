@@ -13,6 +13,7 @@ import {
   pageRanking,
   fetchBlogMeta,
   blogGenreStats,
+  blogArticleList,
   fetchSnsDetail,
   fetchSnsHistory,
   snsHistoryRows,
@@ -42,6 +43,8 @@ import {
   filterMediaByPeriod,
   filterMediaByGenre,
   mediaGenreOptions,
+  articleGenreOptions,
+  filterArticlesByGenre,
   mediaDateRange,
   sortGenreRows,
   genreAverageBars,
@@ -232,6 +235,7 @@ async function loadDashboard() {
   // returns nothing without one and the section says why instead.
   const meta = await metaPromise;
   renderBlogGenres(pages, meta, titles);
+  renderBlogArticles(pages, meta, titles);
   renderRanking("top-sources", sources, 8);
   gateEl.hidden = true;
   expiredEl.hidden = true;
@@ -506,6 +510,107 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
   wrap.appendChild(scroll);
 }
 
+// --- Blog per-article table (blog tab) ---
+// The blog counterpart of the Instagram tab's 投稿ごと: every
+// article that drew views in the GA window, with its tags shown
+// as genres, the shared genre filter buttons and sortable
+// columns. The differences from the media table follow the
+// data, not the design: the GA rows cover a fixed last-28-days
+// window, so there is no period selector to link or ignore —
+// and an article can carry several tags, so it appears under
+// each of its genres' filters (the genre rollup counts it the
+// same way). A fresh dashboard load resets the filter to
+// すべて, exactly like the media table.
+
+let blogArticles = [];
+let blogArticleSort = { key: "views", dir: "desc", wired: false };
+// The per-article table's genre filter: null shows every
+// article (the すべて button).
+let blogArticleGenreFilter = null;
+
+function renderBlogArticleGenreTabs() {
+  renderGenreFilterTabs(document.getElementById("blog-article-genre-tabs"), {
+    total: blogArticles.length,
+    options: articleGenreOptions(blogArticles),
+    active: blogArticleGenreFilter,
+    onSelect: (genre) => {
+      blogArticleGenreFilter = genre;
+      renderBlogArticleGenreTabs();
+      renderBlogArticleTable();
+    },
+  });
+}
+
+function renderBlogArticleTable() {
+  const tbody = document.getElementById("blog-article-body");
+  tbody.innerHTML = "";
+  const rows = sortMedia(
+    filterArticlesByGenre(blogArticles, blogArticleGenreFilter),
+    blogArticleSort.key,
+    blogArticleSort.dir,
+  );
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  for (const article of rows) {
+    const tr = document.createElement("tr");
+    const titleTd = document.createElement("td");
+    const link = document.createElement("a");
+    link.href = article.href;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = article.title;
+    titleTd.appendChild(link);
+    tr.appendChild(titleTd);
+    const genreTd = document.createElement("td");
+    genreTd.className = "nowrap";
+    genreTd.textContent = article.tags.length
+      ? article.tags.join("、")
+      : "—";
+    tr.appendChild(genreTd);
+    const viewsTd = document.createElement("td");
+    viewsTd.className = "num";
+    viewsTd.textContent = formatCount(article.views);
+    tr.appendChild(viewsTd);
+    tbody.appendChild(tr);
+  }
+  updateSortHeaders("blog-article-table", blogArticleSort);
+}
+
+function renderBlogArticles(pagesResponse, meta, rssTitles) {
+  // The RSS titles win; the titles payload fills any gap — the
+  // same merge the genre rollup makes.
+  const titles = new Map(meta ? meta.titles : []);
+  for (const [id, title] of rssTitles) {
+    titles.set(id, title);
+  }
+  blogArticles = blogArticleList(
+    pagesResponse,
+    meta ? meta.tags : null,
+    titles,
+    CONFIG.SITE_ORIGIN,
+  );
+  document.getElementById("blog-article-range").textContent =
+    blogArticles.length
+      ? `対象：直近28日間に表示された記事（全${blogArticles.length}件）`
+      : "";
+  // A fresh load resets the per-article genre filter to すべて.
+  blogArticleGenreFilter = null;
+  renderBlogArticleGenreTabs();
+  wireSortableTable(
+    "blog-article-table",
+    blogArticleSort,
+    renderBlogArticleTable,
+  );
+  renderBlogArticleTable();
+}
+
 // --- Overview tab ---
 // The overview pulls its numbers from three independent loads (GA
 // totals, the SNS snapshot, the SNS history). Each loader stores
@@ -645,8 +750,7 @@ const snsBodyEl = document.getElementById("sns-body");
 
 let snsMediaRows = [];
 // The media table starts sorted by views, most-watched first.
-let snsSort = { key: "views", dir: "desc" };
-let snsSortWired = false;
+let snsSort = { key: "views", dir: "desc", wired: false };
 // The per-post table's genre filter: null shows every post (the
 // すべて button). Independent of the genre section's period
 // selector — the filter always covers the full fetched list.
@@ -690,17 +794,17 @@ function fillDemoRanking(elId, items) {
   }
 }
 
-// The genre filter buttons above the per-post table: すべて
-// plus one button per genre that has posts, each labelled with
-// its post count. The buttons are rebuilt from the current media
-// list on every SNS render, so they always match the genres the
-// classifier produces. Clicking one narrows the table below to
-// that genre; the sort order is kept.
-function renderMediaGenreTabs() {
-  const wrap = document.getElementById("sns-media-genre-tabs");
+// The genre filter buttons above a per-item table (the
+// Instagram tab's 投稿ごと and the blog tab's 記事ごと share
+// this renderer, so the two tables feel the same): すべて plus
+// one button per genre that has items, each labelled with its
+// item count. `total` is the count on the すべて button — the
+// caller computes it, since a blog article with several tags
+// counts once per tag in the options but is still one article.
+// Clicking a button reports the genre (null for すべて) through
+// onSelect; the caller owns the filter state and re-renders.
+function renderGenreFilterTabs(wrap, { total, options, active, onSelect }) {
   wrap.innerHTML = "";
-  const options = mediaGenreOptions(snsMediaRows);
-  const total = options.reduce((sum, option) => sum + option.count, 0);
   const buttons = [{ genre: null, label: `すべて（${total}）` }];
   for (const option of options) {
     buttons.push({
@@ -712,18 +816,34 @@ function renderMediaGenreTabs() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "tab-button genre-filter-button";
-    const active = snsGenreFilter === entry.genre;
-    btn.classList.toggle("active", active);
+    const isActive = active === entry.genre;
+    btn.classList.toggle("active", isActive);
     btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-selected", String(active));
+    btn.setAttribute("aria-selected", String(isActive));
     btn.textContent = entry.label;
-    btn.addEventListener("click", () => {
-      snsGenreFilter = entry.genre;
-      renderMediaGenreTabs();
-      renderMediaTable();
-    });
+    btn.addEventListener("click", () => onSelect(entry.genre));
     wrap.appendChild(btn);
   }
+}
+
+// The buttons are rebuilt from the current media list on every
+// SNS render, so they always match the genres the classifier
+// produces. Clicking one narrows the table below to that genre;
+// the sort order is kept.
+function renderMediaGenreTabs() {
+  const wrap = document.getElementById("sns-media-genre-tabs");
+  const options = mediaGenreOptions(snsMediaRows);
+  const total = options.reduce((sum, option) => sum + option.count, 0);
+  renderGenreFilterTabs(wrap, {
+    total,
+    options,
+    active: snsGenreFilter,
+    onSelect: (genre) => {
+      snsGenreFilter = genre;
+      renderMediaGenreTabs();
+      renderMediaTable();
+    },
+  });
 }
 
 function renderMediaTable() {
@@ -784,34 +904,46 @@ function renderMediaTable() {
     tr.appendChild(linkTd);
     tbody.appendChild(tr);
   }
-  document
-    .querySelectorAll("#sns-media-table th.sortable")
-    .forEach((th) => {
-      const active = th.dataset.sortKey === snsSort.key;
-      th.textContent =
-        th.dataset.label + (active ? (snsSort.dir === "desc" ? " ↓" : " ↑") : "");
+  updateSortHeaders("sns-media-table", snsSort);
+}
+
+// Column-header sorting shared by the per-item tables (the
+// Instagram tab's 投稿ごと and the blog tab's 記事ごと): the
+// first click on a header sorts descending by that column,
+// clicking the same header again flips the direction, and the
+// active header carries a ↓ / ↑ mark. `sortState` is the
+// table's own { key, dir, wired } object; render redraws the
+// table body (and calls updateSortHeaders) after a click.
+function wireSortableTable(tableId, sortState, render) {
+  if (sortState.wired) {
+    return;
+  }
+  sortState.wired = true;
+  document.querySelectorAll(`#${tableId} th.sortable`).forEach((th) => {
+    th.dataset.label = th.textContent;
+    th.addEventListener("click", () => {
+      const key = th.dataset.sortKey;
+      if (sortState.key === key) {
+        sortState.dir = sortState.dir === "desc" ? "asc" : "desc";
+      } else {
+        sortState.key = key;
+        sortState.dir = "desc";
+      }
+      render();
     });
+  });
+}
+
+function updateSortHeaders(tableId, sortState) {
+  document.querySelectorAll(`#${tableId} th.sortable`).forEach((th) => {
+    const active = th.dataset.sortKey === sortState.key;
+    th.textContent =
+      th.dataset.label + (active ? (sortState.dir === "desc" ? " ↓" : " ↑") : "");
+  });
 }
 
 function wireMediaSort() {
-  if (snsSortWired) {
-    return;
-  }
-  snsSortWired = true;
-  document
-    .querySelectorAll("#sns-media-table th.sortable")
-    .forEach((th) => {
-      th.dataset.label = th.textContent;
-      th.addEventListener("click", () => {
-        const key = th.dataset.sortKey;
-        if (snsSort.key === key) {
-          snsSort = { key, dir: snsSort.dir === "desc" ? "asc" : "desc" };
-        } else {
-          snsSort = { key, dir: "desc" };
-        }
-        renderMediaTable();
-      });
-    });
+  wireSortableTable("sns-media-table", snsSort, renderMediaTable);
 }
 
 // --- Instagram genre rollup ---

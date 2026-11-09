@@ -432,3 +432,52 @@ export function filterMediaByGenre(media, genre, rules = INSTAGRAM_GENRE_RULES) 
   }
   return list.filter((post) => classifyCaption(post.caption, rules) === genre);
 }
+
+// The genre filter of the blog tab's per-article table: one
+// entry per tag that actually has articles, in the blog genre
+// rollup's order (total views, biggest first) so the filter
+// buttons line up with the genre section above them:
+// [{ genre, count }]. The grouping mirrors blogGenreStats — an
+// article with several tags counts once under each of them —
+// so the counts on the buttons always match the genre table.
+// Articles whose tags list is empty (no tag map) contribute
+// nothing: no button is offered for an unknown genre.
+export function articleGenreOptions(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  const groups = new Map();
+  for (const row of list) {
+    if (!row || !Array.isArray(row.tags)) {
+      continue;
+    }
+    for (const tag of row.tags) {
+      let group = groups.get(tag);
+      if (!group) {
+        group = { genre: tag, count: 0, totalViews: 0 };
+        groups.set(tag, group);
+      }
+      group.count += 1;
+      group.totalViews += isNum(row.views) ? row.views : 0;
+    }
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count)
+    .map(({ genre, count }) => ({ genre, count }));
+}
+
+// The articles of one genre for the per-article table's genre
+// filter, the blog counterpart of filterMediaByGenre. A
+// null/undefined genre means "no filter" (the すべて button):
+// every usable row comes back. Otherwise a row stays when its
+// tag list contains the genre — an article with several tags
+// appears under each of its genres' filters, the same counting
+// the blog genre rollup states in its note. Null entries are
+// skipped either way.
+export function filterArticlesByGenre(rows, genre) {
+  const list = (Array.isArray(rows) ? rows : []).filter((row) => row);
+  if (genre === null || genre === undefined) {
+    return list;
+  }
+  return list.filter(
+    (row) => Array.isArray(row.tags) && row.tags.includes(genre),
+  );
+}

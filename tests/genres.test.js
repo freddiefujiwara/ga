@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   INSTAGRAM_GENRE_RULES,
+  articleGenreOptions,
   classifyCaption,
+  filterArticlesByGenre,
   filterMediaByGenre,
   filterMediaByPeriod,
   formatRate,
@@ -317,6 +319,48 @@ describe("mediaGenreOptions / filterMediaByGenre", () => {
     expect(mediaGenreOptions(tagged)).toEqual([
       { genre: "グルメ", count: 1 },
     ]);
+  });
+});
+
+describe("articleGenreOptions / filterArticlesByGenre", () => {
+  const article = (title, views, tags) => ({ title, views, tags });
+  const rows = [
+    article("運営の記事", 100, ["運営"]),
+    article("運営と技術の記事", 60, ["運営", "技術"]),
+    article("中国語の記事", 45, ["中国語"]),
+    article("タグなしの記事", 10, ["タグなし"]),
+    article("ジャンル不明の記事", 5, []),
+    null,
+  ];
+
+  it("lists only the genres that have articles, with their counts", () => {
+    // Order follows the blog rollup: total views, biggest
+    // first. The multi-tag article counts under both of its
+    // tags; the genre-less article offers no button.
+    expect(articleGenreOptions(rows)).toEqual([
+      { genre: "運営", count: 2 },
+      { genre: "技術", count: 1 },
+      { genre: "中国語", count: 1 },
+      { genre: "タグなし", count: 1 },
+    ]);
+    expect(articleGenreOptions(null)).toEqual([]);
+    expect(articleGenreOptions([])).toEqual([]);
+  });
+
+  it("a null genre keeps every usable article (the すべて filter)", () => {
+    expect(filterArticlesByGenre(rows, null)).toHaveLength(5);
+    expect(filterArticlesByGenre(rows, undefined)).toHaveLength(5);
+    expect(filterArticlesByGenre(null, null)).toEqual([]);
+  });
+
+  it("keeps the articles carrying the chosen genre, multi-tag ones included", () => {
+    expect(
+      filterArticlesByGenre(rows, "運営").map((row) => row.title),
+    ).toEqual(["運営の記事", "運営と技術の記事"]);
+    expect(
+      filterArticlesByGenre(rows, "技術").map((row) => row.title),
+    ).toEqual(["運営と技術の記事"]);
+    expect(filterArticlesByGenre(rows, "川口")).toEqual([]);
   });
 });
 
