@@ -7,6 +7,7 @@ import {
   totalsOf,
   dailySeries,
   dimensionRanking,
+  dataAsOfText,
 } from "../src/api.js";
 
 const ENDPOINT = "https://example.com/exec";
@@ -99,5 +100,26 @@ describe("report shaping", () => {
       { name: "/a", views: 5 },
       { name: "/b", views: 3 },
     ]);
+  });
+});
+
+describe("dataAsOfText", () => {
+  it("formats the collection time in JST, zero-padded", () => {
+    expect(dataAsOfText("2026-11-09T09:50:00.000Z")).toBe(
+      "データは 2026/11/09 18:50 時点のものです",
+    );
+  });
+
+  it("rolls the date over at the JST day boundary", () => {
+    expect(dataAsOfText("2026-11-08T16:30:00.000Z")).toBe(
+      "データは 2026/11/09 01:30 時点のものです",
+    );
+  });
+
+  it("returns an empty string when there is no usable timestamp", () => {
+    expect(dataAsOfText(null)).toBe("");
+    expect(dataAsOfText(undefined)).toBe("");
+    expect(dataAsOfText("")).toBe("");
+    expect(dataAsOfText("not-a-date")).toBe("");
   });
 });

@@ -30,7 +30,11 @@
         </div>
       </header>
       <main>
-        <section id="gate" class="table-wrap auth-gate">
+        <section id="boot-loading" class="table-wrap auth-gate" aria-busy="true">
+          <div class="spinner" aria-hidden="true"></div>
+          <p class="meta">読み込んでいます…</p>
+        </section>
+        <section id="gate" class="table-wrap auth-gate" hidden>
           <h2 class="section-title">Googleログインが必要です</h2>
           <p class="meta">許可されたアカウントでサインインしてください。</p>
           <div id="signin" class="google-login-button"></div>
@@ -42,6 +46,7 @@
         </section>
         <div id="dashboard" hidden>
           <p id="account" class="meta"></p>
+          <p id="data-asof" class="meta"></p>
           <nav class="tabs" id="tabs" aria-label="表示切替">
             <button type="button" class="tab-button" data-tab="overview">概要</button>
             <button type="button" class="tab-button" data-tab="instagram">Instagram</button>
