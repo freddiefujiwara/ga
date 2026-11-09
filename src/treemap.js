@@ -167,6 +167,35 @@ export function hasLabelRoom(rect) {
   return Boolean(rect) && rect.w >= 10 && rect.h >= 16;
 }
 
+// Heat colour for a genre tile, scaled by where its average sits
+// between the smallest and largest average on show: the smallest
+// average keeps the plain tile colour, the largest gets the
+// strongest red, and values in between shade smoothly. The scale
+// is relative to what is on show, so changing the period window
+// recolours the tiles. The mix percentage is capped well short
+// of solid red so the tile's white text stays readable on the
+// hottest tile. null means "no heat colour": a missing average,
+// or nothing to scale against (a lone genre, or every average
+// equal), and the tile keeps the plain colour.
+export const GENRE_HEAT_MAX_MIX = 55;
+const GENRE_HEAT_RED = "#dc2626";
+
+export function genreHeatMix(avg, min, max) {
+  if (!isNum(avg) || !isNum(min) || !isNum(max) || max <= min) {
+    return null;
+  }
+  const ratio = (avg - min) / (max - min);
+  return Math.round(Math.min(1, Math.max(0, ratio)) * GENRE_HEAT_MAX_MIX);
+}
+
+export function genreHeatBackground(avg, min, max) {
+  const mix = genreHeatMix(avg, min, max);
+  if (mix === null || mix <= 0) {
+    return null;
+  }
+  return `color-mix(in srgb, ${GENRE_HEAT_RED} ${mix}%, var(--surface-elevated))`;
+}
+
 // How much of its text a genre tile may carry, decided from the
 // tile's own size so nothing is drawn that cannot fit: "full"
 // (name + average + total), "value" (name + average), "name"
@@ -233,9 +262,11 @@ export function channelBars(detail, gaTotals, historyRows) {
 // only for positive averages; each carries a labelLevel from
 // tileLabelLevel, and the renderer draws only the lines that
 // level allows, so no text is squeezed into a tile it cannot
-// fit. The legend lists every row, in the rows' order, so a
-// genre whose average is zero or missing — or whose tile is
-// too small for its figures — still reads there.
+// fit. Each tile also carries a heat background (see
+// genreHeatBackground) scaled across the averages on show. The
+// legend lists every row, in the rows' order, so a genre whose
+// average is zero or missing — or whose tile is too small for
+// its figures — still reads there.
 export function genreTreemap(rows, pick) {
   const entries = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -251,6 +282,11 @@ export function genreTreemap(rows, pick) {
     })
     .filter(Boolean);
   const byIndex = new Map(entries.map((entry, index) => [index, entry]));
+  const tileAverages = entries
+    .map((entry) => entry.avg)
+    .filter((avg) => isNum(avg) && avg > 0);
+  const heatMin = tileAverages.length ? Math.min(...tileAverages) : null;
+  const heatMax = tileAverages.length ? Math.max(...tileAverages) : null;
   const tiles = squarifiedLayout(
     entries
       .map((entry, index) => ({ id: index, value: entry.avg }))
@@ -263,6 +299,7 @@ export function genreTreemap(rows, pick) {
     return {
       ...entry,
       avgLabel: formatCount(entry.avg),
+      heat: genreHeatBackground(entry.avg, heatMin, heatMax),
       x: rect.x,
       y: rect.y,
       w: rect.w,

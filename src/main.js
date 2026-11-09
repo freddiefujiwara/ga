@@ -253,6 +253,9 @@ async function loadDashboard() {
 // draws only the text lines its size can hold (see
 // tileLabelLevel); the legend under the map lists every genre's
 // average and total, so nothing is lost on the small tiles.
+// Tile colour is a heat scale on the same average (see
+// genreHeatBackground): the biggest average on show is the
+// reddest, the smallest keeps the plain tile colour.
 
 function renderGenreTreemap(mapEl, legendEl, map) {
   mapEl.innerHTML = "";
@@ -269,6 +272,9 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     div.style.top = `${tile.y}%`;
     div.style.width = `${tile.w}%`;
     div.style.height = `${tile.h}%`;
+    if (tile.heat) {
+      div.style.background = tile.heat;
+    }
     div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
     // Draw only the lines this tile's size can hold: the level
     // comes from tileLabelLevel, and a line that is not drawn
@@ -425,7 +431,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
         avgText: `1記事あたり ${formatCount(row.perArticle)}`,
         totalText: `合計 ${formatCount(row.totalViews)}`,
       })),
-      "タイルの面積は1記事あたり表示回数の大きさです。",
+      "タイルの面積は1記事あたり表示回数の大きさです。色が赤いほど1記事あたり表示回数が多いです。",
     ),
   );
   wrap.appendChild(
