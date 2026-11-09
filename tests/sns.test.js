@@ -14,6 +14,7 @@ import {
   formatJstDate,
   snsTotalFollowers,
   snsOverview,
+  overviewKpis,
   snsInteractions,
   ageGenderLabel,
   demographicsBars,
@@ -361,6 +362,41 @@ describe("profile links taps card", () => {
   });
 });
 
+describe("channel separation of the Instagram tab cards", () => {
+  // The Instagram tab shows the Instagram account's own numbers
+  // only. The cross-channel figures (the combined follower total,
+  // YouTube subscribers, Threads followers) belong to the
+  // overview tab, so they never appear among these cards.
+  it("snsOverview has no cross-channel cards", () => {
+    const labels = snsOverview(DETAIL).map((c) => c.label);
+    expect(labels).not.toContain("SNS延べフォロワー");
+    expect(labels).not.toContain("YouTube 登録者");
+    expect(labels).not.toContain("Threads フォロワー");
+  });
+
+  it("snsOverview lists the Instagram cards in display order", () => {
+    expect(snsOverview(DETAIL).map((c) => c.label)).toEqual([
+      "Instagram フォロワー",
+      "Instagram 投稿数",
+      "再生回数（過去30日）",
+      "リーチ（過去30日）",
+      "反応した人数（過去30日）",
+      "反応の合計（過去30日）",
+      "フォロワー以外（過去30日）",
+      "フォロー（過去30日）",
+      "フォロー解除（過去30日）",
+    ]);
+  });
+
+  it("the cross-channel figures stay available on the overview KPIs", () => {
+    const labels = overviewKpis(DETAIL, null, []).map((c) => c.label);
+    expect(labels).toContain("SNS延べフォロワー数");
+    expect(labels).toContain("YouTube 登録者");
+    // Threads reaches the overview through the channel bars; the
+    // combined total it feeds is the SNS延べフォロワー数 above.
+  });
+});
+
 describe("formatting", () => {
   it("formatCount locales numbers and dashes the rest", () => {
     expect(formatCount(576645)).toBe("576,645");
@@ -413,10 +449,7 @@ describe("totals and overview", () => {
     const cards = Object.fromEntries(
       snsOverview(DETAIL).map((c) => [c.label, c.value]),
     );
-    expect(cards["SNS延べフォロワー"]).toBe("2,000");
     expect(cards["Instagram フォロワー"]).toBe("1,991");
-    expect(cards["YouTube 登録者"]).toBe("9");
-    expect(cards["Threads フォロワー"]).toBe("—");
     expect(cards["Instagram 投稿数"]).toBe("2,420");
     expect(cards["再生回数（過去30日）"]).toBe("576,645");
     expect(cards["フォロワー以外（過去30日）"]).toBe("94.5%");
@@ -426,9 +459,9 @@ describe("totals and overview", () => {
 
   it("snsOverview tolerates a missing response", () => {
     const cards = snsOverview(null);
-    expect(cards).toHaveLength(12);
+    expect(cards).toHaveLength(9);
     expect(cards.every((c) => c.value === "—")).toBe(true);
-    expect(snsOverview({ ok: false })).toHaveLength(12);
+    expect(snsOverview({ ok: false })).toHaveLength(9);
   });
 
   it("snsInteractions splits the four kinds", () => {
