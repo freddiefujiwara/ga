@@ -30,6 +30,7 @@ export function channelAudiences(detail, gaTotals, historyRows) {
   const ig = detail?.instagram ?? {};
   const yt = detail?.youtube ?? {};
   const th = detail?.threads ?? {};
+  const x = detail?.x ?? {};
   const deltaFor = (key) => {
     const change = historyDelta(historyRows, key);
     return change ? change.delta : null;
@@ -63,12 +64,22 @@ export function channelAudiences(detail, gaTotals, historyRows) {
       value: isNum(th.followers) ? th.followers : null,
       delta: deltaFor("threads_followers"),
     },
+    {
+      id: "x",
+      name: "X",
+      metricLabel: "フォロワー",
+      value: isNum(x.followers) ? x.followers : null,
+      delta: deltaFor("x_followers"),
+    },
   ];
   return entries.map((entry) => ({
     ...entry,
     valueLabel: formatCount(entry.value),
     deltaLabel: formatDelta(entry.delta),
-    note: entry.id === "threads" && entry.value === null ? "集計待ち" : null,
+    note:
+      (entry.id === "threads" || entry.id === "x") && entry.value === null
+        ? "集計待ち"
+        : null,
   }));
 }
 

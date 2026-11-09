@@ -24,6 +24,10 @@ import {
   threadsInteractions,
   threadsPosts,
   threadsErrorNotes,
+  xHistorySeries,
+  xTotals,
+  xPosts,
+  xErrorNotes,
   overviewKpis,
   topMedia,
   formatCount,
@@ -137,6 +141,7 @@ const tabPanels = {
   blog: document.getElementById("tab-blog"),
   youtube: document.getElementById("tab-youtube"),
   threads: document.getElementById("tab-threads"),
+  x: document.getElementById("tab-x"),
 };
 
 function activateTab(tabId, updateHash = true) {
@@ -1439,6 +1444,108 @@ function renderThreads() {
   wrap.appendChild(chart);
 }
 
+// --- X tab ---
+// The X tab reads the same two loads as the Threads tab: the
+// follower count and the recent posts from sns_detail's x
+// section (collected by social-gas from tweet-gas), and the
+// follower trend from the history rows. renderSns and
+// loadSnsHistory both call renderX, so whichever load lands
+// second completes the picture; data that has not arrived yet
+// shows as "—". X posts carry no genre classification (the tab
+// is a plain per-post list, like the YouTube tab).
+
+let xPostRows = [];
+// The posts table starts sorted by views, most-viewed first,
+// like the other per-post tables.
+let xSort = { key: "views", dir: "desc", wired: false };
+
+function renderXPosts() {
+  const tbody = document.getElementById("x-posts-body");
+  tbody.innerHTML = "";
+  document.getElementById("x-posts-range").textContent = xPostRows.length
+    ? `対象：直近の投稿（全${xPostRows.length}件）`
+    : "";
+  const rows = sortMedia(xPostRows, xSort.key, xSort.dir);
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    const numCell = (value) => {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = formatCount(value);
+      return td;
+    };
+    for (const post of rows) {
+      const tr = document.createElement("tr");
+      const dateTd = document.createElement("td");
+      dateTd.className = "nowrap";
+      dateTd.textContent = formatJstDateTime(post.posted_at);
+      tr.appendChild(dateTd);
+      const textTd = document.createElement("td");
+      textTd.className = "caption-cell";
+      const head = captionHead(post.text) || "投稿";
+      if (post.url) {
+        const link = document.createElement("a");
+        link.href = post.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = head;
+        textTd.appendChild(link);
+      } else {
+        textTd.textContent = head;
+      }
+      tr.appendChild(textTd);
+      tr.appendChild(numCell(post.views));
+      tr.appendChild(numCell(post.likes));
+      tr.appendChild(numCell(post.reposts));
+      tr.appendChild(numCell(post.replies));
+      tbody.appendChild(tr);
+    }
+  }
+  updateSortHeaders("x-posts-table", xSort);
+}
+
+function renderX() {
+  fillTotalBoxes("sns-x-totals", xTotals(overviewState.detail, overviewState.historyRows));
+  xPostRows = xPosts(overviewState.detail);
+  wireSortableTable("x-posts-table", xSort, renderXPosts);
+  renderXPosts();
+  const notes = document.getElementById("x-notes");
+  notes.innerHTML = "";
+  for (const note of xErrorNotes(overviewState.detail)) {
+    const p = document.createElement("p");
+    p.className = "meta sns-note";
+    p.textContent = `※ ${note}`;
+    notes.appendChild(p);
+  }
+  const wrap = document.getElementById("x-history");
+  wrap.innerHTML = "";
+  const series = xHistorySeries(overviewState.historyRows);
+  if (!series.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "履歴はまだありません（取得のたびに貯まっていきます）";
+    wrap.appendChild(p);
+    return;
+  }
+  const item = series[0];
+  const head = document.createElement("p");
+  head.className = "meta";
+  head.textContent =
+    `${item.label}：最新 ${formatCount(item.latest)}` +
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  const chart = document.createElement("div");
+  chart.className = "chart-wrap";
+  chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+  wrap.appendChild(head);
+  wrap.appendChild(chart);
+}
+
 // --- Instagram daily follows (フォロー・フォロー解除（日ごと）) ---
 // Daily follow / unfollow bars with the day's posts mapped onto
 // them. Meta only reports follows as an account-wide daily
@@ -1569,6 +1676,9 @@ function renderSns(detail) {
   document.getElementById("threads-status").textContent = detail.collected_at
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
+  document.getElementById("x-status").textContent = detail.collected_at
+    ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
+    : "";
   fillTotalBoxes("sns-overview", snsOverview(detail));
   fillTotalBoxes("sns-interactions", snsInteractions(detail));
   const bars = document.getElementById("sns-age-gender");
@@ -1666,6 +1776,7 @@ function renderSns(detail) {
   renderGenreTable(detail);
   renderYoutube(detail);
   renderThreads();
+  renderX();
   const notes = document.getElementById("sns-notes");
   notes.innerHTML = "";
   for (const note of snsErrorNotes(detail)) {
@@ -1684,8 +1795,11 @@ async function loadSns() {
   youtubeStatusEl.textContent = "読み込み中…";
   const threadsStatusEl = document.getElementById("threads-status");
   threadsStatusEl.textContent = "読み込み中…";
+  const xStatusEl = document.getElementById("x-status");
+  xStatusEl.textContent = "読み込み中…";
   renderYoutube(null);
   renderThreads();
+  renderX();
   try {
     const detail = await fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
     if (!detail || !detail.ok) {
@@ -1694,6 +1808,7 @@ async function loadSns() {
       snsStatusEl.textContent = message;
       youtubeStatusEl.textContent = message;
       threadsStatusEl.textContent = message;
+      xStatusEl.textContent = message;
       return;
     }
     renderSns(detail);
@@ -1701,6 +1816,7 @@ async function loadSns() {
     snsStatusEl.textContent = "SNSデータを取得できませんでした";
     youtubeStatusEl.textContent = "SNSデータを取得できませんでした";
     threadsStatusEl.textContent = "SNSデータを取得できませんでした";
+    xStatusEl.textContent = "SNSデータを取得できませんでした";
   }
 }
 
@@ -1746,6 +1862,7 @@ async function loadSnsHistory() {
   }
   renderOverview();
   renderThreads();
+  renderX();
 }
 
 // --- Daily chart tooltip (hover on PC, tap on touch) ---

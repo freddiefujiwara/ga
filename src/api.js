@@ -255,9 +255,9 @@ export function dataAsOfText(collectedAt) {
 }
 
 // The combined follower total shown on the top page: the main
-// Instagram account, Threads and YouTube. The secondary Instagram
-// account (@anemone_cancer) is deliberately not part of the sum.
-// Null when not a single network reported a number.
+// Instagram account, Threads, YouTube and X. The secondary
+// Instagram account (@anemone_cancer) is deliberately not part
+// of the sum. Null when not a single network reported a number.
 export function snsTotalFollowers(detail) {
   if (!detail || typeof detail !== "object") {
     return null;
@@ -266,6 +266,7 @@ export function snsTotalFollowers(detail) {
     detail.instagram?.freddiefujiwara,
     detail.threads?.followers,
     detail.youtube?.subscribers,
+    detail.x?.followers,
   ].filter(isNum);
   return parts.length ? parts.reduce((sum, v) => sum + v, 0) : null;
 }
@@ -610,6 +611,56 @@ export function threadsErrorNotes(detail) {
   return ["detail_error", "posts_error"]
     .map((key) => th[key])
     .filter((value) => typeof value === "string" && value.length > 0);
+}
+
+// The X follower trend for the X tab: the same history rows, a
+// single series. X numbers only exist since the tweet-gas sync
+// was connected, so — like Threads — the rows before that
+// (x_followers null) contribute no point.
+export function xHistorySeries(rows) {
+  return shapeHistorySeries(rows, [
+    { key: "x_followers", label: "X フォロワー" },
+  ]);
+}
+
+// Totals boxes for the X tab: the current follower count and its
+// change since the previous collection, from the history rows
+// exactly like threadsTotals. Until two collections carry an X
+// number there is nothing to compare, so the change box shows
+// "—". X has no account-wide 30-day totals in the collection
+// (the API tweet-gas reads reports per-post numbers only), so
+// the follower pair is the whole row.
+export function xTotals(detail, historyRows) {
+  const x = detail?.x ?? {};
+  const change = historyDelta(historyRows, "x_followers");
+  return [
+    { label: "フォロワー", value: formatCount(x.followers) },
+    {
+      label: "前回比",
+      value: change ? (formatDelta(change.delta) ?? "—") : "—",
+    },
+  ];
+}
+
+// The X account's recent posts, newest first as collected:
+// [{ id, posted_at, text, url, views, likes, reposts, replies }],
+// with nulls wherever a number could not be collected. Anything
+// that is not a list yields an empty one.
+export function xPosts(detail) {
+  const list = detail?.x?.recent_posts;
+  return Array.isArray(list) ? list : [];
+}
+
+// Partial-collection notes social-gas attaches to the X section.
+// The tweet-gas call often reports the same summary on both
+// fields (the two halves travel in one call), so duplicates are
+// shown once.
+export function xErrorNotes(detail) {
+  const x = detail?.x ?? {};
+  return ["x_error", "posts_error"]
+    .map((key) => x[key])
+    .filter((value) => typeof value === "string" && value.length > 0)
+    .filter((value, index, all) => all.indexOf(value) === index);
 }
 
 // Partial-collection notes ga-gas attaches to the snapshot (empty
