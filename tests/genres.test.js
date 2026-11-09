@@ -3,6 +3,7 @@ import {
   INSTAGRAM_GENRE_RULES,
   articleGenreOptions,
   classifyCaption,
+  classifyXText,
   filterArticlesByGenre,
   filterMediaByGenre,
   filterMediaByPeriod,
@@ -431,51 +432,159 @@ describe("threads genre rollup / filter", () => {
   });
 });
 
+describe("classifyXText", () => {
+  // Texts in the shape of the account's real posts — the
+  // representative cases of the split the owner hand-classified
+  // (2026-11-10), plus the traps the tuning surfaced.
+  it("buckets a quoted QA-industry post as QA・テスト", () => {
+    expect(
+      classifyXText(
+        "\u201c丹下大社長は「（主力事業(ソフトウェアテスト！？)需要は）なくなる可能性がある」と言い切った。\u201d https://t.co/rfLNbAvfcL",
+      ),
+    ).toBe("QA・テスト");
+    expect(
+      classifyXText(
+        "個人開発のテストのリアル。作るのも直すのも自分ひとりで、第三者の目が入らない。本番で6回壊して、そのたびに学びを仕組みに残したら、1,000本超のテストと毎朝の見回りになっていました。",
+      ),
+    ).toBe("QA・テスト");
+  });
+
+  it("judges a blog update by its subject: a tech article is 技術・AI", () => {
+    expect(
+      classifyXText(
+        "ブログを更新しました｜ノートパソコンの起動が1分41秒→24秒になりました。速くしたのではなく、起動時に走るものを減らしただけです。重かった内訳と対策をまとめました。",
+      ),
+    ).toBe("技術・AI");
+    // The trap: this one mentions 用意したテスト for its blog
+    // pipeline, but the post is about the pipeline — 技術・AI,
+    // not QA・テスト.
+    expect(
+      classifyXText(
+        "ホームページとブログの裏側を、「壊れにくい仕組み」という観点で書きました。Googleドキュメント→GASで変換→GitHub Pagesで表示。小さく保ち、変換にはテストを用意しています。",
+      ),
+    ).toBe("技術・AI");
+  });
+
+  it("buckets a follower milestone as ブログ・サイト更新", () => {
+    expect(
+      classifyXText(
+        "Instagramのフォロワーさんが2,000人になりました。ありがとうございます。記念にストーリーで「皆さんの川口のおすすめは？」を募集中です。",
+      ),
+    ).toBe("ブログ・サイト更新");
+    // The trap: the relaunch post carries the byline
+    // QAエンジニア — the letters QA alone must not make it a
+    // QA post.
+    expect(
+      classifyXText(
+        "ホームページを新しくしました。https://t.co/m6aZ7tC7WU を「川口を歩くQAエンジニア」のページにリニューアル。ブログも同じデザインに統一しました。",
+      ),
+    ).toBe("ブログ・サイト更新");
+  });
+
+  it("buckets the Singapore arrival as 旅行", () => {
+    expect(
+      classifyXText(
+        "3年ぶりのシンガポール🇸🇬 昨夜は線状降水帯で京成線が運転見合わせ。一度空港へ向かうも断念して帰宅。ダメ元で朝5:45のスカイライナーを予約したら、奇跡的に運転再開！",
+      ),
+    ).toBe("旅行");
+    // The homeward leg never names the country; Changi does it.
+    expect(
+      classifyXText(
+        "昨日19時頃、アモイフードセンターで3日間アテンドしてくれた友人とお別れ ホテルで荷物を回収してチャンギへ→夜行便で成田→朝9時過ぎに自宅着",
+      ),
+    ).toBe("旅行");
+  });
+
+  it("keeps a Kawaguchi day in 川口・地域 even when a QA book rides along", () => {
+    // The trap: the diary mentions 『ソフトウェア品質保証ガイド』
+    // read on a train — the day itself is Kawaguchi life.
+    expect(
+      classifyXText(
+        "朝5:30から坐禅で始まった日曜日 布団を洗って、電車で『ソフトウェア品質保証ガイド』を読み、大島でストレッチ。西川口でガチ中華を食べ、所沢までドライブして角川武蔵野ミュージアムへ 最後はお決まりの川口の喜楽湯♨️",
+      ),
+    ).toBe("川口・地域");
+    // And the Saturday that opens with 「旅行では無い」 is no trip.
+    expect(
+      classifyXText(
+        "久しぶりの旅行では無い土曜日 午前は自転車で20kmサイクリングしたあと。初めてストレッチ専門店へ。",
+      ),
+    ).toBe("川口・地域");
+  });
+
+  it("leaves a bare URL unclassifiable: 日常・その他", () => {
+    expect(classifyXText("https://t.co/aAloXXrDU8")).toBe("日常・その他");
+    expect(classifyXText("")).toBe("日常・その他");
+    expect(classifyXText(null)).toBe("日常・その他");
+  });
+});
+
 describe("x genre rollup / filter", () => {
   // X posts in the shape social-gas collects (via tweet-gas):
   // the words live in `text`, the link in `url`, the numbers
-  // are lifetime counts, and there is no saves figure.
-  const post = (text, views, likes = null) => ({
+  // are lifetime counts, and there is no saves figure. The
+  // texts are the account's real posts, one or two per genre
+  // of the X taxonomy.
+  const post = (text, views, likes = null, url = "https://x.com/i/web/status/2001") => ({
     text,
     views,
     likes,
     reposts: 0,
     replies: 0,
-    url: "https://x.com/i/web/status/2001",
+    url,
   });
   const posts = [
-    post("川口でラーメン450円 #川口グルメ", 9000, 90),
-    post("カレーの店に行った", 1000, 10),
-    post("川口から御茶ノ水まで、自転車で何分？", 3000, 30),
-    post("朝の散歩、芝川沿い", 2000, null),
-    post("新しい曲を作りました #Suno", 500, 5),
-    post("今日の空", 100, 1),
+    post(
+      "3年ぶりのシンガポール🇸🇬 一度空港へ向かうも断念して帰宅。ダメ元で朝5:45のスカイライナーを予約したら、奇跡的に運転再開！",
+      3011,
+      30,
+      "https://x.com/i/web/status/2014",
+    ),
+    post(
+      "\u201c丹下大社長は「（主力事業(ソフトウェアテスト！？)需要は）なくなる可能性がある」と言い切った。\u201d",
+      1969,
+      20,
+    ),
+    post("個人開発のテストのリアル。本番で6回壊して、そのたびに学びを仕組みに残しました。", 318, null),
+    post(
+      "ブログを更新しました｜ノートパソコンの起動が1分41秒→24秒になりました。起動時に走るものを減らしただけです。",
+      114,
+      1,
+    ),
+    post(
+      "Instagramのフォロワーさんが2,000人になりました。記念にストーリーで川口のおすすめを募集中です。",
+      119,
+      1,
+    ),
+    post("今日も朝から川口を満喫 AZELでトルコ朝食ビュッフェ 喜楽湯で朝風呂", 304, 3),
+    post("https://t.co/aAloXXrDU8", 267, null),
     null,
   ];
 
-  it("rolls the posts up by genre over their text", () => {
+  it("rolls the posts up by the X genres over their text", () => {
     const rows = genreStatsForX(posts);
     // Order follows the shared rollup: total views, biggest first.
     expect(rows.map((row) => row.genre)).toEqual([
-      "グルメ",
-      "サイクリング",
-      "街歩き・スポット",
-      "音楽",
+      "旅行",
+      "QA・テスト",
+      "川口・地域",
       "日常・その他",
+      "ブログ・サイト更新",
+      "技術・AI",
     ]);
-    const gourmet = rows[0];
-    expect(gourmet.count).toBe(2);
-    expect(gourmet.totalViews).toBe(10000);
-    expect(gourmet.avgViews).toBe(5000);
+    const qa = rows[1];
+    expect(qa.count).toBe(2);
+    expect(qa.totalViews).toBe(2287);
+    expect(qa.avgViews).toBe(1144);
     // likeRate averages likes/views over the posts that have both.
-    expect(gourmet.likeRate).toBeCloseTo((90 / 9000 + 10 / 1000) / 2);
+    expect(qa.likeRate).toBeCloseTo(20 / 1969);
     // X posts carry no saves, so saveRate stays null.
-    expect(gourmet.saveRate).toBeNull();
+    expect(qa.saveRate).toBeNull();
     // The top post is titled by the head of its text, and its
     // link is the post's url (X posts carry no permalink).
-    expect(gourmet.top.views).toBe(9000);
-    expect(gourmet.top.title).toContain("川口でラーメン450円");
-    expect(gourmet.top.permalink).toBe("https://x.com/i/web/status/2001");
+    const travel = rows[0];
+    expect(travel.top.views).toBe(3011);
+    expect(travel.top.title).toContain("3年ぶりのシンガポール");
+    expect(travel.top.permalink).toBe("https://x.com/i/web/status/2014");
   });
 
   it("xGenreStats reads the snapshot's x section", () => {
@@ -488,14 +597,17 @@ describe("x genre rollup / filter", () => {
     expect(genreStatsForX([])).toEqual([]);
   });
 
-  it("classifies with the shared rules: hashtags first, shop before cycling", () => {
-    // A genre hashtag wins over the body words, like Instagram.
-    const tagged = [post("ラーメンを食べた #サイクリング", 10)];
-    expect(filterXByGenre(tagged, "サイクリング")).toHaveLength(1);
-    expect(filterXByGenre(tagged, "グルメ")).toEqual([]);
-    // A ride to a curry shop is グルメ, not サイクリング.
-    const ride = [post("自転車でカレーの店へ行った", 10)];
-    expect(filterXByGenre(ride, "グルメ")).toHaveLength(1);
+  it("classifies with the X rules, not the Instagram ones", () => {
+    // The old shared judgement would have made the ramen post
+    // グルメ and the Suno post 音楽; the X taxonomy has neither
+    // genre — a Kawaguchi ramen post is 川口・地域 here, and a
+    // bare song announcement matches nothing.
+    const ramen = [post("川口でラーメン450円 #川口グルメ", 10)];
+    expect(filterXByGenre(ramen, "川口・地域")).toHaveLength(1);
+    const song = [post("新しい曲を作りました #Suno", 10)];
+    expect(filterXByGenre(song, "日常・その他")).toHaveLength(1);
+    // The Instagram classifier itself is untouched.
+    expect(classifyCaption("川口でラーメン450円 #川口グルメ")).toBe("グルメ");
   });
 
   it("button counts always match the genre rollup", () => {
@@ -516,15 +628,16 @@ describe("x genre rollup / filter", () => {
       (sum, option) => sum + option.count,
       0,
     );
-    expect(total).toBe(6);
-    expect(filterXByGenre(posts, null)).toHaveLength(6);
-    expect(filterXByGenre(posts, undefined)).toHaveLength(6);
+    expect(total).toBe(7);
+    expect(filterXByGenre(posts, null)).toHaveLength(7);
+    expect(filterXByGenre(posts, undefined)).toHaveLength(7);
     expect(filterXByGenre(null, null)).toEqual([]);
   });
 
   it("a post without a view count still counts, with a null average share", () => {
     const rows = genreStatsForX([post("今日の空", null)]);
     expect(rows).toHaveLength(1);
+    expect(rows[0].genre).toBe("日常・その他");
     expect(rows[0].count).toBe(1);
     expect(rows[0].totalViews).toBe(0);
     expect(rows[0].avgViews).toBeNull();

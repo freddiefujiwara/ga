@@ -169,12 +169,27 @@ export const INSTAGRAM_GENRE_RULES = [
   },
 ];
 
+// The keyword stage shared by both classifiers: the first rule
+// (in array order) with a keyword appearing in the text, or
+// null when nothing matches. Matching is a plain substring
+// test, case-insensitive so the latin keywords ("Suno",
+// "HELLO CYCLING", "GitHub") work in any casing.
+const matchByKeywords = (text, rules) => {
+  const lowered = String(text ?? "").toLowerCase();
+  for (const rule of rules) {
+    const hit = (rule.keywords || []).some((keyword) =>
+      lowered.includes(String(keyword).toLowerCase()),
+    );
+    if (hit) {
+      return rule.genre;
+    }
+  }
+  return null;
+};
+
 // The genre of one post. Stage 1: an exact hashtag match from
-// INSTAGRAM_HASHTAG_GENRES wins outright. Stage 2: the first
-// rule (in array order) with a keyword appearing in the caption.
-// Keyword matching is a plain substring test, case-insensitive
-// so the latin keywords ("Suno", "HELLO CYCLING") work in any
-// casing. A missing caption matches nothing and falls back like
+// INSTAGRAM_HASHTAG_GENRES wins outright. Stage 2: the keyword
+// rules. A missing caption matches nothing and falls back like
 // any other unmatched caption.
 export function classifyCaption(caption, rules = INSTAGRAM_GENRE_RULES) {
   const hashtags = captionHashtags(caption);
@@ -183,16 +198,7 @@ export function classifyCaption(caption, rules = INSTAGRAM_GENRE_RULES) {
       return entry.genre;
     }
   }
-  const text = String(caption ?? "").toLowerCase();
-  for (const rule of rules) {
-    const hit = (rule.keywords || []).some((keyword) =>
-      text.includes(String(keyword).toLowerCase()),
-    );
-    if (hit) {
-      return rule.genre;
-    }
-  }
-  return INSTAGRAM_FALLBACK_GENRE;
+  return matchByKeywords(caption, rules) ?? INSTAGRAM_FALLBACK_GENRE;
 }
 
 // A rate (0..1) as a one-decimal percent label; "—" when missing.
@@ -331,14 +337,23 @@ export function sortGenreRows(rows, key = "totalViews", dir = "desc") {
 //   numeric numerator; null when no post qualifies.
 // - top is the most-viewed post of the genre ({ title, views,
 //   permalink }), null when no post reported views.
-export function genreStatsForMedia(media, rules = INSTAGRAM_GENRE_RULES) {
+export function genreStatsForMedia(
+  media,
+  rules = INSTAGRAM_GENRE_RULES,
+  classify = null,
+) {
   const list = Array.isArray(media) ? media : [];
   const groups = new Map();
   for (const post of list) {
     if (!post) {
       continue;
     }
-    const genre = classifyCaption(post.caption, rules);
+    // The X rollup passes its own classifier (classifyXText);
+    // everyone else classifies the caption with the shared
+    // Instagram rules.
+    const genre = classify
+      ? classify(post)
+      : classifyCaption(post.caption, rules);
     let group = groups.get(genre);
     if (!group) {
       group = {
@@ -539,16 +554,150 @@ export function filterThreadsByGenre(posts, genre) {
   return list.filter((post) => classifyCaption(post.text ?? "") === genre);
 }
 
+// --- X genre classification ---
+// X gets its own taxonomy, unlike the other channels. The
+// audience there is mostly QA engineers and the posts are
+// mostly QA / tech writing, so the Instagram genres (グルメ,
+// サイクリング, …) bucketed nearly everything into the
+// fallback. The categories and rules below were tuned against
+// the owner hand-classifying the 50 most recent posts
+// (2026-11-10): QA・テスト 13, 技術・AI 10, ブログ・サイト更新
+// 5, 旅行 6, 川口・地域 4, 日常・その他 12 — the classifier
+// reproduces that split exactly, and the unit tests pin the
+// representative posts.
+//
+// The rule order is the priority order:
+// - QA・テスト first (the owner's call): quality / testing is
+//   what the X audience follows him for.
+// - 技術・AI next, then ブログ・サイト更新 — deliberately AFTER
+//   the subject rules. "ブログを更新しました" is a stock phrase
+//   that also heads the tech and QA articles, so the update
+//   boilerplate alone must not decide the genre; the subject
+//   wins, and only the operation-flavoured posts (subscriber
+//   milestones, relaunches, index-page announcements) land in
+//   ブログ・サイト更新. The ブログを更新しました keyword stays
+//   in that rule for the updates whose subject matches nothing
+//   above (a roundup of Kawaguchi shops, say).
+// - 旅行 before 川口・地域, with place names rather than the
+//   bare word 旅行 — a Saturday at home opens with
+//   「旅行では無い土曜日」 and must not become a trip.
+// - 川口・地域 last: its signals (the city and ward names,
+//   cycling words) are the local-life posts' own words.
+//
+// Two keyword traps the tuning surfaced:
+// - Bare "QA" is not a keyword. The owner's byline is
+//   「川口を歩くQAエンジニア」, so a site-relaunch post carries
+//   the letters QA without being about QA; the QA rule matches
+//   phrase forms (QAは / QAの / QA工程 …) instead. Bare
+//   品質保証 is out for the same reason: a diary post that
+//   mentions reading 『ソフトウェア品質保証ガイド』 on a train
+//   is a Kawaguchi day, not a QA post.
+// - Bare テスト is not a keyword either: a tech article about
+//   the blog pipeline says 「変換にはテストを用意しています」
+//   and is 技術・AI. The QA rule uses the testing phrases that
+//   mark a post as being ABOUT testing (テストの, テスト会社,
+//   手動テスト, …).
+// A post that is only a URL, or a word or two, matches nothing
+// and stays 日常・その他 — there is nothing to classify.
+
+export const X_FALLBACK_GENRE = "日常・その他";
+
+export const X_GENRE_RULES = [
+  {
+    genre: "QA・テスト",
+    keywords: [
+      "QAは",
+      "QAの",
+      "QAを",
+      "QA関連",
+      "QA工程",
+      "QA（",
+      "Quality Assurance",
+      "SHIFT",
+      "Tech Talk",
+      "ソフトウェアテスト",
+      "手動テスト",
+      "テスト会社",
+      "テストの",
+      "テスト自動化",
+      "テストケース",
+      "単体テスト",
+      "検証速度",
+      "自動で検証",
+      "品質保証の教科書",
+      "品質向上",
+    ],
+  },
+  {
+    genre: "技術・AI",
+    keywords: [
+      "ノートパソコン",
+      "起動",
+      "トークン認証",
+      "nginx",
+      "APIサーバー",
+      "APIの",
+      "AIが",
+      "生成AI",
+      "Muse",
+      "ChatGPT",
+      "チャッピー",
+      "GitHub",
+      "skill",
+      "自宅システム",
+      "自前サイト",
+      "eSIM",
+      "物理SIM",
+      "楽天モバイル",
+      "povo",
+      "iPhone",
+      "機種変更",
+    ],
+  },
+  {
+    // After the subject rules on purpose (see the section
+    // comment): the stock update phrase is the last resort for
+    // posts whose subject matched nothing, and the rest of the
+    // keywords are the operation announcements themselves.
+    genre: "ブログ・サイト更新",
+    keywords: [
+      "ブログを更新しました",
+      "フォロワー",
+      "再開しました",
+      "YouTube",
+      "大公開",
+      "リニューアル",
+      "新しくしました",
+    ],
+  },
+  {
+    genre: "旅行",
+    keywords: ["韓国", "シンガポール", "チャンギ", "帰省", "海外旅行", "成田"],
+  },
+  {
+    genre: "川口・地域",
+    keywords: ["川口", "鳩ヶ谷", "サイクリング", "自転車", "喜楽湯"],
+  },
+];
+
+// The X genre of one post's text: the first rule (in array
+// order) with a keyword appearing in the text; the fallback
+// when nothing matches. Keyword matching is the shared plain
+// substring test, case-insensitive.
+export function classifyXText(text, rules = X_GENRE_RULES) {
+  return matchByKeywords(text, rules) ?? X_FALLBACK_GENRE;
+}
+
 // --- X genre rollup ---
-// The same adaptation as Threads, for the same reason: an X
-// post carries its words in `text` rather than `caption` and
-// its numbers are lifetime counts, so there is no period
-// window, and the genre judgement is the shared one. One field
-// differs: an X post links out through `url`, not `permalink`,
-// so the adapter also maps the link across — the shared rollup
-// reads `permalink` for its top post, and with the mapping the
-// genre table's top entry links to the post itself like the
-// other channels'.
+// The adaptation mirrors the Threads one: an X post carries
+// its words in `text` rather than `caption` and its numbers
+// are lifetime counts, so there is no period window. The genre
+// judgement, though, is X's own (classifyXText above), not the
+// shared Instagram one. One field differs: an X post links out
+// through `url`, not `permalink`, so the adapter also maps the
+// link across — the shared rollup reads `permalink` for its
+// top post, and with the mapping the genre table's top entry
+// links to the post itself like the other channels'.
 
 // Per-genre rollup of an X post list: the same rows
 // genreStatsForMedia produces ([{ genre, count, totalViews,
@@ -567,7 +716,11 @@ export function genreStatsForX(posts) {
         }
       : post,
   );
-  return genreStatsForMedia(list);
+  // The rules argument is unused here: the classifier slot is
+  // what decides the genre, and it is X's own.
+  return genreStatsForMedia(list, INSTAGRAM_GENRE_RULES, (post) =>
+    classifyXText(post.caption),
+  );
 }
 
 // The rollup over the snapshot's X section.
@@ -592,14 +745,14 @@ export function xGenreOptions(posts) {
 // The posts of one genre for the X table's genre filter. A
 // null/undefined genre means "no filter" (the すべて button):
 // every usable post comes back. Otherwise a post stays only
-// when the genre the shared classifier gives its text equals
-// the requested one exactly — the same judgement the rollup
-// makes, so the button counts and the filtered rows always
-// agree. Null entries are skipped either way.
+// when the genre the X classifier gives its text equals the
+// requested one exactly — the same judgement the rollup makes,
+// so the button counts and the filtered rows always agree.
+// Null entries are skipped either way.
 export function filterXByGenre(posts, genre) {
   const list = (Array.isArray(posts) ? posts : []).filter((post) => post);
   if (genre === null || genre === undefined) {
     return list;
   }
-  return list.filter((post) => classifyCaption(post.text ?? "") === genre);
+  return list.filter((post) => classifyXText(post.text ?? "") === genre);
 }
