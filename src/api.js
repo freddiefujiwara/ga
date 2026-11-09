@@ -227,18 +227,15 @@ export function snsTotalFollowers(detail) {
   return parts.length ? parts.reduce((sum, v) => sum + v, 0) : null;
 }
 
-// Overview cards for the SNS section: [{ label, value }] with the
-// values already formatted ("—" for anything missing).
+// KPI cards for the Instagram tab: the Instagram account's own
+// numbers only. The cross-channel figures (the combined follower
+// total, the YouTube and Threads counts) live on the overview tab
+// instead, so each channel tab shows just its own channel.
 export function snsOverview(detail) {
   const ig = detail?.instagram ?? {};
-  const yt = detail?.youtube ?? {};
-  const th = detail?.threads ?? {};
   const interactions = ig.interactions_30d ?? {};
   return [
-    { label: "SNS延べフォロワー", value: formatCount(snsTotalFollowers(detail)) },
     { label: "Instagram フォロワー", value: formatCount(ig.freddiefujiwara) },
-    { label: "YouTube 登録者", value: formatCount(yt.subscribers) },
-    { label: "Threads フォロワー", value: formatCount(th.followers) },
     { label: "Instagram 投稿数", value: formatCount(ig.media_count) },
     { label: "再生回数（過去30日）", value: formatCount(ig.views_30d) },
     { label: "リーチ（過去30日）", value: formatCount(ig.reach_30d) },
