@@ -481,3 +481,60 @@ export function filterArticlesByGenre(rows, genre) {
     (row) => Array.isArray(row.tags) && row.tags.includes(genre),
   );
 }
+
+// --- Threads genre rollup ---
+// A Threads post carries its words in `text` rather than
+// `caption`, and its numbers are lifetime counts (so there is
+// no period window), but the genre judgement is shared with
+// Instagram: the same hashtag-first, shop-first rules classify
+// the text. The helpers below adapt posts to the media shape
+// the shared rollup reads ({ caption }), so the genre section,
+// the filter buttons and the table filter all come from one
+// classification and can never drift apart.
+
+// Per-genre rollup of a Threads post list: the same rows
+// genreStatsForMedia produces for Instagram ([{ genre, count,
+// totalViews, avgViews, saveRate, likeRate, top }]), with the
+// views read as 表示 counts. Threads posts carry no saves, so
+// saveRate stays null; likeRate is the real per-post average of
+// likes/views. The top post's title is the head of its text.
+export function genreStatsForThreads(posts) {
+  const list = (Array.isArray(posts) ? posts : []).map((post) =>
+    post ? { ...post, caption: post.text ?? "" } : post,
+  );
+  return genreStatsForMedia(list);
+}
+
+// The rollup over the snapshot's Threads section.
+export function threadsGenreStats(detail) {
+  const posts = Array.isArray(detail?.threads?.recent_posts)
+    ? detail.threads.recent_posts
+    : [];
+  return genreStatsForThreads(posts);
+}
+
+// The genre filter of the Threads per-post table: one entry
+// per genre that actually has posts, in the rollup's order
+// (total views, biggest first) so the buttons line up with the
+// genre section above them: [{ genre, count }].
+export function threadsGenreOptions(posts) {
+  return genreStatsForThreads(posts).map((row) => ({
+    genre: row.genre,
+    count: row.count,
+  }));
+}
+
+// The posts of one genre for the Threads table's genre filter.
+// A null/undefined genre means "no filter" (the すべて button):
+// every usable post comes back. Otherwise a post stays only
+// when the genre the shared classifier gives its text equals
+// the requested one exactly — the same judgement the rollup
+// makes, so the button counts and the filtered rows always
+// agree. Null entries are skipped either way.
+export function filterThreadsByGenre(posts, genre) {
+  const list = (Array.isArray(posts) ? posts : []).filter((post) => post);
+  if (genre === null || genre === undefined) {
+    return list;
+  }
+  return list.filter((post) => classifyCaption(post.text ?? "") === genre);
+}
