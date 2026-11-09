@@ -71,7 +71,13 @@ import {
   genreAverageBars,
   formatRate,
 } from "./genres.js";
-import { tabFromHash, hashWithTab } from "./tabs.js";
+import {
+  tabFromHash,
+  tabFromPath,
+  pathForTab,
+  hasTabPart,
+  hashWithoutTab,
+} from "./tabs.js";
 import { channelBars, genreTreemap } from "./treemap.js";
 import {
   parseShareToken,
@@ -133,9 +139,16 @@ themeBtn.addEventListener("click", () => {
 const auth = () => ({ idToken, shareToken });
 
 // --- Dashboard tabs ---
-// The selected tab lives in the URL hash as a "tab=" part, next to
-// the share token, so a reload restores it. Switching tabs uses
-// replaceState (no extra history entries, no scroll jump).
+// The selected tab lives in the URL path ("/social/instagram").
+// APP_BASE is the Vite build's base: "/social/" in production,
+// "/social/staging/" in the staging build. Deep links arrive via
+// the 404.html rewrite and the index.html restore (see tabs.js).
+// Links issued before the path form carry the tab in the hash
+// ("#tab=…"); those still open the named tab and are rewritten
+// into the path form. Switching tabs uses replaceState (no extra
+// history entries, no scroll jump).
+
+const APP_BASE = import.meta.env.BASE_URL;
 
 const tabButtons = [...document.querySelectorAll("#tabs .tab-button")];
 const tabPanels = {
@@ -147,7 +160,7 @@ const tabPanels = {
   x: document.getElementById("tab-x"),
 };
 
-function activateTab(tabId, updateHash = true) {
+function activateTab(tabId, updateUrl = true) {
   for (const btn of tabButtons) {
     const active = btn.dataset.tab === tabId;
     btn.classList.toggle("active", active);
@@ -156,21 +169,44 @@ function activateTab(tabId, updateHash = true) {
   for (const [id, panel] of Object.entries(tabPanels)) {
     panel.hidden = id !== tabId;
   }
-  if (updateHash) {
-    const next = hashWithTab(window.location.hash, tabId);
-    if (next !== window.location.hash) {
+  if (updateUrl) {
+    // The tab moves into the path; the hash keeps only what it
+    // still owns (the share token). The query string is passed
+    // through untouched.
+    const next =
+      pathForTab(APP_BASE, tabId) +
+      window.location.search +
+      hashWithoutTab(window.location.hash);
+    const current =
+      window.location.pathname + window.location.search + window.location.hash;
+    if (next !== current) {
       window.history.replaceState(null, "", next);
     }
   }
+}
+
+// The path is the canonical tab address; the legacy hash form is
+// consulted only when the path is the app root itself.
+function initialTab() {
+  return (
+    tabFromPath(window.location.pathname, APP_BASE) ??
+    tabFromHash(window.location.hash)
+  );
 }
 
 for (const btn of tabButtons) {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 }
 window.addEventListener("hashchange", () => {
-  activateTab(tabFromHash(window.location.hash), false);
+  // Only a legacy "tab=" part arriving via the hash needs a
+  // reaction: activate the named tab, which also rewrites the
+  // URL into the path form. Hash changes without a tab part
+  // (share-token bookkeeping) leave the selection alone.
+  if (hasTabPart(window.location.hash)) {
+    activateTab(tabFromHash(window.location.hash));
+  }
 });
-activateTab(tabFromHash(window.location.hash), false);
+activateTab(initialTab());
 
 // Boot starts on the loading screen, not the sign-in gate: while
 // the saved session is being restored or the anonymous probe is
@@ -2026,7 +2062,10 @@ async function issueShare() {
       shareStatusEl.textContent = result.error || "発行できませんでした";
       return;
     }
-    const base = window.location.origin + window.location.pathname;
+    // Issued links always name the app root, not the tab the
+    // issuer happens to be on (the pathname varies with the tab
+    // now that tabs live in the path).
+    const base = window.location.origin + APP_BASE;
     showIssuedShare(buildShareUrl(base, result.share_token), result.expires_at);
     shareStatusEl.textContent = "";
   } catch {
