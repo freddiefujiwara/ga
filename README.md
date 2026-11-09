@@ -15,6 +15,7 @@ freddiefujiwara.com のアクセス解析ページ（https://freddiefujiwara.com
 
 - Googleログイン（許可されたアカウント）でデータ表示と一時アクセスリンクの発行ができる
 - 一時アクセスリンク（`#share=...`、30日有効）ならログイン不要で開ける。再発行で旧リンクは無効になる
+- ログイン保持も asset と同じ方式：Google の ID トークンは localStorage（`ga-google-id-token`）、共有トークンの控えは sessionStorage（`ga-share-token`）に保存し、次回訪問時に復元する。ステージングは同一オリジンのため、キーに `:staging` を付けて本番と混ざらないようにしている
 - 認可の判定は ga-gas 側で行い、クライアント側に許可メールの判定は持たせない
 
 ## 開発とデプロイ
