@@ -68,8 +68,8 @@ describe("CI configuration", () => {
     }
   });
 
-  it("uses /ga/ as the Vite base and /ga/staging/ for staging", () => {
-    expect(readRoot("vite.config.js")).toContain('base: "/ga/"');
-    expect(readRoot("package.json")).toContain("--base /ga/staging/");
+  it("uses /social/ as the Vite base and /social/staging/ for staging", () => {
+    expect(readRoot("vite.config.js")).toContain('base: "/social/"');
+    expect(readRoot("package.json")).toContain("--base /social/staging/");
   });
 });

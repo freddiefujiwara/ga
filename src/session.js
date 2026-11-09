@@ -7,7 +7,7 @@
 //     the app without the #share= fragment restores the session.
 //
 // Production and staging are served from the same origin (paths
-// /ga/ and /ga/staging/) and therefore share localStorage. Staging
+// /social/ and /social/staging/) and therefore share localStorage. Staging
 // builds use ":staging"-suffixed keys — the convention the blog
 // introduced for its list cache — so the two environments can never
 // read or clear each other's saved session.

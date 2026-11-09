@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "/ga/",
+  base: "/social/",
   test: {
     globals: true,
     environment: "jsdom",

@@ -83,6 +83,17 @@ describe("pageDisplay", () => {
     });
   });
 
+  it("labels the dashboard under both its current and former paths", () => {
+    expect(pageDisplay("/social/", titles, origin)).toEqual({
+      label: "アクセス解析",
+      href: "https://freddiefujiwara.com/social/",
+    });
+    expect(pageDisplay("/ga/", titles, origin)).toEqual({
+      label: "アクセス解析",
+      href: "https://freddiefujiwara.com/ga/",
+    });
+  });
+
   it("falls back to the raw path for unknown pages", () => {
     expect(pageDisplay("/unknown/path/", titles, origin)).toEqual({
       label: "/unknown/path/",
@@ -112,6 +123,7 @@ describe("canonicalPageKey", () => {
     expect(canonicalPageKey("/blog/")).toBe("/blog/");
     expect(canonicalPageKey("/list-of-stuff/")).toBe("/list-of-stuff/");
     expect(canonicalPageKey("/ga/")).toBe("/ga/");
+    expect(canonicalPageKey("/social/")).toBe("/social/");
   });
 });
 
