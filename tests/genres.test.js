@@ -6,13 +6,17 @@ import {
   filterArticlesByGenre,
   filterMediaByGenre,
   filterMediaByPeriod,
+  filterThreadsByGenre,
   formatRate,
   genreAverageBars,
   genreStatsForMedia,
+  genreStatsForThreads,
   instagramGenreStats,
   mediaDateRange,
   mediaGenreOptions,
   sortGenreRows,
+  threadsGenreOptions,
+  threadsGenreStats,
 } from "../src/genres.js";
 
 // Captions in the shape of the account's real posts (shortened),
@@ -319,6 +323,107 @@ describe("mediaGenreOptions / filterMediaByGenre", () => {
     expect(mediaGenreOptions(tagged)).toEqual([
       { genre: "グルメ", count: 1 },
     ]);
+  });
+});
+
+describe("threads genre rollup / filter", () => {
+  // Threads posts in the shape ga-gas collects: the words live
+  // in `text`, the numbers are lifetime counts, and there is no
+  // saves figure.
+  const post = (text, views, likes = null) => ({
+    type: "TEXT_POST",
+    text,
+    views,
+    likes,
+    permalink: "https://www.threads.net/t/example",
+  });
+  const posts = [
+    post("川口でラーメン450円 #川口グルメ", 9000, 90),
+    post("カレーの店に行った", 1000, 10),
+    post("川口から御茶ノ水まで、自転車で何分？", 3000, 30),
+    post("朝の散歩、芝川沿い", 2000, null),
+    post("新しい曲を作りました #Suno", 500, 5),
+    post("今日の空", 100, 1),
+    null,
+  ];
+
+  it("rolls the posts up by genre over their text", () => {
+    const rows = genreStatsForThreads(posts);
+    // Order follows the shared rollup: total views, biggest first.
+    expect(rows.map((row) => row.genre)).toEqual([
+      "グルメ",
+      "サイクリング",
+      "街歩き・スポット",
+      "音楽",
+      "日常・その他",
+    ]);
+    const gourmet = rows[0];
+    expect(gourmet.count).toBe(2);
+    expect(gourmet.totalViews).toBe(10000);
+    expect(gourmet.avgViews).toBe(5000);
+    // likeRate averages likes/views over the posts that have both.
+    expect(gourmet.likeRate).toBeCloseTo((90 / 9000 + 10 / 1000) / 2);
+    // Threads posts carry no saves, so saveRate stays null.
+    expect(gourmet.saveRate).toBeNull();
+    // The top post is titled by the head of its text.
+    expect(gourmet.top.views).toBe(9000);
+    expect(gourmet.top.title).toContain("川口でラーメン450円");
+    expect(gourmet.top.permalink).toBe("https://www.threads.net/t/example");
+  });
+
+  it("threadsGenreStats reads the snapshot's threads section", () => {
+    const detail = { threads: { recent_posts: posts } };
+    expect(threadsGenreStats(detail)).toEqual(genreStatsForThreads(posts));
+    expect(threadsGenreStats(null)).toEqual([]);
+    expect(threadsGenreStats({})).toEqual([]);
+    expect(threadsGenreStats({ threads: {} })).toEqual([]);
+    expect(genreStatsForThreads(null)).toEqual([]);
+    expect(genreStatsForThreads([])).toEqual([]);
+  });
+
+  it("classifies with the shared rules: hashtags first, shop before cycling", () => {
+    // A genre hashtag wins over the body words, like Instagram.
+    const tagged = [post("ラーメンを食べた #サイクリング", 10)];
+    expect(filterThreadsByGenre(tagged, "サイクリング")).toHaveLength(1);
+    expect(filterThreadsByGenre(tagged, "グルメ")).toEqual([]);
+    // A ride to a curry shop is グルメ, not サイクリング.
+    const ride = [post("自転車でカレーの店へ行った", 10)];
+    expect(filterThreadsByGenre(ride, "グルメ")).toHaveLength(1);
+  });
+
+  it("button counts always match the genre rollup", () => {
+    const options = threadsGenreOptions(posts);
+    const stats = genreStatsForThreads(posts);
+    expect(options).toEqual(
+      stats.map((row) => ({ genre: row.genre, count: row.count })),
+    );
+    expect(threadsGenreOptions(null)).toEqual([]);
+    expect(threadsGenreOptions([])).toEqual([]);
+  });
+
+  it("the filter keeps exactly the posts each button counts", () => {
+    for (const option of threadsGenreOptions(posts)) {
+      expect(filterThreadsByGenre(posts, option.genre)).toHaveLength(
+        option.count,
+      );
+    }
+    const total = threadsGenreOptions(posts).reduce(
+      (sum, option) => sum + option.count,
+      0,
+    );
+    expect(total).toBe(6);
+    expect(filterThreadsByGenre(posts, null)).toHaveLength(6);
+    expect(filterThreadsByGenre(posts, undefined)).toHaveLength(6);
+    expect(filterThreadsByGenre(null, null)).toEqual([]);
+  });
+
+  it("a post without a view count still counts, with a null average share", () => {
+    const rows = genreStatsForThreads([post("今日の空", null)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(1);
+    expect(rows[0].totalViews).toBe(0);
+    expect(rows[0].avgViews).toBeNull();
+    expect(rows[0].top).toBeNull();
   });
 });
 
