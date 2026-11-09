@@ -65,6 +65,15 @@ import {
   formatShareRemaining,
   formatShareExpiry,
 } from "./share.js";
+import {
+  bootEntry,
+  loadSavedIdToken,
+  saveIdToken,
+  clearSavedIdToken,
+  loadSavedShareToken,
+  saveShareToken,
+  clearSavedShareToken,
+} from "./session.js";
 import { isStagingBuild, showStagingBanner } from "./staging-banner.js";
 
 if (isStagingBuild()) {
@@ -1632,14 +1641,21 @@ function wireChartTooltip() {
   chart.addEventListener("pointerleave", hideChartTooltip);
 }
 
-function onSignedIn(credential) {
-  idToken = credential;
+function showAccountEmail(credential) {
   try {
     const payload = decodeJwtPayload(credential);
     accountEl.textContent = payload.email ? `${payload.email} でログイン中` : "";
   } catch {
     accountEl.textContent = "";
   }
+}
+
+function onSignedIn(credential) {
+  idToken = credential;
+  // Save the token like the asset app does, so the next visit can
+  // restore the session instead of starting at the gate.
+  saveIdToken(credential);
+  showAccountEmail(credential);
   loadDashboard();
 }
 
@@ -1660,6 +1676,9 @@ function initGoogleSignIn() {
 
 logoutBtn.addEventListener("click", () => {
   idToken = null;
+  shareToken = null;
+  clearSavedIdToken();
+  clearSavedShareToken();
   if (window.google && window.google.accounts) {
     window.google.accounts.id.disableAutoSelect();
   }
@@ -1717,21 +1736,45 @@ shareCopyBtn.addEventListener("click", async () => {
   }
 });
 
-// Entry point: a share link skips sign-in entirely.
-const hashToken = parseShareToken(window.location.hash);
-if (hashToken) {
-  shareToken = hashToken;
-  validateShareToken(CONFIG.GAS_ENDPOINT, shareToken)
-    .then((result) => {
-      if (result.ok) {
-        shareExpiresAt = result._share ? result._share.expires_at : null;
-        loadDashboard();
-      } else {
-        showExpired();
-      }
-    })
-    .catch(() => showExpired());
-} else {
+// Entry point. A share link skips sign-in entirely; without one, a
+// session saved by an earlier visit is restored before falling back
+// to the sign-in gate — the same arrangement as the asset app.
+async function enterWithShareToken(token, fromHash) {
+  shareToken = token;
+  if (fromHash) {
+    // Keep a copy so reopening the app without the fragment (or a
+    // restored tab) can resume this session.
+    saveShareToken(token);
+  }
+  let result = null;
+  try {
+    result = await validateShareToken(CONFIG.GAS_ENDPOINT, token);
+  } catch {
+    result = null;
+  }
+  if (result && result.ok) {
+    shareExpiresAt = result._share ? result._share.expires_at : null;
+    loadDashboard();
+    return;
+  }
+  shareToken = null;
+  // A dead token must not linger in storage: it would shadow the
+  // sign-in restore on every later visit.
+  clearSavedShareToken();
+  if (fromHash) {
+    // The link itself is dead (revoked, expired, or unreachable).
+    showExpired();
+  } else {
+    // The saved copy went stale. The visitor did not open a link
+    // just now, so the "expired link" screen would mislead; show
+    // the sign-in gate instead.
+    gateErrorEl.textContent = "";
+    showGate();
+    initGoogleSignIn();
+  }
+}
+
+function probeAnonymous() {
   // Probe the bridge once on load, like the other apps do. A 401 just
   // means "sign in"; if the bridge ever answers anonymously, go
   // straight to the dashboard.
@@ -1749,3 +1792,39 @@ if (hashToken) {
       initGoogleSignIn();
     });
 }
+
+async function boot() {
+  const entry = bootEntry({
+    hashToken: parseShareToken(window.location.hash),
+    savedIdToken: loadSavedIdToken(),
+    savedShareToken: loadSavedShareToken(),
+  });
+  if (entry.kind === "share") {
+    await enterWithShareToken(entry.token, entry.fromHash);
+    return;
+  }
+  if (entry.kind === "idToken") {
+    idToken = entry.token;
+    showAccountEmail(entry.token);
+    if (await loadDashboard()) {
+      return;
+    }
+    // The saved token expired or was rejected: drop it and fall
+    // back to a saved share session, then to the gate.
+    clearSavedIdToken();
+    idToken = null;
+    accountEl.textContent = "";
+    const savedShare = loadSavedShareToken();
+    if (savedShare) {
+      await enterWithShareToken(savedShare, false);
+      return;
+    }
+    gateErrorEl.textContent = "";
+    showGate();
+    initGoogleSignIn();
+    return;
+  }
+  probeAnonymous();
+}
+
+boot();
