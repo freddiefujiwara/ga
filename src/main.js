@@ -16,6 +16,7 @@ import {
   blogArticleList,
   fetchSnsDetail,
   fetchSnsHistory,
+  dataAsOfText,
   snsHistoryRows,
   snsHistorySeries,
   threadsHistorySeries,
@@ -87,8 +88,10 @@ if (isStagingBuild()) {
   showStagingBanner();
 }
 
+const loadingEl = document.getElementById("boot-loading");
 const gateEl = document.getElementById("gate");
 const dashboardEl = document.getElementById("dashboard");
+const dataAsOfEl = document.getElementById("data-asof");
 const expiredEl = document.getElementById("share-expired");
 const accountEl = document.getElementById("account");
 const logoutBtn = document.getElementById("logout");
@@ -161,7 +164,23 @@ window.addEventListener("hashchange", () => {
 });
 activateTab(tabFromHash(window.location.hash), false);
 
+// Boot starts on the loading screen, not the sign-in gate: while
+// the saved session is being restored or the anonymous probe is
+// in flight, showing the Google button would read as "not signed
+// in yet". The gate appears only once sign-in is truly required —
+// every transition below therefore starts from showLoading and
+// lands on exactly one of gate / expired / dashboard.
+function showLoading() {
+  loadingEl.hidden = false;
+  gateEl.hidden = true;
+  dashboardEl.hidden = true;
+  expiredEl.hidden = true;
+  shareCardEl.hidden = true;
+  logoutBtn.hidden = true;
+}
+
 function showGate() {
+  loadingEl.hidden = true;
   gateEl.hidden = false;
   dashboardEl.hidden = true;
   expiredEl.hidden = true;
@@ -170,6 +189,7 @@ function showGate() {
 }
 
 function showExpired() {
+  loadingEl.hidden = true;
   gateEl.hidden = true;
   dashboardEl.hidden = true;
   expiredEl.hidden = false;
@@ -259,6 +279,7 @@ async function loadDashboard() {
   renderBlogGenres(pages, meta, titles);
   renderBlogArticles(pages, meta, titles);
   renderRanking("top-sources", sources, 8);
+  loadingEl.hidden = true;
   gateEl.hidden = true;
   expiredEl.hidden = true;
   dashboardEl.hidden = false;
@@ -1536,6 +1557,9 @@ function renderFollowChart(detail) {
 function renderSns(detail) {
   overviewState.detail = detail;
   renderOverview();
+  // The collection timestamp behind every tab, shown once above
+  // the tab bar (the blog numbers come from the same collection).
+  dataAsOfEl.textContent = dataAsOfText(detail?.collected_at);
   snsStatusEl.textContent = detail.collected_at
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
@@ -1779,6 +1803,9 @@ function onSignedIn(credential) {
   // restore the session instead of starting at the gate.
   saveIdToken(credential);
   showAccountEmail(credential);
+  // Sign-in just succeeded, so the gate (and its button) must not
+  // stay on screen while the dashboard loads.
+  showLoading();
   loadDashboard();
 }
 
@@ -1863,6 +1890,10 @@ shareCopyBtn.addEventListener("click", async () => {
 // session saved by an earlier visit is restored before falling back
 // to the sign-in gate — the same arrangement as the asset app.
 async function enterWithShareToken(token, fromHash) {
+  // Validation takes a network round-trip; stay on the loading
+  // screen until it lands on the dashboard, the expired screen,
+  // or (for a stale saved copy) the sign-in gate.
+  showLoading();
   shareToken = token;
   if (fromHash) {
     // Keep a copy so reopening the app without the fragment (or a
@@ -1917,6 +1948,9 @@ function probeAnonymous() {
 }
 
 async function boot() {
+  // The markup already opens on the loading screen; restate it so
+  // the state machine starts from a known place.
+  showLoading();
   const entry = bootEntry({
     hashToken: parseShareToken(window.location.hash),
     savedIdToken: loadSavedIdToken(),
