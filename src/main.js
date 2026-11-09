@@ -58,6 +58,9 @@ import {
   genreStatsForThreads,
   threadsGenreOptions,
   filterThreadsByGenre,
+  genreStatsForX,
+  xGenreOptions,
+  filterXByGenre,
   filterMediaByPeriod,
   filterMediaByGenre,
   mediaGenreOptions,
@@ -1187,7 +1190,21 @@ let threadsGenreFilter = null;
 // The genre table's sort, mirroring the Instagram genre table.
 let threadsGenreSort = { key: "totalViews", dir: "desc" };
 
-const THREADS_GENRE_COLUMNS = [
+// --- Post genre sections (Threads / X) ---
+// The same construction as the Instagram tab's ジャンル別 —
+// treemap (tile area = the genre's average views, heat colour
+// on the same average), legend, average bars, then the table —
+// over the fetched posts, classified by the shared rules over
+// each post's text. Threads and X numbers are lifetime counts,
+// so there is no period selector; the section rebuilds on
+// every render (the blog genre section's pattern), which also
+// keeps the sort headers in step. Neither channel's posts
+// carry saves, so the table carries いいね率 but no 保存率.
+// The builder takes the channel's rollup rows and sort state;
+// each tab's own renderer is a thin wrapper over it, so the
+// two sections can never drift apart.
+
+const POST_GENRE_COLUMNS = [
   { key: "genre", label: "ジャンル", numeric: false },
   { key: "count", label: "投稿数", numeric: true },
   { key: "totalViews", label: "表示合計", numeric: true },
@@ -1196,25 +1213,9 @@ const THREADS_GENRE_COLUMNS = [
   { key: "top", label: "表示トップ", numeric: false },
 ];
 
-// --- Threads genre rollup ---
-// The same construction as the Instagram tab's ジャンル別 —
-// treemap (tile area = the genre's average views, heat colour
-// on the same average), legend, average bars, then the table —
-// over the fetched posts, classified by the shared rules over
-// each post's text. Threads numbers are lifetime counts, so
-// there is no period selector; the section rebuilds on every
-// render (the blog genre section's pattern), which also keeps
-// the sort headers in step. Threads posts have no saves, so
-// the table carries いいね率 but no 保存率.
-
-function renderThreadsGenres() {
-  const wrap = document.getElementById("threads-genres");
+function renderPostGenres(wrap, stats, sortState, rerender) {
   wrap.innerHTML = "";
-  const rows = sortGenreRows(
-    genreStatsForThreads(threadsPostRows),
-    threadsGenreSort.key,
-    threadsGenreSort.dir,
-  );
+  const rows = sortGenreRows(stats, sortState.key, sortState.dir);
   if (!rows.length) {
     const p = document.createElement("p");
     p.className = "meta";
@@ -1240,23 +1241,21 @@ function renderThreadsGenres() {
   table.className = "data-table";
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const column of THREADS_GENRE_COLUMNS) {
+  for (const column of POST_GENRE_COLUMNS) {
     const th = document.createElement("th");
     th.className = (column.numeric ? "num " : "") + "sortable";
-    const active = threadsGenreSort.key === column.key;
+    const active = sortState.key === column.key;
     th.textContent =
       column.label +
-      (active ? (threadsGenreSort.dir === "desc" ? " ↓" : " ↑") : "");
+      (active ? (sortState.dir === "desc" ? " ↓" : " ↑") : "");
     th.addEventListener("click", () => {
-      if (threadsGenreSort.key === column.key) {
-        threadsGenreSort = {
-          key: column.key,
-          dir: threadsGenreSort.dir === "desc" ? "asc" : "desc",
-        };
+      if (sortState.key === column.key) {
+        sortState.dir = sortState.dir === "desc" ? "asc" : "desc";
       } else {
-        threadsGenreSort = { key: column.key, dir: "desc" };
+        sortState.key = column.key;
+        sortState.dir = "desc";
       }
-      renderThreadsGenres();
+      rerender();
     });
     headRow.appendChild(th);
   }
@@ -1316,6 +1315,17 @@ function renderThreadsGenres() {
   scope.textContent =
     "集計は取得済みの投稿だけが対象です（すべての投稿ではありません）。";
   wrap.appendChild(scope);
+}
+
+// The Threads tab's genre section: the shared builder over
+// the Threads rollup and the tab's own sort state.
+function renderThreadsGenres() {
+  renderPostGenres(
+    document.getElementById("threads-genres"),
+    genreStatsForThreads(threadsPostRows),
+    threadsGenreSort,
+    renderThreadsGenres,
+  );
 }
 
 // The buttons above the Threads per-post table, rendered with
@@ -1451,13 +1461,50 @@ function renderThreads() {
 // follower trend from the history rows. renderSns and
 // loadSnsHistory both call renderX, so whichever load lands
 // second completes the picture; data that has not arrived yet
-// shows as "—". X posts carry no genre classification (the tab
-// is a plain per-post list, like the YouTube tab).
+// shows as "—". Like the Threads tab, the posts are classified
+// by the shared genre rules over their text, with the same
+// ジャンル別 section and genre filter over the per-post table.
 
 let xPostRows = [];
 // The posts table starts sorted by views, most-viewed first,
 // like the other per-post tables.
 let xSort = { key: "views", dir: "desc", wired: false };
+// The per-post table's genre filter: null shows every post
+// (the すべて button). The classification is the shared one
+// (classifyCaption over the post text), so the buttons, the
+// genre section above and the filter always agree.
+let xGenreFilter = null;
+// The genre table's sort, mirroring the other genre tables.
+let xGenreSort = { key: "totalViews", dir: "desc" };
+
+// The X tab's genre section: the shared builder over the X
+// rollup and the tab's own sort state.
+function renderXGenres() {
+  renderPostGenres(
+    document.getElementById("x-genres"),
+    genreStatsForX(xPostRows),
+    xGenreSort,
+    renderXGenres,
+  );
+}
+
+// The buttons above the X per-post table, rendered with the
+// shared genre filter renderer like the other tabs. The
+// counts come from the same rollup the genre section shows,
+// so a button's count is exactly the number of rows its
+// filter keeps.
+function renderXPostsGenreTabs() {
+  renderGenreFilterTabs(document.getElementById("x-posts-genre-tabs"), {
+    total: xPostRows.length,
+    options: xGenreOptions(xPostRows),
+    active: xGenreFilter,
+    onSelect: (genre) => {
+      xGenreFilter = genre;
+      renderXPostsGenreTabs();
+      renderXPosts();
+    },
+  });
+}
 
 function renderXPosts() {
   const tbody = document.getElementById("x-posts-body");
@@ -1465,7 +1512,11 @@ function renderXPosts() {
   document.getElementById("x-posts-range").textContent = xPostRows.length
     ? `対象：直近の投稿（全${xPostRows.length}件）`
     : "";
-  const rows = sortMedia(xPostRows, xSort.key, xSort.dir);
+  const rows = sortMedia(
+    filterXByGenre(xPostRows, xGenreFilter),
+    xSort.key,
+    xSort.dir,
+  );
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -1514,6 +1565,8 @@ function renderX() {
   fillTotalBoxes("sns-x-totals", xTotals(overviewState.detail, overviewState.historyRows));
   xPostRows = xPosts(overviewState.detail);
   wireSortableTable("x-posts-table", xSort, renderXPosts);
+  renderXGenres();
+  renderXPostsGenreTabs();
   renderXPosts();
   const notes = document.getElementById("x-notes");
   notes.innerHTML = "";
