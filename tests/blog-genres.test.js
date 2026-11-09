@@ -4,9 +4,10 @@ import {
   fetchBlogMeta,
   articlePageViews,
   blogGenreStats,
+  blogArticleList,
   UNTAGGED_LABEL,
 } from "../src/api.js";
-import { sortGenreRows } from "../src/genres.js";
+import { articleGenreOptions, sortGenreRows } from "../src/genres.js";
 
 const ORIGIN = "https://freddiefujiwara.com";
 
@@ -185,5 +186,94 @@ describe("blogGenreStats", () => {
       tag: "運営",
       count: 2,
     });
+  });
+});
+
+describe("blogArticleList", () => {
+  const pages = response([
+    row(`/blog/${ID_UNNEI}`, 100),
+    row(`/blog/${ID_MULTI}`, 60),
+    row(`/${ID_CHINESE}`, 45),
+    row(`/blog/${ID_KAWAGUCHI}`, 40),
+    row(`/blog/${ID_UNTAGGED}`, 10),
+    row("/", 999),
+  ]);
+
+  it("lists every viewed article with title, link, views and tags, biggest first", () => {
+    expect(blogArticleList(pages, TAGS, TITLES, ORIGIN)).toEqual([
+      {
+        id: ID_UNNEI,
+        title: "ブログ運営の裏側：運用費の話",
+        href: `${ORIGIN}/blog/${ID_UNNEI}`,
+        views: 100,
+        tags: ["運営"],
+      },
+      {
+        id: ID_MULTI,
+        title: "ブログ運営の裏側：壊さない仕組み",
+        href: `${ORIGIN}/blog/${ID_MULTI}`,
+        views: 60,
+        tags: ["運営", "技術"],
+      },
+      {
+        id: ID_CHINESE,
+        title: "中国語レッスン5回目",
+        href: `${ORIGIN}/blog/${ID_CHINESE}`,
+        views: 45,
+        tags: ["中国語"],
+      },
+      {
+        id: ID_KAWAGUCHI,
+        title: "川口の行きたい店まとめ",
+        href: `${ORIGIN}/blog/${ID_KAWAGUCHI}`,
+        views: 40,
+        tags: ["川口"],
+      },
+      {
+        id: ID_UNTAGGED,
+        title: "nginxのログで家電を動かす",
+        href: `${ORIGIN}/blog/${ID_UNTAGGED}`,
+        views: 10,
+        tags: [UNTAGGED_LABEL],
+      },
+    ]);
+  });
+
+  it("merges split article paths into one row, like the rollup", () => {
+    const split = response([
+      row(`/${ID_UNNEI}`, 30),
+      row(`/blog/${ID_UNNEI}`, 12),
+    ]);
+    const rows = blogArticleList(split, TAGS, TITLES, ORIGIN);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].views).toBe(42);
+  });
+
+  it("falls back to the article id when no title is known", () => {
+    const rows = blogArticleList(pages, TAGS, new Map(), ORIGIN);
+    expect(rows[0].title).toBe(ID_UNNEI);
+  });
+
+  it("keeps the articles but drops the genres when there is no tag map", () => {
+    for (const noMap of [new Map(), null, undefined]) {
+      const rows = blogArticleList(pages, noMap, TITLES, ORIGIN);
+      expect(rows).toHaveLength(5);
+      expect(rows.every((row) => row.tags.length === 0)).toBe(true);
+    }
+  });
+
+  it("returns nothing for a missing response", () => {
+    expect(blogArticleList(null, TAGS, TITLES, ORIGIN)).toEqual([]);
+    expect(blogArticleList({ ok: false }, TAGS, TITLES, ORIGIN)).toEqual([]);
+  });
+
+  it("genre filter options agree with the rollup's counts", () => {
+    const options = articleGenreOptions(
+      blogArticleList(pages, TAGS, TITLES, ORIGIN),
+    );
+    const fromRollup = blogGenreStats(pages, TAGS, TITLES, ORIGIN).map(
+      (row) => ({ genre: row.tag, count: row.count }),
+    );
+    expect(options).toEqual(fromRollup);
   });
 });
