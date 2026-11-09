@@ -17,7 +17,7 @@
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/social/assets/index-CIsaMxw6.js"></script>
+    <script type="module" crossorigin src="/social/assets/index-DwLfS0c3.js"></script>
     <link rel="stylesheet" crossorigin href="/social/assets/index-TJLg5L-K.css">
   </head>
   <body>
@@ -55,6 +55,7 @@
             <button type="button" class="tab-button" data-tab="blog">ブログ</button>
             <button type="button" class="tab-button" data-tab="youtube">YouTube</button>
             <button type="button" class="tab-button" data-tab="threads">Threads</button>
+            <button type="button" class="tab-button" data-tab="x">X</button>
           </nav>
           <div id="tab-overview" class="tab-panel">
             <section class="table-wrap">
@@ -264,6 +265,34 @@
                 </table>
               </div>
               <div id="threads-notes"></div>
+            </section>
+          </div>
+          <div id="tab-x" class="tab-panel" hidden>
+            <section class="table-wrap">
+              <h2 class="section-title">X</h2>
+              <p class="meta" id="x-status"></p>
+              <div class="totals-row" id="sns-x-totals"></div>
+              <h3 class="subsection-title">フォロワー数の推移</h3>
+              <div id="x-history"></div>
+              <p class="meta">X の取得は tweet-gas 経由で、収集のたびに貯まっていきます。</p>
+              <h3 class="subsection-title">投稿ごと</h3>
+              <p class="meta" id="x-posts-range"></p>
+              <div class="table-scroll">
+                <table class="data-table" id="x-posts-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort-key="posted_at">投稿日時</th>
+                      <th>本文</th>
+                      <th class="num sortable" data-sort-key="views">表示回数</th>
+                      <th class="num sortable" data-sort-key="likes">いいね</th>
+                      <th class="num sortable" data-sort-key="reposts">リポスト</th>
+                      <th class="num sortable" data-sort-key="replies">返信</th>
+                    </tr>
+                  </thead>
+                  <tbody id="x-posts-body"></tbody>
+                </table>
+              </div>
+              <div id="x-notes"></div>
             </section>
           </div>
         </div>
