@@ -4,6 +4,7 @@ import {
   fetchSnsHistory,
   snsHistoryRows,
   snsHistorySeries,
+  dailyLatestSeries,
   threadsHistorySeries,
   threadsTotals,
   threadsInteractions,
@@ -208,30 +209,58 @@ describe("sns history series", () => {
     ]);
     const followers = series[0];
     expect(followers.label).toBe("SNS延べフォロワー数");
-    expect(followers.points).toEqual([
-      { date: "20261109", views: 2000 },
-      { date: "20261109", views: 2005 },
-    ]);
+    // All three rows fall on the same JST day, so each series
+    // collapses to that day's last value.
+    expect(followers.points).toEqual([{ date: "20261109", views: 2005 }]);
     expect(followers.latest).toBe(2005);
-    expect(followers.firstAt).toBe("2026-11-08T19:00:00.000Z");
-    expect(followers.lastAt).toBe("2026-11-09T07:00:00.000Z");
+    // The period follows the plotted points: the first and last
+    // daily points both come from the 10:00 JST collection here.
+    expect(followers.firstAt).toBe("2026-11-09T01:00:00.000Z");
+    expect(followers.lastAt).toBe("2026-11-09T01:00:00.000Z");
     // The null in the middle row is skipped, not zero-filled.
-    expect(series[1].points).toEqual([
-      { date: "20261109", views: 576645 },
-      { date: "20261109", views: 580000 },
-    ]);
+    expect(series[1].points).toEqual([{ date: "20261109", views: 580000 }]);
     expect(series[1].latest).toBe(580000);
+    expect(series[1].firstAt).toBe("2026-11-09T07:00:00.000Z");
+    expect(series[1].lastAt).toBe("2026-11-09T07:00:00.000Z");
+    expect(series[2].points).toEqual([{ date: "20261109", views: 2421 }]);
     expect(series[2].latest).toBe(2421);
   });
 
   it("sorts out-of-order rows and drops series without any number", () => {
     const shuffled = [ROWS[2], ROWS[0], ROWS[1]];
     const series = snsHistorySeries(shuffled);
-    expect(series[0].points.map((p) => p.views)).toEqual([2000, 2005]);
+    expect(series[0].points.map((p) => p.views)).toEqual([2005]);
     const onlyFollowers = snsHistorySeries([
       { collected_at: "2026-11-09T00:00:00.000Z", total_followers: 2000 },
     ]);
     expect(onlyFollowers.map((s) => s.key)).toEqual(["total_followers"]);
+  });
+
+  it("cuts the days at the JST boundary, not the UTC one", () => {
+    // 16:30 UTC is already 01:30 JST the next day, and 15:30 UTC
+    // is 00:30 JST: the first two rows sit on different UTC days
+    // but the same JST day, the last two share a UTC day but fall
+    // on different JST days.
+    const series = snsHistorySeries([
+      {
+        collected_at: "2026-11-08T16:30:00.000Z",
+        total_followers: 2000,
+      },
+      {
+        collected_at: "2026-11-09T14:00:00.000Z",
+        total_followers: 2010,
+      },
+      {
+        collected_at: "2026-11-09T15:30:00.000Z",
+        total_followers: 2020,
+      },
+    ]);
+    expect(series[0].points).toEqual([
+      { date: "20261109", views: 2010 },
+      { date: "20261110", views: 2020 },
+    ]);
+    expect(series[0].firstAt).toBe("2026-11-09T14:00:00.000Z");
+    expect(series[0].lastAt).toBe("2026-11-09T15:30:00.000Z");
   });
 
   it("empty or junk history yields no series (the empty state)", () => {
@@ -244,6 +273,47 @@ describe("sns history series", () => {
         { collected_at: "2026-11-09T00:00:00.000Z", total_followers: null },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("dailyLatestSeries", () => {
+  it("keeps only the last point of each day", () => {
+    expect(
+      dailyLatestSeries([
+        { date: "20261109", views: 2000 },
+        { date: "20261109", views: 2005 },
+        { date: "20261109", views: 2003 },
+      ]),
+    ).toEqual([{ date: "20261109", views: 2003 }]);
+  });
+
+  it("keeps the ascending day order across days", () => {
+    expect(
+      dailyLatestSeries([
+        { date: "20261108", views: 1900 },
+        { date: "20261109", views: 2000 },
+        { date: "20261109", views: 2005 },
+        { date: "20261110", views: 2010 },
+      ]),
+    ).toEqual([
+      { date: "20261108", views: 1900 },
+      { date: "20261109", views: 2005 },
+      { date: "20261110", views: 2010 },
+    ]);
+  });
+
+  it("leaves a single-point day as is", () => {
+    const points = [{ date: "20261109", views: 252 }];
+    expect(dailyLatestSeries(points)).toEqual(points);
+  });
+
+  it("tolerates empty and junk input", () => {
+    expect(dailyLatestSeries([])).toEqual([]);
+    expect(dailyLatestSeries(null)).toEqual([]);
+    expect(dailyLatestSeries("nope")).toEqual([]);
+    expect(dailyLatestSeries([null, { views: 1 }, { date: "20261109", views: 2 }])).toEqual([
+      { date: "20261109", views: 2 },
+    ]);
   });
 });
 
@@ -271,14 +341,13 @@ describe("threads tab", () => {
     expect(series).toHaveLength(1);
     expect(series[0].key).toBe("threads_followers");
     expect(series[0].label).toBe("Threads フォロワー");
-    expect(series[0].points).toEqual([
-      { date: "20261109", views: 252 },
-      { date: "20261109", views: 255 },
-    ]);
+    // Both numbered rows fall on JST 2026/11/9, so the series
+    // collapses to that day's last value.
+    expect(series[0].points).toEqual([{ date: "20261109", views: 255 }]);
     expect(series[0].latest).toBe(255);
-    // The period spans the contributing rows only: the null row
-    // before Threads collection started does not stretch it.
-    expect(series[0].firstAt).toBe("2026-11-08T23:46:00.000Z");
+    // The period follows the plotted point: the null row before
+    // Threads collection started does not stretch it.
+    expect(series[0].firstAt).toBe("2026-11-09T05:00:00.000Z");
     expect(series[0].lastAt).toBe("2026-11-09T05:00:00.000Z");
   });
 

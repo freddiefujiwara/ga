@@ -95,20 +95,39 @@ export const SNS_HISTORY_SERIES = [
   { key: "media_count", label: "投稿数" },
 ];
 
+// Collapse a chronological point list to one point per calendar
+// day: the day's last point wins. Points carry their JST day in
+// `date` ("YYYYMMDD", from jstDateKey), so a Map keyed by date —
+// last write wins, first-insertion order kept — does the whole
+// reduction while preserving the ascending day order. Entries
+// without a usable date are dropped.
+export function dailyLatestSeries(points) {
+  if (!Array.isArray(points)) {
+    return [];
+  }
+  const byDate = new Map();
+  for (const point of points) {
+    if (point && point.date) {
+      byDate.set(point.date, point);
+    }
+  }
+  return [...byDate.values()];
+}
+
 // Shape history rows into one chart series per metric: points are
 // { date, views } for buildLineChartSvg (views is just the value),
-// skipping the collections where that metric is missing. Each
-// series also carries its latest value and the covered period
-// (first/last collected_at, ISO). Series with no numeric point at
-// all are dropped, and an empty history yields an empty list.
+// skipping the collections where that metric is missing, and
+// collapsed to one point per JST calendar day via
+// dailyLatestSeries (collections run every six hours plus manual
+// runs, so a raw series would stack several points on the same
+// day). Each series also carries its latest value and the covered
+// period: the collected_at behind its first and last daily
+// points, so the stated period follows the plotted days. Series
+// with no numeric point at all are dropped, and an empty history
+// yields an empty list.
 // Shared shaping behind snsHistorySeries / threadsHistorySeries:
-// one chart series per { key, label } definition, points skipping
-// the collections where that metric is missing. With
-// periodFromPoints a series' period (firstAt / lastAt) spans only
-// the rows that contributed a point; otherwise it spans the whole
-// history. Series with no numeric point at all are dropped, and an
-// empty history yields an empty list.
-function shapeHistorySeries(rows, defs, periodFromPoints) {
+// one chart series per { key, label } definition.
+function shapeHistorySeries(rows, defs) {
   if (!Array.isArray(rows)) {
     return [];
   }
@@ -125,33 +144,36 @@ function shapeHistorySeries(rows, defs, periodFromPoints) {
   }
   return defs
     .map(({ key, label }) => {
-      const points = [];
-      const pointRows = [];
+      const entries = [];
       for (const row of sorted) {
         const date = isNum(row[key]) ? jstDateKey(row.collected_at) : null;
         if (date) {
-          points.push({ date, views: row[key] });
-          pointRows.push(row);
+          entries.push({
+            date,
+            views: row[key],
+            collected_at: row.collected_at,
+          });
         }
       }
-      if (!points.length) {
+      if (!entries.length) {
         return null;
       }
-      const period = periodFromPoints ? pointRows : sorted;
+      const daily = dailyLatestSeries(entries);
+      const points = daily.map(({ date, views }) => ({ date, views }));
       return {
         key,
         label,
         points,
         latest: points[points.length - 1].views,
-        firstAt: period[0].collected_at,
-        lastAt: period[period.length - 1].collected_at,
+        firstAt: daily[0].collected_at,
+        lastAt: daily[daily.length - 1].collected_at,
       };
     })
     .filter(Boolean);
 }
 
 export function snsHistorySeries(rows) {
-  return shapeHistorySeries(rows, SNS_HISTORY_SERIES, false);
+  return shapeHistorySeries(rows, SNS_HISTORY_SERIES);
 }
 
 // The Threads follower trend for the Threads tab: the same history
@@ -161,11 +183,9 @@ export function snsHistorySeries(rows) {
 // (threads_followers null) contribute no point and do not stretch
 // the stated period.
 export function threadsHistorySeries(rows) {
-  return shapeHistorySeries(
-    rows,
-    [{ key: "threads_followers", label: "Threads フォロワー" }],
-    true,
-  );
+  return shapeHistorySeries(rows, [
+    { key: "threads_followers", label: "Threads フォロワー" },
+  ]);
 }
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
