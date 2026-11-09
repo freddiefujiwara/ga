@@ -182,6 +182,24 @@
               <p class="meta">記事のタグごとに、直近28日間の表示回数を集計しています。タグが複数ある記事は、それぞれのタグに数えます。</p>
             </section>
             <section class="table-wrap">
+              <h2 class="section-title">記事ごと</h2>
+              <p class="meta" id="blog-article-range"></p>
+              <div class="tabs genre-filter" id="blog-article-genre-tabs" role="tablist" aria-label="ジャンルで絞り込み"></div>
+              <div class="table-scroll">
+                <table class="data-table" id="blog-article-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort-key="title">タイトル</th>
+                      <th>ジャンル</th>
+                      <th class="num sortable" data-sort-key="views">表示回数</th>
+                    </tr>
+                  </thead>
+                  <tbody id="blog-article-body"></tbody>
+                </table>
+              </div>
+              <p class="meta">ジャンルは記事のタグです。タグが複数ある記事は、それぞれのジャンルの絞り込みに現れます。</p>
+            </section>
+            <section class="table-wrap">
               <h2 class="section-title">参照元 上位8件</h2>
               <ol id="top-sources" class="ranking"></ol>
             </section>
