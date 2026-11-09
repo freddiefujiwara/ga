@@ -874,6 +874,7 @@ const KNOWN_PAGES = {
   "/alarm/": "アラーム",
   "/tweet/": "ツイート",
   "/ga/": "アクセス解析",
+  "/social/": "アクセス解析",
 };
 
 // The identity a pagePath counts under in the ranking. Blog articles

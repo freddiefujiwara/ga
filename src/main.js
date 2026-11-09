@@ -1425,7 +1425,7 @@ function renderThreads() {
 // posted on the days follows moved, never that a post caused the
 // move — the note under the chart says exactly that. The series
 // arrives with sns_detail (instagram.daily_follows); until
-// ga-gas collects it, the section shows its empty state.
+// social-gas collects it, the section shows its empty state.
 //
 // Tapping a posted day's column in the chart (the ▼ marker or
 // anywhere on the column — buildFollowChartSvg gives those days
