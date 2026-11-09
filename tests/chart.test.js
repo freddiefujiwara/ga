@@ -140,6 +140,31 @@ describe("buildFollowChartSvg", () => {
     expect(count(svg, 'class="follow-post-marker"')).toBe(2);
   });
 
+  it("gives posted days a full-column hit rect carrying the date", () => {
+    // width 200, padding 10: inner width 180, so each of the two
+    // days owns a 90-wide column; the second starts at x=100.
+    const svg = buildFollowChartSvg(
+      [
+        { date: "20261107", follows: 10, unfollows: 5, posts: [] },
+        { date: "20261108", follows: 20, unfollows: null, posts: [{ id: "m" }] },
+      ],
+      { width: 200, height: 140, padding: 10 },
+    );
+    expect(count(svg, 'class="follow-day-hit"')).toBe(1);
+    expect(svg).toContain(
+      '<rect class="follow-day-hit" data-date="20261108" x="100" y="0" width="90" height="140"/>',
+    );
+    expect(svg).toContain('class="follow-post-marker" data-date="20261108"');
+  });
+
+  it("draws no hit rect when no day carries posts", () => {
+    const svg = buildFollowChartSvg([
+      { date: "20261107", follows: 10, unfollows: 5, posts: [] },
+      { date: "20261108", follows: 20, unfollows: null, posts: [] },
+    ]);
+    expect(svg).not.toContain("follow-day-hit");
+  });
+
   it("draws no bars for zero or null values", () => {
     const svg = buildFollowChartSvg([
       { date: "20261107", follows: 0, unfollows: 0, posts: [] },

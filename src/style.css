@@ -434,6 +434,26 @@ textarea:disabled {
 
 .follow-post-marker {
   fill: #f0a832;
+  cursor: pointer;
+}
+
+.follow-day-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.follow-day-hit.selected {
+  fill: rgb(77 163 255 / 0.15);
+}
+
+.follow-day-entry {
+  scroll-margin-top: 12px;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.follow-day-entry.highlight {
+  background: rgb(77 163 255 / 0.12);
 }
 
 .chart-tooltip {
