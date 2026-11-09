@@ -228,9 +228,30 @@
               <h2 class="section-title">Threads</h2>
               <p class="meta" id="threads-status"></p>
               <div class="totals-row" id="sns-threads-totals"></div>
+              <h3 class="subsection-title">反応の内訳（過去30日）</h3>
+              <div class="totals-row" id="sns-threads-interactions"></div>
               <h3 class="subsection-title">フォロワー数の推移</h3>
               <div id="threads-history"></div>
               <p class="meta">Threads の取得は2026年11月9日に始まったため、推移の点はこれから増えていきます。</p>
+              <h3 class="subsection-title">投稿ごと</h3>
+              <p class="meta" id="threads-posts-range"></p>
+              <div class="table-scroll">
+                <table class="data-table" id="threads-posts-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort-key="posted_at">投稿日時</th>
+                      <th>本文</th>
+                      <th class="num sortable" data-sort-key="views">表示回数</th>
+                      <th class="num sortable" data-sort-key="likes">いいね</th>
+                      <th class="num sortable" data-sort-key="replies">返信</th>
+                      <th class="num sortable" data-sort-key="reposts">リポスト</th>
+                      <th class="num sortable" data-sort-key="quotes">引用</th>
+                    </tr>
+                  </thead>
+                  <tbody id="threads-posts-body"></tbody>
+                </table>
+              </div>
+              <div id="threads-notes"></div>
             </section>
           </div>
         </div>

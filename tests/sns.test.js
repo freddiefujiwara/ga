@@ -6,6 +6,9 @@ import {
   snsHistorySeries,
   threadsHistorySeries,
   threadsTotals,
+  threadsInteractions,
+  threadsPosts,
+  threadsErrorNotes,
   jstDateKey,
   formatCount,
   formatPercent,
@@ -298,6 +301,25 @@ describe("threads tab", () => {
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "255" },
       { label: "前回比", value: "+3" },
+      { label: "表示回数（過去30日）", value: "—" },
+      { label: "反応の合計（過去30日）", value: "—" },
+    ]);
+  });
+
+  it("threadsTotals carries the 30-day account totals", () => {
+    // The production shape, measured on 2026-11-09.
+    const detail = {
+      threads: {
+        followers: 252,
+        views_30d: 53342,
+        interactions_30d: { total: 808, likes: 654, replies: 151, reposts: 3, quotes: 0 },
+      },
+    };
+    expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
+      { label: "フォロワー", value: "252" },
+      { label: "前回比", value: "+3" },
+      { label: "表示回数（過去30日）", value: "53,342" },
+      { label: "反応の合計（過去30日）", value: "808" },
     ]);
   });
 
@@ -323,10 +345,14 @@ describe("threads tab", () => {
     expect(threadsTotals(detail, [THREADS_ROWS[1]])).toEqual([
       { label: "フォロワー", value: "252" },
       { label: "前回比", value: "—" },
+      { label: "表示回数（過去30日）", value: "—" },
+      { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals(detail, [])).toEqual([
       { label: "フォロワー", value: "252" },
       { label: "前回比", value: "—" },
+      { label: "表示回数（過去30日）", value: "—" },
+      { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals(detail, null)[1].value).toBe("—");
   });
@@ -335,11 +361,89 @@ describe("threads tab", () => {
     expect(threadsTotals(null, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "—" },
       { label: "前回比", value: "+3" },
+      { label: "表示回数（過去30日）", value: "—" },
+      { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals({}, null)).toEqual([
       { label: "フォロワー", value: "—" },
       { label: "前回比", value: "—" },
+      { label: "表示回数（過去30日）", value: "—" },
+      { label: "反応の合計（過去30日）", value: "—" },
     ]);
+  });
+
+  it("threadsInteractions splits the 30-day interactions four ways", () => {
+    const detail = {
+      threads: {
+        interactions_30d: { total: 808, likes: 654, replies: 151, reposts: 3, quotes: 0 },
+      },
+    };
+    expect(threadsInteractions(detail)).toEqual([
+      { label: "いいね", value: "654" },
+      { label: "返信", value: "151" },
+      { label: "リポスト", value: "3" },
+      { label: "引用", value: "0" },
+    ]);
+  });
+
+  it("threadsInteractions dashes whatever is missing", () => {
+    expect(
+      threadsInteractions({ threads: { interactions_30d: { likes: 10 } } }),
+    ).toEqual([
+      { label: "いいね", value: "10" },
+      { label: "返信", value: "—" },
+      { label: "リポスト", value: "—" },
+      { label: "引用", value: "—" },
+    ]);
+    expect(threadsInteractions(null)).toEqual([
+      { label: "いいね", value: "—" },
+      { label: "返信", value: "—" },
+      { label: "リポスト", value: "—" },
+      { label: "引用", value: "—" },
+    ]);
+    expect(threadsInteractions({})).toEqual(threadsInteractions(null));
+  });
+
+  it("threadsPosts passes the collected posts through", () => {
+    const posts = [
+      {
+        id: "1",
+        type: "TEXT_POST",
+        posted_at: "2026-11-09T00:00:00.000Z",
+        text: "テスト投稿",
+        permalink: "https://www.threads.net/t/example",
+        views: 120,
+        likes: 4,
+        replies: 1,
+        reposts: 0,
+        quotes: null,
+      },
+    ];
+    expect(threadsPosts({ threads: { recent_posts: posts } })).toEqual(posts);
+  });
+
+  it("threadsPosts is empty until posts arrive", () => {
+    expect(threadsPosts(null)).toEqual([]);
+    expect(threadsPosts({})).toEqual([]);
+    expect(threadsPosts({ threads: {} })).toEqual([]);
+    expect(threadsPosts({ threads: { recent_posts: null } })).toEqual([]);
+    expect(threadsPosts({ threads: { recent_posts: "nope" } })).toEqual([]);
+  });
+
+  it("threadsErrorNotes surfaces partial-failure notes only", () => {
+    expect(
+      threadsErrorNotes({
+        threads: { detail_error: "指標の一部を取得できませんでした", posts_error: null },
+      }),
+    ).toEqual(["指標の一部を取得できませんでした"]);
+    expect(
+      threadsErrorNotes({
+        threads: { detail_error: "a", posts_error: "b" },
+      }),
+    ).toEqual(["a", "b"]);
+    expect(threadsErrorNotes({ threads: {} })).toEqual([]);
+    expect(threadsErrorNotes({ threads: { detail_error: "" } })).toEqual([]);
+    expect(threadsErrorNotes(null)).toEqual([]);
   });
 });
 

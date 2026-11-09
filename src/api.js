@@ -515,17 +515,58 @@ export function youtubeTotals(detail) {
 // its change since the previous collection, taken from the history
 // rows exactly like the overview KPI deltas. Until two collections
 // carry a Threads number there is nothing to compare, so the
-// change box shows "—".
+// change box shows "—". Then the account-wide last-30-days numbers
+// ga-gas collects with the detail: total views and the
+// interactions total (the four-way split is threadsInteractions).
+// Every number can be null; missing ones show "—".
 export function threadsTotals(detail, historyRows) {
   const th = detail?.threads ?? {};
   const change = historyDelta(historyRows, "threads_followers");
+  const interactions = th.interactions_30d ?? {};
   return [
     { label: "フォロワー", value: formatCount(th.followers) },
     {
       label: "前回比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
     },
+    { label: "表示回数（過去30日）", value: formatCount(th.views_30d) },
+    {
+      label: "反応の合計（過去30日）",
+      value: formatCount(interactions.total),
+    },
   ];
+}
+
+// The four-way split of the Threads account's last 30 days of
+// interactions, the counterpart of snsInteractions on the
+// Instagram tab.
+export function threadsInteractions(detail) {
+  const it = detail?.threads?.interactions_30d ?? {};
+  return [
+    { label: "いいね", value: formatCount(it.likes) },
+    { label: "返信", value: formatCount(it.replies) },
+    { label: "リポスト", value: formatCount(it.reposts) },
+    { label: "引用", value: formatCount(it.quotes) },
+  ];
+}
+
+// The Threads account's recent posts, newest first as collected:
+// [{ id, type, posted_at, text, permalink, views, likes, replies,
+// reposts, quotes }], with nulls wherever a number could not be
+// collected. Anything that is not a list yields an empty one.
+export function threadsPosts(detail) {
+  const list = detail?.threads?.recent_posts;
+  return Array.isArray(list) ? list : [];
+}
+
+// Partial-collection notes ga-gas attaches to the Threads section
+// (empty in the normal case); shown as small print only when
+// present, like snsErrorNotes for the Instagram section.
+export function threadsErrorNotes(detail) {
+  const th = detail?.threads ?? {};
+  return ["detail_error", "posts_error"]
+    .map((key) => th[key])
+    .filter((value) => typeof value === "string" && value.length > 0);
 }
 
 // Partial-collection notes ga-gas attaches to the snapshot (empty

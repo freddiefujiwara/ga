@@ -20,6 +20,9 @@ import {
   snsHistorySeries,
   threadsHistorySeries,
   threadsTotals,
+  threadsInteractions,
+  threadsPosts,
+  threadsErrorNotes,
   overviewKpis,
   topMedia,
   formatCount,
@@ -1118,18 +1121,100 @@ function renderYoutube(detail) {
 
 // --- Threads tab ---
 // The Threads tab reads the same two loads as the overview: the
-// current follower count from the SNS snapshot and the trend from
-// the history rows. renderSns and loadSnsHistory both call this,
-// so whichever load lands second completes the picture; data that
-// has not arrived yet shows as "—" and the chart area keeps its
-// empty-state line. Threads history only starts on 2026-11-09, so
-// for a while the chart holds a handful of points (or just one).
+// follower count, the last-30-days account totals and the recent
+// posts from the SNS snapshot (sns_detail's threads section),
+// and the follower trend from the history rows. renderSns and
+// loadSnsHistory both call renderThreads, so whichever load
+// lands second completes the picture; data that has not arrived
+// yet shows as "—" and the chart area keeps its empty-state
+// line. Threads history only starts on 2026-11-09, so for a
+// while the chart holds a handful of points (or just one).
+
+let threadsPostRows = [];
+// The posts table starts sorted by views, most-viewed first,
+// like the Instagram tab's media table.
+let threadsSort = { key: "views", dir: "desc", wired: false };
+
+// Per-post table of the Threads tab, the counterpart of the
+// Instagram tab's 投稿ごと: one row per recent post, the text
+// shortened and linked to the post itself, and the shared
+// header-click sorting. Threads posts have no genre, so there
+// is no genre filter here. Values that could not be collected
+// show "—", and a partial failure (posts_error) never hides
+// the posts that did arrive.
+function renderThreadsPosts() {
+  const tbody = document.getElementById("threads-posts-body");
+  tbody.innerHTML = "";
+  document.getElementById("threads-posts-range").textContent =
+    threadsPostRows.length
+      ? `対象：直近の投稿（全${threadsPostRows.length}件）`
+      : "";
+  const rows = sortMedia(threadsPostRows, threadsSort.key, threadsSort.dir);
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 7;
+    td.textContent = "データがありません";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  } else {
+    const numCell = (value) => {
+      const td = document.createElement("td");
+      td.className = "num";
+      td.textContent = formatCount(value);
+      return td;
+    };
+    for (const post of rows) {
+      const tr = document.createElement("tr");
+      const dateTd = document.createElement("td");
+      dateTd.className = "nowrap";
+      dateTd.textContent = formatJstDateTime(post.posted_at);
+      tr.appendChild(dateTd);
+      const textTd = document.createElement("td");
+      textTd.className = "caption-cell";
+      const head = captionHead(post.text) || "投稿";
+      if (post.permalink) {
+        const link = document.createElement("a");
+        link.href = post.permalink;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = head;
+        textTd.appendChild(link);
+      } else {
+        textTd.textContent = head;
+      }
+      tr.appendChild(textTd);
+      tr.appendChild(numCell(post.views));
+      tr.appendChild(numCell(post.likes));
+      tr.appendChild(numCell(post.replies));
+      tr.appendChild(numCell(post.reposts));
+      tr.appendChild(numCell(post.quotes));
+      tbody.appendChild(tr);
+    }
+  }
+  updateSortHeaders("threads-posts-table", threadsSort);
+}
 
 function renderThreads() {
   fillTotalBoxes(
     "sns-threads-totals",
     threadsTotals(overviewState.detail, overviewState.historyRows),
   );
+  fillTotalBoxes(
+    "sns-threads-interactions",
+    threadsInteractions(overviewState.detail),
+  );
+  threadsPostRows = threadsPosts(overviewState.detail);
+  wireSortableTable("threads-posts-table", threadsSort, renderThreadsPosts);
+  renderThreadsPosts();
+  const notes = document.getElementById("threads-notes");
+  notes.innerHTML = "";
+  for (const note of threadsErrorNotes(overviewState.detail)) {
+    const p = document.createElement("p");
+    p.className = "meta sns-note";
+    p.textContent = `※ ${note}`;
+    notes.appendChild(p);
+  }
   const wrap = document.getElementById("threads-history");
   wrap.innerHTML = "";
   const series = threadsHistorySeries(overviewState.historyRows);
