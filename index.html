@@ -88,28 +88,6 @@
                     <ol id="sns-countries" class="ranking"></ol>
                   </div>
                 </div>
-                <h3 class="subsection-title">投稿ごと</h3>
-                <p class="meta" id="sns-media-range"></p>
-                <div class="table-scroll">
-                  <table class="data-table" id="sns-media-table">
-                    <thead>
-                      <tr>
-                        <th class="sortable" data-sort-key="posted_at">投稿日時</th>
-                        <th>キャプション</th>
-                        <th>種類</th>
-                        <th class="num sortable" data-sort-key="views">再生回数</th>
-                        <th class="num sortable" data-sort-key="reach">リーチ</th>
-                        <th class="num sortable" data-sort-key="likes">いいね</th>
-                        <th class="num sortable" data-sort-key="comments">コメント</th>
-                        <th class="num sortable" data-sort-key="shares">シェア</th>
-                        <th class="num sortable" data-sort-key="saves">保存</th>
-                        <th class="num sortable" data-sort-key="avg_watch_sec">平均再生</th>
-                        <th>リンク</th>
-                      </tr>
-                    </thead>
-                    <tbody id="sns-media-body"></tbody>
-                  </table>
-                </div>
                 <h3 class="subsection-title">ジャンル別</h3>
                 <p class="meta">
                   <label>期間
@@ -145,6 +123,29 @@
                 <p class="meta">ジャンルはキャプションのキーワードで振り分けています。保存率・いいね率は、投稿ごとの率（保存÷再生、いいね÷再生）の平均です。</p>
                 <p class="meta">集計は取得済みの投稿だけが対象です（すべての投稿ではありません）。</p>
                 <div id="sns-notes"></div>
+                <h3 class="subsection-title">投稿ごと</h3>
+                <p class="meta" id="sns-media-range"></p>
+                <div class="tabs genre-filter" id="sns-media-genre-tabs" role="tablist" aria-label="ジャンルで絞り込み"></div>
+                <div class="table-scroll">
+                  <table class="data-table" id="sns-media-table">
+                    <thead>
+                      <tr>
+                        <th class="sortable" data-sort-key="posted_at">投稿日時</th>
+                        <th>キャプション</th>
+                        <th>種類</th>
+                        <th class="num sortable" data-sort-key="views">再生回数</th>
+                        <th class="num sortable" data-sort-key="reach">リーチ</th>
+                        <th class="num sortable" data-sort-key="likes">いいね</th>
+                        <th class="num sortable" data-sort-key="comments">コメント</th>
+                        <th class="num sortable" data-sort-key="shares">シェア</th>
+                        <th class="num sortable" data-sort-key="saves">保存</th>
+                        <th class="num sortable" data-sort-key="avg_watch_sec">平均再生</th>
+                        <th>リンク</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sns-media-body"></tbody>
+                  </table>
+                </div>
               </div>
             </section>
           </div>

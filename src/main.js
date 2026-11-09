@@ -38,6 +38,8 @@ import { buildLineChartSvg, tooltipText } from "./chart.js";
 import {
   genreStatsForMedia,
   filterMediaByPeriod,
+  filterMediaByGenre,
+  mediaGenreOptions,
   mediaDateRange,
   sortGenreRows,
   genreAverageBars,
@@ -636,6 +638,10 @@ let snsMediaRows = [];
 // The media table starts sorted by views, most-watched first.
 let snsSort = { key: "views", dir: "desc" };
 let snsSortWired = false;
+// The per-post table's genre filter: null shows every post (the
+// すべて button). Independent of the genre section's period
+// selector — the filter always covers the full fetched list.
+let snsGenreFilter = null;
 
 function fillTotalBoxes(elId, items) {
   const wrap = document.getElementById(elId);
@@ -675,10 +681,50 @@ function fillDemoRanking(elId, items) {
   }
 }
 
+// The genre filter buttons above the per-post table: すべて
+// plus one button per genre that has posts, each labelled with
+// its post count. The buttons are rebuilt from the current media
+// list on every SNS render, so they always match the genres the
+// classifier produces. Clicking one narrows the table below to
+// that genre; the sort order is kept.
+function renderMediaGenreTabs() {
+  const wrap = document.getElementById("sns-media-genre-tabs");
+  wrap.innerHTML = "";
+  const options = mediaGenreOptions(snsMediaRows);
+  const total = options.reduce((sum, option) => sum + option.count, 0);
+  const buttons = [{ genre: null, label: `すべて（${total}）` }];
+  for (const option of options) {
+    buttons.push({
+      genre: option.genre,
+      label: `${option.genre}（${option.count}）`,
+    });
+  }
+  for (const entry of buttons) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-button genre-filter-button";
+    const active = snsGenreFilter === entry.genre;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", String(active));
+    btn.textContent = entry.label;
+    btn.addEventListener("click", () => {
+      snsGenreFilter = entry.genre;
+      renderMediaGenreTabs();
+      renderMediaTable();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
 function renderMediaTable() {
   const tbody = document.getElementById("sns-media-body");
   tbody.innerHTML = "";
-  const rows = sortMedia(snsMediaRows, snsSort.key, snsSort.dir);
+  const rows = sortMedia(
+    filterMediaByGenre(snsMediaRows, snsGenreFilter),
+    snsSort.key,
+    snsSort.dir,
+  );
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -1025,6 +1071,9 @@ function renderSns(detail) {
   document.getElementById("sns-media-range").textContent = mediaRange
     ? `対象：${formatJstDate(mediaRange.from)}〜${formatJstDate(mediaRange.to)}の投稿（全${snsMediaRows.length}件）`
     : "";
+  // A fresh snapshot resets the per-post genre filter to すべて.
+  snsGenreFilter = null;
+  renderMediaGenreTabs();
   wireMediaSort();
   renderMediaTable();
   wireGenreControls();

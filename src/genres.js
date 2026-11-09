@@ -405,3 +405,30 @@ export function instagramGenreStats(detail, rules = INSTAGRAM_GENRE_RULES) {
     : [];
   return genreStatsForMedia(media, rules);
 }
+
+// The genre filter of the per-post table: one entry per genre
+// that actually has posts, in the rollup's order (total views,
+// biggest first) so the filter buttons line up with the genre
+// section above them: [{ genre, count }]. Genres with no posts
+// are omitted — a button that shows nothing is dead weight.
+export function mediaGenreOptions(media, rules = INSTAGRAM_GENRE_RULES) {
+  return genreStatsForMedia(media, rules).map((row) => ({
+    genre: row.genre,
+    count: row.count,
+  }));
+}
+
+// The posts of one genre for the per-post table's genre filter.
+// A null/undefined genre means "no filter" (the すべて button):
+// every usable post comes back. Otherwise a post stays only
+// when its classified genre equals the requested one exactly —
+// the genre names are the classifier's own output, so the
+// buttons and the filter can never drift apart. Null entries
+// are skipped either way (the rollup skips them too).
+export function filterMediaByGenre(media, genre, rules = INSTAGRAM_GENRE_RULES) {
+  const list = (Array.isArray(media) ? media : []).filter((post) => post);
+  if (genre === null || genre === undefined) {
+    return list;
+  }
+  return list.filter((post) => classifyCaption(post.caption, rules) === genre);
+}
