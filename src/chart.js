@@ -81,3 +81,73 @@ export function buildLineChartSvg(points, options = {}) {
   const maxLabel = `<text x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
 }
+
+// Diverging bar chart for one account's daily follows and
+// unfollows: follow bars grow up from a centre baseline, unfollow
+// bars grow down, and both sides share one scale (the larger of
+// the two maxima) so a day's gain and loss stay comparable. A
+// null value draws no bar — a gap, not a zero. Days carrying
+// posts get a small triangle marker above the follow bar, so a
+// follow spike can be eyeballed against what was posted that
+// day. Days are the followChartDays shape:
+// { date: "YYYYMMDD", follows, unfollows, posts }.
+// Pure string building, like buildLineChartSvg.
+export function buildFollowChartSvg(days, options = {}) {
+  const width = options.width || 720;
+  const height = options.height || 220;
+  const pad = options.padding || 24;
+  const padBottom = pad + 22; // room for the date labels
+  const ariaLabel = options.label || "日ごとのフォロー・フォロー解除";
+  if (!days || days.length === 0) {
+    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"></svg>`;
+  }
+  const maxFollows = Math.max(...days.map((d) => d.follows ?? 0), 0);
+  const maxUnfollows = Math.max(...days.map((d) => d.unfollows ?? 0), 0);
+  const max = Math.max(maxFollows, maxUnfollows, 1);
+  const innerW = width - pad * 2;
+  const innerH = height - pad - padBottom;
+  const halfH = innerH / 2;
+  const baseY = pad + halfH;
+  const slot = innerW / days.length;
+  const barW = Math.max(2, Math.min(18, slot * 0.6));
+  const round = (n) => Number(n.toFixed(1));
+  const parts = [
+    `<line class="follow-baseline" x1="${pad}" y1="${round(baseY)}" x2="${width - pad}" y2="${round(baseY)}"/>`,
+  ];
+  days.forEach((day, i) => {
+    const cx = pad + slot * i + slot / 2;
+    const x = round(cx - barW / 2);
+    let barTop = baseY;
+    if (typeof day.follows === "number" && day.follows > 0) {
+      const h = (day.follows / max) * halfH;
+      barTop = baseY - h;
+      parts.push(
+        `<rect class="follow-bar" x="${x}" y="${round(barTop)}" width="${round(barW)}" height="${round(h)}"/>`,
+      );
+    }
+    if (typeof day.unfollows === "number" && day.unfollows > 0) {
+      const h = (day.unfollows / max) * halfH;
+      parts.push(
+        `<rect class="unfollow-bar" x="${x}" y="${round(baseY)}" width="${round(barW)}" height="${round(h)}"/>`,
+      );
+    }
+    if (Array.isArray(day.posts) && day.posts.length > 0) {
+      const my = Math.max(round(barTop) - 11, 2);
+      parts.push(
+        `<path class="follow-post-marker" d="M ${round(cx - 5)},${my} L ${round(cx + 5)},${my} L ${round(cx)},${my + 6} Z"/>`,
+      );
+    }
+  });
+  const axisLabels = tickIndices(days.length)
+    .map((i) => {
+      const x = pad + slot * i + slot / 2;
+      const anchor =
+        i === 0 ? "start" : i === days.length - 1 ? "end" : "middle";
+      return `<text class="chart-axis-label" x="${round(x)}" y="${height - 6}" text-anchor="${anchor}">${formatDateLabel(days[i].date)}</text>`;
+    })
+    .join("");
+  const maxLabels =
+    `<text x="${pad}" y="${pad - 8}" font-size="11">最大フォロー ${maxFollows}</text>` +
+    `<text x="${pad}" y="${height - padBottom + 13}" font-size="11">最大解除 ${maxUnfollows}</text>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}">${parts.join("")}${axisLabels}${maxLabels}</svg>`;
+}

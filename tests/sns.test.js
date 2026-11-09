@@ -30,6 +30,9 @@ import {
   youtubeVideos,
   youtubeTotals,
   snsErrorNotes,
+  instagramDailyFollows,
+  instagramDailyFollowsError,
+  followChartDays,
 } from "../src/api.js";
 
 const ENDPOINT = "https://example.com/exec";
@@ -117,6 +120,12 @@ const DETAIL = {
     insights_error: null,
     detail_error: null,
     media_error: null,
+    daily_follows: [
+      { date: "2026-11-06", follows: 4, unfollows: 1 },
+      { date: "2026-11-07", follows: 12, unfollows: null },
+      { date: "2026-11-08", follows: null, unfollows: 2 },
+    ],
+    daily_follows_error: null,
   },
   threads: { followers: null },
 };
@@ -1042,5 +1051,114 @@ describe("youtube and error notes", () => {
     };
     expect(snsErrorNotes(withError)).toEqual(["HTTP 400 code=100: something"]);
     expect(snsErrorNotes(null)).toEqual([]);
+  });
+});
+
+describe("instagramDailyFollows", () => {
+  it("passes the collected array through", () => {
+    expect(instagramDailyFollows(DETAIL)).toHaveLength(3);
+    expect(instagramDailyFollows(DETAIL)[0]).toEqual({
+      date: "2026-11-06",
+      follows: 4,
+      unfollows: 1,
+    });
+  });
+
+  it("yields an empty list when the section is missing or junk", () => {
+    expect(instagramDailyFollows(null)).toEqual([]);
+    expect(instagramDailyFollows({})).toEqual([]);
+    expect(instagramDailyFollows({ instagram: { daily_follows: "x" } })).toEqual([]);
+  });
+});
+
+describe("instagramDailyFollowsError", () => {
+  it("returns the error string and null otherwise", () => {
+    expect(instagramDailyFollowsError(DETAIL)).toBeNull();
+    expect(
+      instagramDailyFollowsError({
+        instagram: { daily_follows_error: "HTTP 400: daily unavailable" },
+      }),
+    ).toBe("HTTP 400: daily unavailable");
+    expect(instagramDailyFollowsError(null)).toBeNull();
+    expect(
+      instagramDailyFollowsError({ instagram: { daily_follows_error: "" } }),
+    ).toBeNull();
+  });
+});
+
+describe("followChartDays", () => {
+  it("maps each post onto the JST day it was posted", () => {
+    const days = followChartDays(DETAIL);
+    expect(days.map((d) => d.date)).toEqual(["20261106", "20261107", "20261108"]);
+    expect(days[0]).toMatchObject({ follows: 4, unfollows: 1, posts: [] });
+    // m1 was posted 2026-11-07T01:00Z = 10:00 JST on 11/7.
+    expect(days[1].follows).toBe(12);
+    expect(days[1].unfollows).toBeNull();
+    expect(days[1].posts.map((p) => p.id)).toEqual(["m1"]);
+    expect(days[2].follows).toBeNull();
+    expect(days[2].posts.map((p) => p.id)).toEqual(["m2"]);
+  });
+
+  it("uses the JST calendar day, not the UTC day, for the mapping", () => {
+    const detail = {
+      instagram: {
+        daily_follows: [
+          { date: "2026-11-06", follows: 1, unfollows: 0 },
+          { date: "2026-11-07", follows: 2, unfollows: 0 },
+        ],
+        recent_media: [
+          // 2026-11-06 16:30 UTC is already 2026-11-07 01:30 in Tokyo.
+          { id: "late", posted_at: "2026-11-06T16:30:00Z", caption: "x" },
+        ],
+      },
+    };
+    const days = followChartDays(detail);
+    expect(days[0].posts).toEqual([]);
+    expect(days[1].posts.map((p) => p.id)).toEqual(["late"]);
+  });
+
+  it("drops posts outside the series and malformed rows", () => {
+    const detail = {
+      instagram: {
+        daily_follows: [
+          { date: "2026/11/07", follows: 1, unfollows: 1 },
+          { date: "2026-11-07", follows: "many", unfollows: 3 },
+          null,
+          { follows: 1, unfollows: 1 },
+        ],
+        recent_media: [
+          { id: "old", posted_at: "2026-10-01T01:00:00Z", caption: "x" },
+          { id: "bad", posted_at: "not-a-date", caption: "x" },
+        ],
+      },
+    };
+    const days = followChartDays(detail);
+    expect(days).toHaveLength(1);
+    expect(days[0].date).toBe("20261107");
+    // A non-numeric value stays a gap (null), not a zero.
+    expect(days[0].follows).toBeNull();
+    expect(days[0].unfollows).toBe(3);
+    expect(days[0].posts).toEqual([]);
+  });
+
+  it("keeps the last entry of a duplicated date and sorts ascending", () => {
+    const detail = {
+      instagram: {
+        daily_follows: [
+          { date: "2026-11-08", follows: 1, unfollows: 1 },
+          { date: "2026-11-07", follows: 2, unfollows: 2 },
+          { date: "2026-11-08", follows: 9, unfollows: 9 },
+        ],
+        recent_media: [],
+      },
+    };
+    const days = followChartDays(detail);
+    expect(days.map((d) => d.date)).toEqual(["20261107", "20261108"]);
+    expect(days[1].follows).toBe(9);
+  });
+
+  it("is empty without a daily series", () => {
+    expect(followChartDays(null)).toEqual([]);
+    expect(followChartDays({ instagram: { recent_media: [] } })).toEqual([]);
   });
 });
