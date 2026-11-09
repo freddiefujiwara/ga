@@ -170,15 +170,17 @@ export function hasLabelRoom(rect) {
 // Heat colour for a genre tile, scaled by where its average sits
 // between the smallest and largest average on show: the smallest
 // average keeps the plain tile colour, the largest gets the
-// strongest red, and values in between shade smoothly. The scale
-// is relative to what is on show, so changing the period window
-// recolours the tiles. The mix percentage is capped well short
-// of solid red so the tile's white text stays readable on the
-// hottest tile. null means "no heat colour": a missing average,
-// or nothing to scale against (a lone genre, or every average
-// equal), and the tile keeps the plain colour.
+// strongest blue (the same blue as the bar charts below, the
+// --primary of the dark theme), and values in between shade
+// smoothly. The scale is relative to what is on show, so
+// changing the period window recolours the tiles. The mix
+// percentage is capped well short of solid blue so the tile's
+// white text stays readable on the strongest tile. null means
+// "no heat colour": a missing average, or nothing to scale
+// against (a lone genre, or every average equal), and the tile
+// keeps the plain colour.
 export const GENRE_HEAT_MAX_MIX = 55;
-const GENRE_HEAT_RED = "#dc2626";
+const GENRE_HEAT_BLUE = "#3b82f6";
 
 export function genreHeatMix(avg, min, max) {
   if (!isNum(avg) || !isNum(min) || !isNum(max) || max <= min) {
@@ -193,7 +195,7 @@ export function genreHeatBackground(avg, min, max) {
   if (mix === null || mix <= 0) {
     return null;
   }
-  return `color-mix(in srgb, ${GENRE_HEAT_RED} ${mix}%, var(--surface-elevated))`;
+  return `color-mix(in srgb, ${GENRE_HEAT_BLUE} ${mix}%, var(--surface-elevated))`;
 }
 
 // How much of its text a genre tile may carry, decided from the

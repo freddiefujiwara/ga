@@ -281,7 +281,7 @@ async function loadDashboard() {
 // average and total, so nothing is lost on the small tiles.
 // Tile colour is a heat scale on the same average (see
 // genreHeatBackground): the biggest average on show is the
-// reddest, the smallest keeps the plain tile colour.
+// bluest, the smallest keeps the plain tile colour.
 
 function renderGenreTreemap(mapEl, legendEl, map) {
   mapEl.innerHTML = "";
@@ -457,7 +457,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
         avgText: `1記事あたり ${formatCount(row.perArticle)}`,
         totalText: `合計 ${formatCount(row.totalViews)}`,
       })),
-      "タイルの面積は1記事あたり表示回数の大きさです。色が赤いほど1記事あたり表示回数が多いです。",
+      "タイルの面積は1記事あたり表示回数の大きさです。色が青いほど1記事あたり表示回数が多いです。",
     ),
   );
   wrap.appendChild(
@@ -1204,7 +1204,7 @@ function renderThreadsGenres() {
         avgText: `平均表示 ${formatCount(row.avgViews)}`,
         totalText: `合計 ${formatCount(row.totalViews)}`,
       })),
-      "タイルの面積は平均表示回数の大きさです。色が赤いほど平均表示回数が多いです。",
+      "タイルの面積は平均表示回数の大きさです。色が青いほど平均表示回数が多いです。",
     ),
   );
   wrap.appendChild(

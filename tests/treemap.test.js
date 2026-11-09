@@ -371,10 +371,10 @@ describe("genreTreemap", () => {
     const music = tiles.find((t) => t.name === "音楽");
     // グルメ has the smallest average on show, so its tile keeps
     // the plain colour; 音楽 has the largest and gets the
-    // strongest red.
+    // strongest blue.
     expect(gourmet.heat).toBeNull();
     expect(music.heat).toBe(
-      "color-mix(in srgb, #dc2626 55%, var(--surface-elevated))",
+      "color-mix(in srgb, #3b82f6 55%, var(--surface-elevated))",
     );
     // The legend carries no colour: it stays a plain figure list.
     for (const entry of legend) {
@@ -405,7 +405,7 @@ describe("genreHeatMix / genreHeatBackground", () => {
     expect(genreHeatMix(300, 100, 300)).toBe(55);
     expect(genreHeatBackground(100, 100, 300)).toBeNull();
     expect(genreHeatBackground(300, 100, 300)).toBe(
-      "color-mix(in srgb, #dc2626 55%, var(--surface-elevated))",
+      "color-mix(in srgb, #3b82f6 55%, var(--surface-elevated))",
     );
   });
 
@@ -413,7 +413,7 @@ describe("genreHeatMix / genreHeatBackground", () => {
     expect(genreHeatMix(200, 100, 300)).toBe(28);
     expect(genreHeatMix(150, 100, 300)).toBe(14);
     expect(genreHeatBackground(200, 100, 300)).toBe(
-      "color-mix(in srgb, #dc2626 28%, var(--surface-elevated))",
+      "color-mix(in srgb, #3b82f6 28%, var(--surface-elevated))",
     );
   });
 
