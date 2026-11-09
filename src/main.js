@@ -17,6 +17,8 @@ import {
   fetchSnsHistory,
   snsHistoryRows,
   snsHistorySeries,
+  threadsHistorySeries,
+  threadsTotals,
   overviewKpis,
   topMedia,
   formatCount,
@@ -106,6 +108,7 @@ const tabPanels = {
   instagram: document.getElementById("tab-instagram"),
   blog: document.getElementById("tab-blog"),
   youtube: document.getElementById("tab-youtube"),
+  threads: document.getElementById("tab-threads"),
 };
 
 function activateTab(tabId, updateHash = true) {
@@ -975,6 +978,43 @@ function renderYoutube(detail) {
   }
 }
 
+// --- Threads tab ---
+// The Threads tab reads the same two loads as the overview: the
+// current follower count from the SNS snapshot and the trend from
+// the history rows. renderSns and loadSnsHistory both call this,
+// so whichever load lands second completes the picture; data that
+// has not arrived yet shows as "—" and the chart area keeps its
+// empty-state line. Threads history only starts on 2026-11-09, so
+// for a while the chart holds a handful of points (or just one).
+
+function renderThreads() {
+  fillTotalBoxes(
+    "sns-threads-totals",
+    threadsTotals(overviewState.detail, overviewState.historyRows),
+  );
+  const wrap = document.getElementById("threads-history");
+  wrap.innerHTML = "";
+  const series = threadsHistorySeries(overviewState.historyRows);
+  if (!series.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "履歴はまだありません（取得のたびに貯まっていきます）";
+    wrap.appendChild(p);
+    return;
+  }
+  const item = series[0];
+  const head = document.createElement("p");
+  head.className = "meta";
+  head.textContent =
+    `${item.label}：最新 ${formatCount(item.latest)}` +
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  const chart = document.createElement("div");
+  chart.className = "chart-wrap";
+  chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+  wrap.appendChild(head);
+  wrap.appendChild(chart);
+}
+
 function renderSns(detail) {
   overviewState.detail = detail;
   renderOverview();
@@ -982,6 +1022,9 @@ function renderSns(detail) {
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
   document.getElementById("youtube-status").textContent = detail.collected_at
+    ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
+    : "";
+  document.getElementById("threads-status").textContent = detail.collected_at
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
   fillTotalBoxes("sns-overview", snsOverview(detail));
@@ -1079,6 +1122,7 @@ function renderSns(detail) {
   wireGenreControls();
   renderGenreTable(detail);
   renderYoutube(detail);
+  renderThreads();
   const notes = document.getElementById("sns-notes");
   notes.innerHTML = "";
   for (const note of snsErrorNotes(detail)) {
@@ -1095,7 +1139,10 @@ async function loadSns() {
   snsBodyEl.hidden = true;
   const youtubeStatusEl = document.getElementById("youtube-status");
   youtubeStatusEl.textContent = "読み込み中…";
+  const threadsStatusEl = document.getElementById("threads-status");
+  threadsStatusEl.textContent = "読み込み中…";
   renderYoutube(null);
+  renderThreads();
   try {
     const detail = await fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
     if (!detail || !detail.ok) {
@@ -1103,12 +1150,14 @@ async function loadSns() {
         (detail && detail.error) || "SNSデータを取得できませんでした";
       snsStatusEl.textContent = message;
       youtubeStatusEl.textContent = message;
+      threadsStatusEl.textContent = message;
       return;
     }
     renderSns(detail);
   } catch {
     snsStatusEl.textContent = "SNSデータを取得できませんでした";
     youtubeStatusEl.textContent = "SNSデータを取得できませんでした";
+    threadsStatusEl.textContent = "SNSデータを取得できませんでした";
   }
 }
 
@@ -1153,6 +1202,7 @@ async function loadSnsHistory() {
     renderSnsHistory(null);
   }
   renderOverview();
+  renderThreads();
 }
 
 // --- Daily chart tooltip (hover on PC, tap on touch) ---

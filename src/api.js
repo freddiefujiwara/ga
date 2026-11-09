@@ -101,7 +101,14 @@ export const SNS_HISTORY_SERIES = [
 // series also carries its latest value and the covered period
 // (first/last collected_at, ISO). Series with no numeric point at
 // all are dropped, and an empty history yields an empty list.
-export function snsHistorySeries(rows) {
+// Shared shaping behind snsHistorySeries / threadsHistorySeries:
+// one chart series per { key, label } definition, points skipping
+// the collections where that metric is missing. With
+// periodFromPoints a series' period (firstAt / lastAt) spans only
+// the rows that contributed a point; otherwise it spans the whole
+// history. Series with no numeric point at all are dropped, and an
+// empty history yields an empty list.
+function shapeHistorySeries(rows, defs, periodFromPoints) {
   if (!Array.isArray(rows)) {
     return [];
   }
@@ -116,28 +123,49 @@ export function snsHistorySeries(rows) {
   if (!sorted.length) {
     return [];
   }
-  const firstAt = sorted[0].collected_at;
-  const lastAt = sorted[sorted.length - 1].collected_at;
-  return SNS_HISTORY_SERIES.map(({ key, label }) => {
-    const points = [];
-    for (const row of sorted) {
-      const date = isNum(row[key]) ? jstDateKey(row.collected_at) : null;
-      if (date) {
-        points.push({ date, views: row[key] });
+  return defs
+    .map(({ key, label }) => {
+      const points = [];
+      const pointRows = [];
+      for (const row of sorted) {
+        const date = isNum(row[key]) ? jstDateKey(row.collected_at) : null;
+        if (date) {
+          points.push({ date, views: row[key] });
+          pointRows.push(row);
+        }
       }
-    }
-    if (!points.length) {
-      return null;
-    }
-    return {
-      key,
-      label,
-      points,
-      latest: points[points.length - 1].views,
-      firstAt,
-      lastAt,
-    };
-  }).filter(Boolean);
+      if (!points.length) {
+        return null;
+      }
+      const period = periodFromPoints ? pointRows : sorted;
+      return {
+        key,
+        label,
+        points,
+        latest: points[points.length - 1].views,
+        firstAt: period[0].collected_at,
+        lastAt: period[period.length - 1].collected_at,
+      };
+    })
+    .filter(Boolean);
+}
+
+export function snsHistorySeries(rows) {
+  return shapeHistorySeries(rows, SNS_HISTORY_SERIES, false);
+}
+
+// The Threads follower trend for the Threads tab: the same history
+// rows, a single series. Threads numbers only exist since
+// 2026-11-09, long after the other metrics, so the period spans
+// only the collections that actually carry one — the earlier rows
+// (threads_followers null) contribute no point and do not stretch
+// the stated period.
+export function threadsHistorySeries(rows) {
+  return shapeHistorySeries(
+    rows,
+    [{ key: "threads_followers", label: "Threads フォロワー" }],
+    true,
+  );
 }
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
@@ -483,6 +511,23 @@ export function youtubeTotals(detail) {
     { label: "登録者", value: formatCount(yt.subscribers) },
     { label: "総再生回数", value: formatCount(yt.total_views) },
     { label: "動画本数", value: formatCount(yt.video_count) },
+  ];
+}
+
+// Totals boxes for the Threads tab: the current follower count and
+// its change since the previous collection, taken from the history
+// rows exactly like the overview KPI deltas. Until two collections
+// carry a Threads number there is nothing to compare, so the
+// change box shows "—".
+export function threadsTotals(detail, historyRows) {
+  const th = detail?.threads ?? {};
+  const change = historyDelta(historyRows, "threads_followers");
+  return [
+    { label: "フォロワー", value: formatCount(th.followers) },
+    {
+      label: "前回比",
+      value: change ? (formatDelta(change.delta) ?? "—") : "—",
+    },
   ];
 }
 
