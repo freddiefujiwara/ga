@@ -598,6 +598,66 @@ export function snsErrorNotes(detail) {
     .filter((value) => typeof value === "string" && value.length > 0);
 }
 
+// The Instagram account's daily follows / unfollows over the last
+// 30 days, as collected for the detail's instagram section:
+// [{ date: "YYYY-MM-DD", follows, unfollows }] in ascending date
+// order, with nulls wherever a day's number could not be
+// collected. Anything that is not a list yields an empty one.
+export function instagramDailyFollows(detail) {
+  const list = detail?.instagram?.daily_follows;
+  return Array.isArray(list) ? list : [];
+}
+
+// The collection error ga-gas attaches when the daily follows
+// could not be fetched (null in the normal case); the follow
+// chart section shows it as small print when present.
+export function instagramDailyFollowsError(detail) {
+  const error = detail?.instagram?.daily_follows_error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+// Days for the Instagram tab's daily follow / unfollow chart: the
+// daily-follows series with the recent posts mapped onto the JST
+// calendar day each was posted (the day key is the "YYYYMMDD"
+// shape the chart builders take). Days ascend by date and a
+// duplicated date keeps its last entry. A value that is not a
+// finite number becomes null — a gap in the chart, not a zero.
+// Posts whose JST day falls outside the series cannot be placed
+// on it and are left out.
+export function followChartDays(detail) {
+  const media = Array.isArray(detail?.instagram?.recent_media)
+    ? detail.instagram.recent_media
+    : [];
+  const postsByDate = new Map();
+  for (const post of media) {
+    const key = post ? jstDateKey(post.posted_at) : null;
+    if (!key) {
+      continue;
+    }
+    if (!postsByDate.has(key)) {
+      postsByDate.set(key, []);
+    }
+    postsByDate.get(key).push(post);
+  }
+  const byDate = new Map();
+  for (const row of instagramDailyFollows(detail)) {
+    const key =
+      row && typeof row.date === "string" ? row.date.replace(/-/g, "") : "";
+    if (!/^\d{8}$/.test(key)) {
+      continue;
+    }
+    byDate.set(key, {
+      date: key,
+      follows: isNum(row.follows) ? row.follows : null,
+      unfollows: isNum(row.unfollows) ? row.unfollows : null,
+      posts: postsByDate.get(key) ?? [],
+    });
+  }
+  return [...byDate.values()].sort((a, b) =>
+    a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+  );
+}
+
 // --- Overview tab helpers ---
 
 // The change of one history metric between its two most recent

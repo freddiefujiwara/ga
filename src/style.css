@@ -423,6 +423,19 @@ textarea:disabled {
   font-size: 11px;
 }
 
+.follow-baseline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.unfollow-bar {
+  fill: #e0655f;
+}
+
+.follow-post-marker {
+  fill: #f0a832;
+}
+
 .chart-tooltip {
   position: fixed;
   transform: translate(-50%, -140%);

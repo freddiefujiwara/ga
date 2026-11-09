@@ -39,8 +39,15 @@ import {
   youtubeVideos,
   youtubeTotals,
   snsErrorNotes,
+  instagramDailyFollowsError,
+  followChartDays,
 } from "./api.js";
-import { buildLineChartSvg, tooltipText } from "./chart.js";
+import {
+  buildLineChartSvg,
+  buildFollowChartSvg,
+  formatDateLabel,
+  tooltipText,
+} from "./chart.js";
 import {
   genreStatsForMedia,
   genreStatsForThreads,
@@ -1411,6 +1418,87 @@ function renderThreads() {
   wrap.appendChild(chart);
 }
 
+// --- Instagram daily follows (フォロー・フォロー解除（日ごと）) ---
+// Daily follow / unfollow bars with the day's posts mapped onto
+// them. Meta only reports follows as an account-wide daily
+// number, so the overlay is by calendar day: it shows what was
+// posted on the days follows moved, never that a post caused the
+// move — the note under the chart says exactly that. The series
+// arrives with sns_detail (instagram.daily_follows); until
+// ga-gas collects it, the section shows its empty state.
+
+function renderFollowChart(detail) {
+  const wrap = document.getElementById("sns-follow-chart");
+  wrap.innerHTML = "";
+  const days = followChartDays(detail);
+  if (!days.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "データがありません";
+    wrap.appendChild(p);
+  } else {
+    const chart = document.createElement("div");
+    chart.className = "chart-wrap";
+    chart.innerHTML = buildFollowChartSvg(days);
+    wrap.appendChild(chart);
+    const legend = document.createElement("p");
+    legend.className = "meta";
+    legend.textContent =
+      "青い棒がフォロー、赤い棒がフォロー解除です。▼は投稿があった日です。";
+    wrap.appendChild(legend);
+    const postedDays = days.filter((day) => day.posts.length);
+    if (postedDays.length) {
+      const head = document.createElement("h4");
+      head.className = "demo-list-title";
+      head.textContent = "投稿があった日";
+      wrap.appendChild(head);
+      for (const day of [...postedDays].reverse()) {
+        const dayLine = document.createElement("p");
+        dayLine.className = "meta";
+        dayLine.textContent =
+          `${formatDateLabel(day.date)}：フォロー ${formatCount(day.follows)}` +
+          ` · フォロー解除 ${formatCount(day.unfollows)}`;
+        wrap.appendChild(dayLine);
+        const list = document.createElement("ul");
+        list.className = "ranking";
+        for (const media of day.posts) {
+          const li = document.createElement("li");
+          const label =
+            captionHead(media.caption) || mediaTypeLabel(media.type) || "投稿";
+          if (media.permalink) {
+            const link = document.createElement("a");
+            link.href = media.permalink;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = label;
+            li.appendChild(link);
+          } else {
+            li.textContent = label;
+          }
+          const span = document.createElement("span");
+          span.className = "rank-value";
+          span.textContent = formatCount(media.views);
+          li.appendChild(span);
+          list.appendChild(li);
+        }
+        wrap.appendChild(list);
+      }
+    }
+    const note = document.createElement("p");
+    note.className = "meta";
+    note.textContent =
+      "フォロー数はアカウント全体の数字です。投稿との対応は日付による重ね合わせで、どの投稿がきっかけかまでは分かりません。";
+    wrap.appendChild(note);
+  }
+  const error = instagramDailyFollowsError(detail);
+  if (error) {
+    const p = document.createElement("p");
+    p.className = "meta sns-note";
+    p.textContent = `※ ${error}`;
+    wrap.appendChild(p);
+  }
+}
+
 function renderSns(detail) {
   overviewState.detail = detail;
   renderOverview();
@@ -1502,6 +1590,7 @@ function renderSns(detail) {
   const demo = detail?.instagram?.demographics ?? {};
   fillDemoRanking("sns-cities", topDemographics(demo.top_cities));
   fillDemoRanking("sns-countries", topDemographics(demo.top_countries));
+  renderFollowChart(detail);
   snsMediaRows = Array.isArray(detail?.instagram?.recent_media)
     ? detail.instagram.recent_media
     : [];
