@@ -933,3 +933,30 @@ export function blogGenreStats(response, tags, titles, origin) {
     }))
     .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count);
 }
+
+// Per-article rows for the blog tab's 記事ごと table, the blog
+// counterpart of the Instagram tab's per-post table:
+// [{ id, title, href, views, tags }] sorted by views, biggest
+// first (title order breaks ties). Views are the same merged
+// per-article counts blogGenreStats rolls up, so the two sections
+// always agree. `tags` is the article's genre list under the
+// rollup's convention: the tag map's list when it has one, and
+// [UNTAGGED_LABEL] when the map exists but does not cover the
+// article. When there is no tag map at all, tags is empty — the
+// genre is unknown, not "untagged" — and the caller shows "—"
+// and offers no genre filter.
+export function blogArticleList(response, tags, titles, origin) {
+  const hasMap = Boolean(tags) && typeof tags.get === "function" && tags.size > 0;
+  return articlePageViews(response)
+    .map(({ id, views }) => {
+      const own = hasMap ? tags.get(id) : null;
+      return {
+        id,
+        title: (titles && titles.get(id)) || id,
+        href: `${origin}/blog/${id}`,
+        views,
+        tags: !hasMap ? [] : Array.isArray(own) && own.length ? [...own] : [UNTAGGED_LABEL],
+      };
+    })
+    .sort((a, b) => b.views - a.views || a.title.localeCompare(b.title));
+}
