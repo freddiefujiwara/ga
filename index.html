@@ -17,7 +17,7 @@
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/ga/assets/index-DNW3jwBR.js"></script>
+    <script type="module" crossorigin src="/ga/assets/index-BePNmUv8.js"></script>
     <link rel="stylesheet" crossorigin href="/ga/assets/index-DXkpzJy3.css">
   </head>
   <body>
@@ -180,6 +180,24 @@
               <h2 class="section-title">ジャンル（タグ）別</h2>
               <div id="blog-genres"></div>
               <p class="meta">記事のタグごとに、直近28日間の表示回数を集計しています。タグが複数ある記事は、それぞれのタグに数えます。</p>
+            </section>
+            <section class="table-wrap">
+              <h2 class="section-title">記事ごと</h2>
+              <p class="meta" id="blog-article-range"></p>
+              <div class="tabs genre-filter" id="blog-article-genre-tabs" role="tablist" aria-label="ジャンルで絞り込み"></div>
+              <div class="table-scroll">
+                <table class="data-table" id="blog-article-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-sort-key="title">タイトル</th>
+                      <th>ジャンル</th>
+                      <th class="num sortable" data-sort-key="views">表示回数</th>
+                    </tr>
+                  </thead>
+                  <tbody id="blog-article-body"></tbody>
+                </table>
+              </div>
+              <p class="meta">ジャンルは記事のタグです。タグが複数ある記事は、それぞれのジャンルの絞り込みに現れます。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">参照元 上位8件</h2>
