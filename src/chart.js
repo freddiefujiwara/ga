@@ -89,7 +89,11 @@ export function buildLineChartSvg(points, options = {}) {
 // null value draws no bar — a gap, not a zero. Days carrying
 // posts get a small triangle marker above the follow bar, so a
 // follow spike can be eyeballed against what was posted that
-// day. Days are the followChartDays shape:
+// day; those days also get a transparent, full-column hit rect
+// (class "follow-day-hit", with data-date) drawn last in the
+// column so main.js can turn a tap anywhere on the column into
+// a jump to that day's entry in the posted-days list below.
+// Days are the followChartDays shape:
 // { date: "YYYYMMDD", follows, unfollows, posts }.
 // Pure string building, like buildLineChartSvg.
 export function buildFollowChartSvg(days, options = {}) {
@@ -134,7 +138,10 @@ export function buildFollowChartSvg(days, options = {}) {
     if (Array.isArray(day.posts) && day.posts.length > 0) {
       const my = Math.max(round(barTop) - 11, 2);
       parts.push(
-        `<path class="follow-post-marker" d="M ${round(cx - 5)},${my} L ${round(cx + 5)},${my} L ${round(cx)},${my + 6} Z"/>`,
+        `<path class="follow-post-marker" data-date="${day.date}" d="M ${round(cx - 5)},${my} L ${round(cx + 5)},${my} L ${round(cx)},${my + 6} Z"/>`,
+      );
+      parts.push(
+        `<rect class="follow-day-hit" data-date="${day.date}" x="${round(pad + slot * i)}" y="0" width="${round(slot)}" height="${height}"/>`,
       );
     }
   });

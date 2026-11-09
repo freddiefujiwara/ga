@@ -1426,6 +1426,30 @@ function renderThreads() {
 // move — the note under the chart says exactly that. The series
 // arrives with sns_detail (instagram.daily_follows); until
 // ga-gas collects it, the section shows its empty state.
+//
+// Tapping a posted day's column in the chart (the ▼ marker or
+// anywhere on the column — buildFollowChartSvg gives those days
+// a full-column hit rect) scrolls to that day's entry in the
+// list below and highlights both the entry and the column until
+// another day is picked.
+
+function jumpToFollowDay(wrap, date) {
+  for (const el of wrap.querySelectorAll(".follow-day-hit.selected")) {
+    el.classList.remove("selected");
+  }
+  for (const el of wrap.querySelectorAll(".follow-day-entry.highlight")) {
+    el.classList.remove("highlight");
+  }
+  const hit = wrap.querySelector(`.follow-day-hit[data-date="${date}"]`);
+  if (hit) {
+    hit.classList.add("selected");
+  }
+  const entry = wrap.querySelector(`.follow-day-entry[data-date="${date}"]`);
+  if (entry) {
+    entry.classList.add("highlight");
+    entry.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 
 function renderFollowChart(detail) {
   const wrap = document.getElementById("sns-follow-chart");
@@ -1440,11 +1464,17 @@ function renderFollowChart(detail) {
     const chart = document.createElement("div");
     chart.className = "chart-wrap";
     chart.innerHTML = buildFollowChartSvg(days);
+    chart.addEventListener("click", (event) => {
+      const hit = event.target.closest?.("[data-date]");
+      if (hit) {
+        jumpToFollowDay(wrap, hit.dataset.date);
+      }
+    });
     wrap.appendChild(chart);
     const legend = document.createElement("p");
     legend.className = "meta";
     legend.textContent =
-      "青い棒がフォロー、赤い棒がフォロー解除です。▼は投稿があった日です。";
+      "青い棒がフォロー、赤い棒がフォロー解除です。▼は投稿があった日です。▼や棒を押すと、その日の投稿に飛びます。";
     wrap.appendChild(legend);
     const postedDays = days.filter((day) => day.posts.length);
     if (postedDays.length) {
@@ -1453,12 +1483,15 @@ function renderFollowChart(detail) {
       head.textContent = "投稿があった日";
       wrap.appendChild(head);
       for (const day of [...postedDays].reverse()) {
+        const entry = document.createElement("div");
+        entry.className = "follow-day-entry";
+        entry.dataset.date = day.date;
         const dayLine = document.createElement("p");
         dayLine.className = "meta";
         dayLine.textContent =
           `${formatDateLabel(day.date)}：フォロー ${formatCount(day.follows)}` +
           ` · フォロー解除 ${formatCount(day.unfollows)}`;
-        wrap.appendChild(dayLine);
+        entry.appendChild(dayLine);
         const list = document.createElement("ul");
         list.className = "ranking";
         for (const media of day.posts) {
@@ -1481,7 +1514,8 @@ function renderFollowChart(detail) {
           li.appendChild(span);
           list.appendChild(li);
         }
-        wrap.appendChild(list);
+        entry.appendChild(list);
+        wrap.appendChild(entry);
       }
     }
     const note = document.createElement("p");
