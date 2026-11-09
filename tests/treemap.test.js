@@ -3,6 +3,8 @@ import {
   channelAudiences,
   channelBars,
   deltaTone,
+  genreHeatBackground,
+  genreHeatMix,
   genreTreemap,
   hasLabelRoom,
   squarifiedLayout,
@@ -361,5 +363,74 @@ describe("genreTreemap", () => {
   it("tolerates junk input", () => {
     expect(genreTreemap(null, pick)).toEqual({ tiles: [], legend: [] });
     expect(genreTreemap([], pick)).toEqual({ tiles: [], legend: [] });
+  });
+
+  it("heats the tiles from the smallest to the largest average", () => {
+    const { tiles, legend } = genreTreemap(rows, pick);
+    const gourmet = tiles.find((t) => t.name === "グルメ");
+    const music = tiles.find((t) => t.name === "音楽");
+    // グルメ has the smallest average on show, so its tile keeps
+    // the plain colour; 音楽 has the largest and gets the
+    // strongest red.
+    expect(gourmet.heat).toBeNull();
+    expect(music.heat).toBe(
+      "color-mix(in srgb, #dc2626 55%, var(--surface-elevated))",
+    );
+    // The legend carries no colour: it stays a plain figure list.
+    for (const entry of legend) {
+      expect(entry.heat).toBeUndefined();
+    }
+  });
+
+  it("leaves every tile plain when all averages are equal", () => {
+    const flat = [
+      { genre: "グルメ", totalViews: 1000, avgViews: 1000 },
+      { genre: "音楽", totalViews: 2000, avgViews: 1000 },
+    ];
+    const { tiles } = genreTreemap(flat, pick);
+    expect(tiles.length).toBe(2);
+    expect(tiles.every((t) => t.heat === null)).toBe(true);
+  });
+
+  it("leaves a lone genre's tile plain", () => {
+    const { tiles } = genreTreemap([rows[0]], pick);
+    expect(tiles.length).toBe(1);
+    expect(tiles[0].heat).toBeNull();
+  });
+});
+
+describe("genreHeatMix / genreHeatBackground", () => {
+  it("sits at 0 for the smallest average and at the cap for the largest", () => {
+    expect(genreHeatMix(100, 100, 300)).toBe(0);
+    expect(genreHeatMix(300, 100, 300)).toBe(55);
+    expect(genreHeatBackground(100, 100, 300)).toBeNull();
+    expect(genreHeatBackground(300, 100, 300)).toBe(
+      "color-mix(in srgb, #dc2626 55%, var(--surface-elevated))",
+    );
+  });
+
+  it("shades the middle smoothly", () => {
+    expect(genreHeatMix(200, 100, 300)).toBe(28);
+    expect(genreHeatMix(150, 100, 300)).toBe(14);
+    expect(genreHeatBackground(200, 100, 300)).toBe(
+      "color-mix(in srgb, #dc2626 28%, var(--surface-elevated))",
+    );
+  });
+
+  it("has no scale when every value is equal or there is only one", () => {
+    expect(genreHeatMix(100, 100, 100)).toBeNull();
+    expect(genreHeatBackground(100, 100, 100)).toBeNull();
+  });
+
+  it("has no colour for a missing average", () => {
+    expect(genreHeatMix(null, 100, 300)).toBeNull();
+    expect(genreHeatMix(undefined, 100, 300)).toBeNull();
+    expect(genreHeatMix(NaN, 100, 300)).toBeNull();
+    expect(genreHeatBackground(null, 100, 300)).toBeNull();
+  });
+
+  it("clamps averages outside the range", () => {
+    expect(genreHeatMix(50, 100, 300)).toBe(0);
+    expect(genreHeatMix(999, 100, 300)).toBe(55);
   });
 });
