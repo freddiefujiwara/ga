@@ -7,16 +7,20 @@ import {
   filterMediaByGenre,
   filterMediaByPeriod,
   filterThreadsByGenre,
+  filterXByGenre,
   formatRate,
   genreAverageBars,
   genreStatsForMedia,
   genreStatsForThreads,
+  genreStatsForX,
   instagramGenreStats,
   mediaDateRange,
   mediaGenreOptions,
   sortGenreRows,
   threadsGenreOptions,
   threadsGenreStats,
+  xGenreOptions,
+  xGenreStats,
 } from "../src/genres.js";
 
 // Captions in the shape of the account's real posts (shortened),
@@ -419,6 +423,107 @@ describe("threads genre rollup / filter", () => {
 
   it("a post without a view count still counts, with a null average share", () => {
     const rows = genreStatsForThreads([post("今日の空", null)]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].count).toBe(1);
+    expect(rows[0].totalViews).toBe(0);
+    expect(rows[0].avgViews).toBeNull();
+    expect(rows[0].top).toBeNull();
+  });
+});
+
+describe("x genre rollup / filter", () => {
+  // X posts in the shape social-gas collects (via tweet-gas):
+  // the words live in `text`, the link in `url`, the numbers
+  // are lifetime counts, and there is no saves figure.
+  const post = (text, views, likes = null) => ({
+    text,
+    views,
+    likes,
+    reposts: 0,
+    replies: 0,
+    url: "https://x.com/i/web/status/2001",
+  });
+  const posts = [
+    post("川口でラーメン450円 #川口グルメ", 9000, 90),
+    post("カレーの店に行った", 1000, 10),
+    post("川口から御茶ノ水まで、自転車で何分？", 3000, 30),
+    post("朝の散歩、芝川沿い", 2000, null),
+    post("新しい曲を作りました #Suno", 500, 5),
+    post("今日の空", 100, 1),
+    null,
+  ];
+
+  it("rolls the posts up by genre over their text", () => {
+    const rows = genreStatsForX(posts);
+    // Order follows the shared rollup: total views, biggest first.
+    expect(rows.map((row) => row.genre)).toEqual([
+      "グルメ",
+      "サイクリング",
+      "街歩き・スポット",
+      "音楽",
+      "日常・その他",
+    ]);
+    const gourmet = rows[0];
+    expect(gourmet.count).toBe(2);
+    expect(gourmet.totalViews).toBe(10000);
+    expect(gourmet.avgViews).toBe(5000);
+    // likeRate averages likes/views over the posts that have both.
+    expect(gourmet.likeRate).toBeCloseTo((90 / 9000 + 10 / 1000) / 2);
+    // X posts carry no saves, so saveRate stays null.
+    expect(gourmet.saveRate).toBeNull();
+    // The top post is titled by the head of its text, and its
+    // link is the post's url (X posts carry no permalink).
+    expect(gourmet.top.views).toBe(9000);
+    expect(gourmet.top.title).toContain("川口でラーメン450円");
+    expect(gourmet.top.permalink).toBe("https://x.com/i/web/status/2001");
+  });
+
+  it("xGenreStats reads the snapshot's x section", () => {
+    const detail = { x: { recent_posts: posts } };
+    expect(xGenreStats(detail)).toEqual(genreStatsForX(posts));
+    expect(xGenreStats(null)).toEqual([]);
+    expect(xGenreStats({})).toEqual([]);
+    expect(xGenreStats({ x: {} })).toEqual([]);
+    expect(genreStatsForX(null)).toEqual([]);
+    expect(genreStatsForX([])).toEqual([]);
+  });
+
+  it("classifies with the shared rules: hashtags first, shop before cycling", () => {
+    // A genre hashtag wins over the body words, like Instagram.
+    const tagged = [post("ラーメンを食べた #サイクリング", 10)];
+    expect(filterXByGenre(tagged, "サイクリング")).toHaveLength(1);
+    expect(filterXByGenre(tagged, "グルメ")).toEqual([]);
+    // A ride to a curry shop is グルメ, not サイクリング.
+    const ride = [post("自転車でカレーの店へ行った", 10)];
+    expect(filterXByGenre(ride, "グルメ")).toHaveLength(1);
+  });
+
+  it("button counts always match the genre rollup", () => {
+    const options = xGenreOptions(posts);
+    const stats = genreStatsForX(posts);
+    expect(options).toEqual(
+      stats.map((row) => ({ genre: row.genre, count: row.count })),
+    );
+    expect(xGenreOptions(null)).toEqual([]);
+    expect(xGenreOptions([])).toEqual([]);
+  });
+
+  it("the filter keeps exactly the posts each button counts", () => {
+    for (const option of xGenreOptions(posts)) {
+      expect(filterXByGenre(posts, option.genre)).toHaveLength(option.count);
+    }
+    const total = xGenreOptions(posts).reduce(
+      (sum, option) => sum + option.count,
+      0,
+    );
+    expect(total).toBe(6);
+    expect(filterXByGenre(posts, null)).toHaveLength(6);
+    expect(filterXByGenre(posts, undefined)).toHaveLength(6);
+    expect(filterXByGenre(null, null)).toEqual([]);
+  });
+
+  it("a post without a view count still counts, with a null average share", () => {
+    const rows = genreStatsForX([post("今日の空", null)]);
     expect(rows).toHaveLength(1);
     expect(rows[0].count).toBe(1);
     expect(rows[0].totalViews).toBe(0);

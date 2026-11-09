@@ -538,3 +538,68 @@ export function filterThreadsByGenre(posts, genre) {
   }
   return list.filter((post) => classifyCaption(post.text ?? "") === genre);
 }
+
+// --- X genre rollup ---
+// The same adaptation as Threads, for the same reason: an X
+// post carries its words in `text` rather than `caption` and
+// its numbers are lifetime counts, so there is no period
+// window, and the genre judgement is the shared one. One field
+// differs: an X post links out through `url`, not `permalink`,
+// so the adapter also maps the link across — the shared rollup
+// reads `permalink` for its top post, and with the mapping the
+// genre table's top entry links to the post itself like the
+// other channels'.
+
+// Per-genre rollup of an X post list: the same rows
+// genreStatsForMedia produces ([{ genre, count, totalViews,
+// avgViews, saveRate, likeRate, top }]), with the views read
+// as 表示 counts. X posts carry no saves, so saveRate stays
+// null; likeRate is the real per-post average of likes/views.
+// The top post's title is the head of its text, and its link
+// is the post's url.
+export function genreStatsForX(posts) {
+  const list = (Array.isArray(posts) ? posts : []).map((post) =>
+    post
+      ? {
+          ...post,
+          caption: post.text ?? "",
+          permalink: post.permalink ?? post.url ?? null,
+        }
+      : post,
+  );
+  return genreStatsForMedia(list);
+}
+
+// The rollup over the snapshot's X section.
+export function xGenreStats(detail) {
+  const posts = Array.isArray(detail?.x?.recent_posts)
+    ? detail.x.recent_posts
+    : [];
+  return genreStatsForX(posts);
+}
+
+// The genre filter of the X per-post table: one entry per
+// genre that actually has posts, in the rollup's order (total
+// views, biggest first) so the buttons line up with the genre
+// section above them: [{ genre, count }].
+export function xGenreOptions(posts) {
+  return genreStatsForX(posts).map((row) => ({
+    genre: row.genre,
+    count: row.count,
+  }));
+}
+
+// The posts of one genre for the X table's genre filter. A
+// null/undefined genre means "no filter" (the すべて button):
+// every usable post comes back. Otherwise a post stays only
+// when the genre the shared classifier gives its text equals
+// the requested one exactly — the same judgement the rollup
+// makes, so the button counts and the filtered rows always
+// agree. Null entries are skipped either way.
+export function filterXByGenre(posts, genre) {
+  const list = (Array.isArray(posts) ? posts : []).filter((post) => post);
+  if (genre === null || genre === undefined) {
+    return list;
+  }
+  return list.filter((post) => classifyCaption(post.text ?? "") === genre);
+}
