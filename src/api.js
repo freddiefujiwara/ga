@@ -231,6 +231,29 @@ export function formatJstDate(iso) {
   return date && !Number.isNaN(date.getTime()) ? jstDate.format(date) : "—";
 }
 
+const jstDateTimePadded = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+// The "as of" line shown above the tabs: when the collection
+// behind every figure on the page ran, in JST, zero-padded
+// ("データは 2026/11/09 18:50 時点のものです"). Returns "" when
+// the timestamp is missing or unparseable, so the caller can
+// leave the line blank instead of showing a placeholder.
+export function dataAsOfText(collectedAt) {
+  const date = collectedAt ? new Date(collectedAt) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return `データは ${jstDateTimePadded.format(date)} 時点のものです`;
+}
+
 // The combined follower total shown on the top page: the main
 // Instagram account, Threads and YouTube. The secondary Instagram
 // account (@anemone_cancer) is deliberately not part of the sum.
