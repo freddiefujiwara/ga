@@ -171,8 +171,21 @@ describe("channelAudiences", () => {
 
   it("tolerates missing sources entirely", () => {
     const entries = channelAudiences(null, null, null);
-    expect(entries.map((e) => e.id)).toEqual(["instagram", "blog", "youtube", "threads"]);
+    expect(entries.map((e) => e.id)).toEqual(["instagram", "blog", "youtube", "threads", "x"]);
     expect(entries.every((e) => e.value === null && e.delta === null)).toBe(true);
+  });
+
+  it("marks X as 集計待ち while its followers are unknown, then joins the bars", () => {
+    const entries = Object.fromEntries(
+      channelAudiences(DETAIL, GA_TOTALS, HISTORY2).map((e) => [e.id, e]),
+    );
+    expect(entries.x).toMatchObject({ value: null, valueLabel: "—", note: "集計待ち" });
+
+    const detail = { ...DETAIL, x: { followers: 321 } };
+    const joined = Object.fromEntries(
+      channelAudiences(detail, GA_TOTALS, HISTORY2).map((e) => [e.id, e]),
+    );
+    expect(joined.x).toMatchObject({ value: 321, valueLabel: "321", note: null });
   });
 });
 
@@ -184,6 +197,7 @@ describe("channelBars", () => {
       "blog",
       "youtube",
       "threads",
+      "x",
     ]);
     const byId = Object.fromEntries(bars.map((bar) => [bar.id, bar]));
     expect(byId.instagram.pct).toBe(100);
@@ -224,7 +238,7 @@ describe("channelBars", () => {
 
   it("returns empty bars when nothing has been collected yet", () => {
     const bars = channelBars(null, null, null);
-    expect(bars).toHaveLength(4);
+    expect(bars).toHaveLength(5);
     expect(bars.every((bar) => bar.pct === 0)).toBe(true);
   });
 });
