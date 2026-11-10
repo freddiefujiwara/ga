@@ -574,7 +574,7 @@ describe("channel separation of the Instagram tab cards", () => {
     const labels = overviewKpis(DETAIL, null, []).map((c) => c.label);
     expect(labels).toContain("SNS延べフォロワー数");
     expect(labels).toContain("YouTube 登録者");
-    // Threads reaches the overview through the channel bars; the
+    // Threads reaches the overview through the channel tiles; the
     // combined total it feeds is the SNS延べフォロワー数 above.
   });
 });

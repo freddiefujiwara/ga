@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   channelAudiences,
-  channelBars,
+  channelTreemap,
   deltaTone,
   genreHeatBackground,
   genreHeatMix,
@@ -189,59 +189,151 @@ describe("channelAudiences", () => {
   });
 });
 
-describe("channelBars", () => {
-  it("scales bar lengths to the largest channel, in fixed order", () => {
-    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
-    expect(bars.map((bar) => bar.id)).toEqual([
+describe("channelTreemap", () => {
+  // All four SNS channels collected. Combined followers:
+  // 1991 + 9 + 250 + 1800 = 4050.
+  const FULL_DETAIL = {
+    ...DETAIL,
+    threads: { followers: 250 },
+    x: { followers: 1800 },
+  };
+
+  it("tiles only the four SNS channels, sized by follower count", () => {
+    const { tiles, legend } = channelTreemap(FULL_DETAIL, HISTORY2);
+    // The blog is not a tile: its GA user count is not a
+    // follower count. The legend keeps the fixed channel order.
+    expect(legend.map((entry) => entry.id)).toEqual([
       "instagram",
-      "blog",
       "youtube",
       "threads",
       "x",
     ]);
-    const byId = Object.fromEntries(bars.map((bar) => [bar.id, bar]));
-    expect(byId.instagram.pct).toBe(100);
-    expect(byId.blog.pct).toBeCloseTo((678 / 1991) * 100, 1);
-    expect(byId.youtube.pct).toBeCloseTo((9 / 1991) * 100, 1);
+    expect(tiles.map((tile) => tile.id).sort()).toEqual([
+      "instagram",
+      "threads",
+      "x",
+      "youtube",
+    ]);
+    const totalArea = tiles.reduce((sum, tile) => sum + tile.w * tile.h, 0);
+    expect(totalArea).toBeCloseTo(10000, 6);
+    const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
+    // Area is proportional to the follower count.
+    expect((byId.instagram.w * byId.instagram.h) / (byId.youtube.w * byId.youtube.h)).toBeCloseTo(
+      1991 / 9,
+      3,
+    );
     expect(byId.instagram.valueLabel).toBe("1,991");
   });
 
-  it("colours bars by the direction of the change", () => {
-    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
-    const byId = Object.fromEntries(bars.map((bar) => [bar.id, bar]));
-    expect(byId.instagram.tone).toBe("up");
-    expect(byId.youtube.tone).toBe("up");
-    // The blog has no history, so it stays neutral.
-    expect(byId.blog.tone).toBe("neutral");
+  it("carries each channel's share of the combined followers", () => {
+    const { tiles, legend } = channelTreemap(FULL_DETAIL, HISTORY2);
+    const byId = Object.fromEntries(legend.map((entry) => [entry.id, entry]));
+    expect(byId.instagram.share).toBeCloseTo(49.2, 5);
+    expect(byId.instagram.shareLabel).toBe("全体の 49.2%");
+    expect(byId.x.share).toBeCloseTo(44.4, 5);
+    expect(byId.threads.share).toBeCloseTo(6.2, 5);
+    expect(byId.youtube.share).toBeCloseTo(0.2, 5);
+    // The tiles carry the same share as the legend.
+    const tileById = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
+    expect(tileById.instagram.shareLabel).toBe("全体の 49.2%");
+  });
+
+  it("tones the change since the previous collection", () => {
+    const { legend } = channelTreemap(FULL_DETAIL, HISTORY2);
+    const byId = Object.fromEntries(legend.map((entry) => [entry.id, entry]));
+    expect(byId.instagram).toMatchObject({ delta: 4, deltaLabel: "+4", tone: "up" });
+    expect(byId.youtube).toMatchObject({ delta: 1, deltaLabel: "+1", tone: "up" });
+    // The history has no Threads / X points yet: nothing to
+    // compare, so no delta line and a neutral tone.
+    expect(byId.threads).toMatchObject({ delta: null, deltaLabel: null, tone: "neutral" });
+    expect(byId.x).toMatchObject({ delta: null, deltaLabel: null, tone: "neutral" });
 
     const shrinking = [
       HISTORY2[0],
       { ...HISTORY2[1], ig_followers: 1980, youtube_subscribers: 9 },
     ];
-    const shrunk = channelBars(DETAIL, GA_TOTALS, shrinking);
-    const shrunkById = Object.fromEntries(shrunk.map((bar) => [bar.id, bar]));
-    expect(shrunkById.instagram.tone).toBe("down");
-    expect(shrunkById.youtube.tone).toBe("neutral");
+    const shrunk = Object.fromEntries(
+      channelTreemap(FULL_DETAIL, shrinking).legend.map((entry) => [entry.id, entry]),
+    );
+    expect(shrunk.instagram.tone).toBe("down");
+    expect(shrunk.youtube.tone).toBe("neutral");
   });
 
-  it("keeps Threads as an empty 集計待ち bar until followers arrive", () => {
-    const bars = channelBars(DETAIL, GA_TOTALS, HISTORY2);
-    const threads = bars.find((bar) => bar.id === "threads");
-    expect(threads).toMatchObject({ value: null, pct: 0, note: "集計待ち" });
-
-    const detail = { ...DETAIL, threads: { followers: 500 } };
-    const withThreads = channelBars(detail, GA_TOTALS, HISTORY2);
-    const joined = withThreads.find((bar) => bar.id === "threads");
-    expect(joined).toMatchObject({ value: 500, valueLabel: "500", note: null });
-    expect(joined.pct).toBeCloseTo((500 / 1991) * 100, 1);
+  it("heats the tiles on the genre tiles' blue scale, by follower count", () => {
+    const { tiles, legend } = channelTreemap(FULL_DETAIL, HISTORY2);
+    const byId = Object.fromEntries(tiles.map((tile) => [tile.id, tile]));
+    // Instagram has the largest count and gets the strongest
+    // blue; YouTube has the smallest and keeps the plain colour.
+    expect(byId.instagram.heat).toBe(
+      "color-mix(in srgb, #3b82f6 55%, var(--surface-elevated))",
+    );
+    expect(byId.x.heat).toBe(
+      "color-mix(in srgb, #3b82f6 50%, var(--surface-elevated))",
+    );
+    expect(byId.threads.heat).toBe(
+      "color-mix(in srgb, #3b82f6 7%, var(--surface-elevated))",
+    );
+    expect(byId.youtube.heat).toBeNull();
+    // The legend carries no colour.
+    for (const entry of legend) {
+      expect(entry.heat).toBeUndefined();
+    }
   });
 
-  it("returns empty bars when nothing has been collected yet", () => {
-    const bars = channelBars(null, null, null);
-    expect(bars).toHaveLength(5);
-    expect(bars.every((bar) => bar.pct === 0)).toBe(true);
+  it("keeps uncollected channels in the legend only, as 集計待ち", () => {
+    const { tiles, legend } = channelTreemap(DETAIL, HISTORY2);
+    // DETAIL has no Threads / X followers yet.
+    expect(tiles.map((tile) => tile.id)).toEqual(["instagram", "youtube"]);
+    const byId = Object.fromEntries(legend.map((entry) => [entry.id, entry]));
+    expect(byId.threads).toMatchObject({
+      value: null,
+      note: "集計待ち",
+      share: null,
+      shareLabel: null,
+    });
+    expect(byId.x).toMatchObject({ value: null, note: "集計待ち", share: null });
+  });
+
+  it("stamps every tile with the level its own size earns", () => {
+    const { tiles } = channelTreemap(FULL_DETAIL, HISTORY2);
+    expect(tiles.length).toBeGreaterThan(0);
+    for (const tile of tiles) {
+      expect(tile.labelLevel).toBe(tileLabelLevel(tile));
+      expect(tile.labelRoom).toBe(tile.labelLevel !== "none");
+    }
+  });
+
+  it("leaves a lone channel's tile plain and gives it the whole box", () => {
+    const { tiles, legend } = channelTreemap(
+      { instagram: { freddiefujiwara: 100 } },
+      null,
+    );
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0]).toMatchObject({
+      id: "instagram",
+      heat: null,
+      share: 100,
+      shareLabel: "全体の 100%",
+    });
+    expect(tiles[0].w * tiles[0].h).toBeCloseTo(10000, 6);
+    expect(legend).toHaveLength(4);
+  });
+
+  it("tolerates missing sources entirely", () => {
+    const { tiles, legend } = channelTreemap(null, null);
+    expect(tiles).toEqual([]);
+    expect(legend.map((entry) => entry.id)).toEqual([
+      "instagram",
+      "youtube",
+      "threads",
+      "x",
+    ]);
+    expect(
+      legend.every((entry) => entry.value === null && entry.share === null),
+    ).toBe(true);
   });
 });
+
 
 describe("deltaTone / hasLabelRoom", () => {
   it("maps the change direction to a tone", () => {
