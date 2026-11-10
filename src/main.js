@@ -348,27 +348,48 @@ async function loadDashboard() {
   // restate the privacy masking for it (a share session suspends
   // masking and hides the toggle).
   renderPrivacy();
+  // Every request the dashboard needs is independent — a different
+  // action or report shape off the same bridge — so they all
+  // start here, in parallel, instead of queueing behind each
+  // other. What a section waits for is only its own data: the
+  // dashboard itself is revealed as soon as the GA totals land
+  // (that response doubles as the auth verdict), and the other
+  // sections fill in as their own responses arrive.
   // Article titles come from the blog RSS feed; fetched in parallel
   // and never allowed to block (or break) the numbers.
   const titlesPromise = fetchArticleTitles(CONFIG.BLOG_RSS_URL);
   // The article tag map comes from the blog API's titles payload;
   // same treatment: parallel, tolerant, display-only.
   const metaPromise = fetchBlogMeta(CONFIG.BLOG_TITLES_URL);
-  const [totals, daily, pages, sources] = await Promise.all([
-    fetchReport(CONFIG.GAS_ENDPOINT, auth(), { dimensions: "" }),
-    fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
-      dimensions: "date",
-      metrics: "screenPageViews",
-      limit: 40,
-    }),
-    // Fetch well past the top 10: the same article can be split
-    // across two page paths, and the rows are merged before ranking.
-    fetchReport(CONFIG.GAS_ENDPOINT, auth(), { limit: 250 }),
-    fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
-      dimensions: "sessionDefaultChannelGroup",
-      limit: 8,
-    }),
-  ]);
+  const totalsPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    dimensions: "",
+  });
+  const dailyPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    dimensions: "date",
+    metrics: "screenPageViews",
+    limit: 40,
+  });
+  // Fetch well past the top 10: the same article can be split
+  // across two page paths, and the rows are merged before ranking.
+  const pagesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    limit: 250,
+  });
+  const sourcesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    dimensions: "sessionDefaultChannelGroup",
+    limit: 8,
+  });
+  // The SNS snapshot and history start now too, alongside the GA
+  // reports; their loaders are only invoked once the totals check
+  // below has passed, so a dead session never renders into a
+  // dashboard that stays hidden. The no-op catches keep a
+  // rejection from surfacing as unhandled when that check fails
+  // first and the loaders never run; a loader's own catch still
+  // sees the rejection when it does run.
+  const detailPromise = fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
+  detailPromise.catch(() => {});
+  const historyPromise = fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth());
+  historyPromise.catch(() => {});
+  const totals = await totalsPromise;
   if (!totals.ok) {
     if (shareToken) {
       showExpired();
@@ -385,28 +406,99 @@ async function loadDashboard() {
   document.getElementById("total-users").textContent = t.users.toLocaleString();
   document.getElementById("total-sessions").textContent =
     t.sessions.toLocaleString();
-  // The blog's daily figures are 28-day GA rollups that no
-  // public page prints, so the chart's max label masks like
-  // the other charts'.
-  document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
-    dailySeries(daily),
+  // The totals are in, so the session is good: reveal the
+  // dashboard now and let the remaining sections fill in as
+  // their responses land, instead of holding the loading screen
+  // until the slowest request finishes.
+  loadingEl.hidden = true;
+  gateEl.hidden = true;
+  expiredEl.hidden = true;
+  dashboardEl.hidden = false;
+  logoutBtn.hidden = !idToken;
+  shareCardEl.hidden = !idToken;
+  // The dashboard is up, so the session kind is settled: the
+  // privacy toggle may appear (unless this is a share session,
+  // where renderPrivacy keeps it hidden).
+  sessionSettled = true;
+  renderPrivacy();
+  // The SNS section loads on its own: a failure there must not take
+  // the GA dashboard down with it.
+  loadSns(detailPromise);
+  loadSnsHistory(historyPromise);
+  loadBlogSections(
+    dailyPromise,
+    pagesPromise,
+    sourcesPromise,
+    titlesPromise,
+    metaPromise,
   );
-  wireChartTooltip();
-  const renderRanking = (elId, response, limit) => {
-    const list = document.getElementById(elId);
-    list.innerHTML = "";
-    for (const item of dimensionRanking(response, limit)) {
-      const li = document.createElement("li");
-      li.textContent = item.name;
-      const span = document.createElement("span");
-      // Blog-tab figures are unpublished GA rollups: masked
-      // like every other raw count.
-      span.className = "rank-value amount-value";
-      span.textContent = item.views.toLocaleString();
-      li.appendChild(span);
-      list.appendChild(li);
-    }
-  };
+  return true;
+}
+
+function renderRanking(elId, response, limit) {
+  const list = document.getElementById(elId);
+  list.innerHTML = "";
+  for (const item of dimensionRanking(response, limit)) {
+    const li = document.createElement("li");
+    li.textContent = item.name;
+    const span = document.createElement("span");
+    // Blog-tab figures are unpublished GA rollups: masked
+    // like every other raw count.
+    span.className = "rank-value amount-value";
+    span.textContent = item.views.toLocaleString();
+    li.appendChild(span);
+    list.appendChild(li);
+  }
+}
+
+// The blog tab's sections, filled in as their responses land.
+// Each chain renders only its own sections, so a slow (or failed)
+// response holds up nothing else; a failed one leaves its section
+// in the initial state, the same look as data that has not
+// arrived yet.
+function loadBlogSections(
+  dailyPromise,
+  pagesPromise,
+  sourcesPromise,
+  titlesPromise,
+  metaPromise,
+) {
+  dailyPromise
+    .then((daily) => {
+      // The blog's daily figures are 28-day GA rollups that no
+      // public page prints, so the chart's max label masks like
+      // the other charts'.
+      document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
+        dailySeries(daily),
+      );
+      wireChartTooltip();
+    })
+    .catch(() => {});
+  sourcesPromise
+    .then((sources) => renderRanking("top-sources", sources, 8))
+    .catch(() => {});
+  fillBlogPages(pagesPromise, titlesPromise, metaPromise);
+}
+
+// The page ranking and everything joined to it: the blog tab's
+// page list, the overview's blog top-3 rows, the per-genre rollup
+// and the per-article table. They share one input set — the GA
+// page rows plus the two title sources — so they land together,
+// when the slowest of the three arrives.
+async function fillBlogPages(pagesPromise, titlesPromise, metaPromise) {
+  let pages;
+  let rssTitles;
+  let meta;
+  try {
+    [pages, rssTitles, meta] = await Promise.all([
+      pagesPromise,
+      titlesPromise,
+      metaPromise,
+    ]);
+  } catch {
+    // The page rows could not be read; the sections stay empty.
+    return;
+  }
   // Page rows show the article title and link to the page itself,
   // opening in a new tab. Split article paths are merged into a
   // single row by pageRanking. The titles are the merged map of
@@ -414,8 +506,6 @@ async function loadDashboard() {
   // ranking used to read the RSS alone, so one failed RSS fetch
   // silently dropped every article back to its raw path even
   // though the payload copy had arrived fine.
-  const rssTitles = await titlesPromise;
-  const meta = await metaPromise;
   const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
   const pageList = document.getElementById("top-pages");
   pageList.innerHTML = "";
@@ -453,23 +543,6 @@ async function loadDashboard() {
   document.getElementById("total-per-article").textContent = formatCount(
     articleStats.perArticle,
   );
-  renderRanking("top-sources", sources, 8);
-  loadingEl.hidden = true;
-  gateEl.hidden = true;
-  expiredEl.hidden = true;
-  dashboardEl.hidden = false;
-  logoutBtn.hidden = !idToken;
-  shareCardEl.hidden = !idToken;
-  // The dashboard is up, so the session kind is settled: the
-  // privacy toggle may appear (unless this is a share session,
-  // where renderPrivacy keeps it hidden).
-  sessionSettled = true;
-  renderPrivacy();
-  // The SNS section loads on its own: a failure there must not take
-  // the GA dashboard down with it.
-  loadSns();
-  loadSnsHistory();
-  return true;
 }
 
 // --- Genre visuals (Instagram / blog genre sections) ---
@@ -2291,7 +2364,7 @@ function renderSns(detail) {
   snsBodyEl.hidden = false;
 }
 
-async function loadSns() {
+async function loadSns(detailPromise) {
   snsStatusEl.textContent = "読み込み中…";
   snsBodyEl.hidden = true;
   const youtubeStatusEl = document.getElementById("youtube-status");
@@ -2304,7 +2377,8 @@ async function loadSns() {
   renderThreads();
   renderX();
   try {
-    const detail = await fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
+    const detail = await (detailPromise ??
+      fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth()));
     if (!detail || !detail.ok) {
       const message =
         (detail && detail.error) || "SNSデータを取得できませんでした";
@@ -2357,9 +2431,10 @@ function renderSnsHistory(response) {
 // The history has its own load: empty or failed just shows the
 // empty-state line and never touches the rest of the SNS section.
 // Its rows also feed the overview KPI deltas.
-async function loadSnsHistory() {
+async function loadSnsHistory(historyPromise) {
   try {
-    const response = await fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth());
+    const response = await (historyPromise ??
+      fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth()));
     const ok = response && response.ok ? response : null;
     overviewState.historyRows = snsHistoryRows(ok);
     renderSnsHistory(ok);
