@@ -15,9 +15,9 @@
 // every tile and legend row names its metric alongside the
 // number. Tile colour is the blue heat scale the genre tiles
 // use (see genreHeatBackground), scaled by follower count: the
-// largest channel is the bluest. The change since the previous
-// collection, where the history offers one, rides along as a
-// "前回比" line coloured by direction: up = green, down = red,
+// largest channel is the bluest. The day-over-day change
+// （前日比）, where the history offers one, rides along as a
+// "前日比" line coloured by direction: up = green, down = red,
 // flat or unknown = plain — the same delta the overview's KPI
 // cards show.
 //
@@ -35,7 +35,7 @@
 // an order of magnitude of each other, so tiles stay readable
 // there, and the average is the axis the owner compares on.
 
-import { formatCount, formatDelta, historyDelta } from "./api.js";
+import { formatCount, formatDelta, historyDailyDelta } from "./api.js";
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
 
@@ -50,7 +50,7 @@ export function channelAudiences(detail, gaTotals, historyRows) {
   const th = detail?.threads ?? {};
   const x = detail?.x ?? {};
   const deltaFor = (key) => {
-    const change = historyDelta(historyRows, key);
+    const change = historyDailyDelta(historyRows, key);
     return change ? change.delta : null;
   };
   const entries = [

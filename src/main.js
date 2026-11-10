@@ -730,7 +730,7 @@ function fillKpiBoxes(items) {
       const good = item.invert ? sign < 0 : sign > 0;
       const bad = item.invert ? sign > 0 : sign < 0;
       delta.className = "kpi-delta" + (good ? " up" : bad ? " down" : "");
-      delta.textContent = `前回比 ${item.delta}`;
+      delta.textContent = `前日比 ${item.delta}`;
       box.appendChild(delta);
     }
     wrap.appendChild(box);
@@ -794,8 +794,8 @@ function renderTopPosts() {
 // genre tiles use, scaled by the figure. Each tile draws the
 // lines its size can hold (see tileLabelLevel): the channel
 // name and the count ride on every tile, down to micro type,
-// and the roomiest tiles add a sub line with the change since
-// the previous collection (coloured green / red by direction)
+// and the roomiest tiles add a sub line with the day-over-day
+// change (coloured green / red by direction)
 // and the channel's share of the combined SNS followers. The
 // legend under the map lists every channel's exact figures,
 // so a channel still awaiting collection reads there too.
@@ -827,7 +827,7 @@ function renderChannelTreemap() {
     div.title =
       `${tile.name}：${tile.metricLabel} ${tile.valueLabel}` +
       (tile.shareLabel ? `（${tile.shareLabel}）` : "") +
-      (tile.deltaLabel ? ` 前回比 ${tile.deltaLabel}` : "");
+      (tile.deltaLabel ? ` 前日比 ${tile.deltaLabel}` : "");
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
     div.classList.add(`level-${level}`);
     if (level === "micro-v" || level === "micro-h") {
@@ -853,7 +853,7 @@ function renderChannelTreemap() {
         delta.className =
           "treemap-tile-delta" +
           (tile.tone !== "neutral" ? ` ${tile.tone}` : "");
-        delta.textContent = `前回比 ${tile.deltaLabel}`;
+        delta.textContent = `前日比 ${tile.deltaLabel}`;
         sub.appendChild(delta);
       }
       if (tile.shareLabel) {
@@ -900,7 +900,7 @@ function renderChannelTreemap() {
         delta.className =
           "kpi-delta" +
           (entry.delta > 0 ? " up" : entry.delta < 0 ? " down" : "");
-        delta.textContent = `前回比 ${entry.deltaLabel}`;
+        delta.textContent = `前日比 ${entry.deltaLabel}`;
         li.appendChild(delta);
       }
     }

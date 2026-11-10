@@ -30,7 +30,7 @@ const DETAIL = {
 
 const HISTORY2 = [
   {
-    collected_at: "2026-11-08T19:00:00.000Z",
+    collected_at: "2026-11-07T19:00:00.000Z",
     total_followers: 2000,
     ig_followers: 1991,
     youtube_subscribers: 9,
@@ -369,7 +369,7 @@ describe("channelTreemap", () => {
     expect(tileById.blog.shareLabel).toBeNull();
   });
 
-  it("tones the change since the previous collection", () => {
+  it("tones the day-over-day change", () => {
     const { legend } = channelTreemap(FULL_DETAIL, null, HISTORY2);
     const byId = Object.fromEntries(legend.map((entry) => [entry.id, entry]));
     expect(byId.instagram).toMatchObject({ delta: 4, deltaLabel: "+4", tone: "up" });

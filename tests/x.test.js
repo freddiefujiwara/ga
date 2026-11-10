@@ -54,12 +54,12 @@ describe("X shaping", () => {
     expect(snsTotalFollowers(withoutX)).toBe(2000 + 252 + 10);
   });
 
-  it("xTotals formats the followers and the change since the previous collection", () => {
+  it("xTotals formats the followers and the day-over-day change", () => {
     const boxes = Object.fromEntries(
       xTotals(DETAIL, ROWS).map((box) => [box.label, box.value]),
     );
     expect(boxes["フォロワー"]).toBe("321");
-    expect(boxes["前回比"]).toBe("+21");
+    expect(boxes["前日比"]).toBe("+21");
   });
 
   it("xTotals sums the fetched posts into count / total / average boxes", () => {
@@ -86,7 +86,7 @@ describe("X shaping", () => {
     const boxes = xTotals({}, []);
     expect(boxes).toEqual([
       { label: "フォロワー", value: "—" },
-      { label: "前回比", value: "—" },
+      { label: "前日比", value: "—" },
       { label: "投稿数（取得分）", value: "—" },
       { label: "表示合計（取得分）", value: "—" },
       { label: "平均表示（取得分）", value: "—" },
