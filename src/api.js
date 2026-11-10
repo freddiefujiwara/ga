@@ -546,6 +546,79 @@ export function youtubeVideos(detail) {
   return Array.isArray(list) ? list : [];
 }
 
+// The still image for one Instagram post, as collected into
+// thumbnail_url (a reel's thumbnail, or a photo's own image).
+// The URLs are signed and expire; the hourly collection refreshes
+// them, so what the screen holds is at most one collection old.
+// A missing or non-string value yields null, and the row renders
+// an empty frame instead.
+export function instagramThumbnailUrl(media) {
+  const url = media?.thumbnail_url;
+  return typeof url === "string" && url.length > 0 ? url : null;
+}
+
+// The thumbnail frame shape an Instagram post needs: reels and
+// videos are vertical, everything else (photos, carousels) sits
+// in a square frame; the image is cover-cropped either way.
+export function mediaThumbnailShape(media) {
+  switch (media?.type) {
+    case "REELS":
+    case "REEL":
+    case "VIDEO":
+      return "vertical";
+    default:
+      return "square";
+  }
+}
+
+// The video id a YouTube thumbnail is derived from: the entry's
+// own id, or — for a row that only carries its watch URL — the
+// id inside that URL. Anything else yields null.
+function youtubeVideoId(video) {
+  if (video && typeof video.id === "string" && video.id.length > 0) {
+    return video.id;
+  }
+  const url = typeof video?.url === "string" ? video.url : "";
+  const match = url.match(/[?&]v=([\w-]{6,})/);
+  return match ? match[1] : null;
+}
+
+// YouTube thumbnail candidates for one video, best first, derived
+// from the video id (nothing extra is collected): oardefault is
+// the posted thumbnail in the video's original aspect — vertical
+// for Shorts, wide for regular videos — but only some videos have
+// one; the rest answer with YouTube's 120x90 placeholder (see
+// isPlaceholderThumbnail), so oar2, a frame in the same original
+// aspect, follows as the fallback. No id means no candidates.
+export function youtubeThumbnailUrls(video) {
+  const id = youtubeVideoId(video);
+  if (!id) {
+    return [];
+  }
+  return [
+    `https://i.ytimg.com/vi/${id}/oardefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/oar2.jpg`,
+  ];
+}
+
+// Whether a loaded image is YouTube's 120x90 placeholder rather
+// than a real thumbnail: i.ytimg.com answers missing variants
+// with that fixed-size stub instead of an error.
+export function isPlaceholderThumbnail(naturalWidth, naturalHeight) {
+  return naturalWidth === 120 && naturalHeight === 90;
+}
+
+// The frame shape a loaded thumbnail's own aspect calls for:
+// taller than wide is "vertical" (Shorts), anything else —
+// including a square — is "horizontal". A size that is not two
+// positive numbers yields null (no opinion).
+export function thumbnailOrientation(naturalWidth, naturalHeight) {
+  if (!(naturalWidth > 0) || !(naturalHeight > 0)) {
+    return null;
+  }
+  return naturalHeight > naturalWidth ? "vertical" : "horizontal";
+}
+
 export function youtubeTotals(detail) {
   const yt = detail?.youtube ?? {};
   return [
@@ -556,22 +629,21 @@ export function youtubeTotals(detail) {
 }
 
 // Totals boxes for the Threads tab: the current follower count and
-// its day-over-day change （前日比）, taken from the history
-// rows exactly like the overview KPI deltas. Until the previous
-// calendar day carries a Threads number there is nothing to
-// compare, so the change box shows "—". Then the account-wide
-// last-30-days numbers ga-gas collects with the detail: total
-// views and the interactions total (the four-way split is
-// threadsInteractions).
+// its change since the previous collection, taken from the history
+// rows exactly like the overview KPI deltas. Until two collections
+// carry a Threads number there is nothing to compare, so the
+// change box shows "—". Then the account-wide last-30-days numbers
+// ga-gas collects with the detail: total views and the
+// interactions total (the four-way split is threadsInteractions).
 // Every number can be null; missing ones show "—".
 export function threadsTotals(detail, historyRows) {
   const th = detail?.threads ?? {};
-  const change = historyDailyDelta(historyRows, "threads_followers");
+  const change = historyDelta(historyRows, "threads_followers");
   const interactions = th.interactions_30d ?? {};
   return [
     { label: "フォロワー", value: formatCount(th.followers) },
     {
-      label: "前日比",
+      label: "前回比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
     },
     { label: "表示回数（過去30日）", value: formatCount(th.views_30d) },
@@ -636,10 +708,9 @@ export function xHistorySeries(rows) {
 }
 
 // Totals boxes for the X tab: the current follower count and its
-// day-over-day change （前日比）, from the history rows
-// exactly like threadsTotals. X collection started on
-// 2026-11-10, so until a previous calendar day carries an X
-// number there is nothing to compare and the change box shows
+// change since the previous collection, from the history rows
+// exactly like threadsTotals. Until two collections carry an X
+// number there is nothing to compare, so the change box shows
 // "—". X has no account-wide 30-day totals in the collection
 // (the API tweet-gas reads reports per-post numbers only), so
 // the rest of the row is summed from the fetched posts
@@ -648,7 +719,7 @@ export function xHistorySeries(rows) {
 // only appears inside the genre section.
 export function xTotals(detail, historyRows) {
   const x = detail?.x ?? {};
-  const change = historyDailyDelta(historyRows, "x_followers");
+  const change = historyDelta(historyRows, "x_followers");
   const posts = xPosts(detail);
   const viewed = posts.filter((post) => isNum(post?.views));
   const totalViews = viewed.length
@@ -657,7 +728,7 @@ export function xTotals(detail, historyRows) {
   return [
     { label: "フォロワー", value: formatCount(x.followers) },
     {
-      label: "前日比",
+      label: "前回比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
     },
     { label: "投稿数（取得分）", value: formatCount(posts.length || null) },
@@ -763,63 +834,34 @@ export function followChartDays(detail) {
 
 // --- Overview tab helpers ---
 
-// The "YYYYMMDD" day key of the day before the given one, by
-// plain calendar arithmetic (the keys are JST day labels, so no
-// timezone conversion is involved).
-function previousDayKey(dateKey) {
-  const year = Number(dateKey.slice(0, 4));
-  const month = Number(dateKey.slice(4, 6));
-  const day = Number(dateKey.slice(6, 8));
-  const prev = new Date(Date.UTC(year, month - 1, day) - 86400000);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${prev.getUTCFullYear()}${pad(prev.getUTCMonth() + 1)}${pad(prev.getUTCDate())}`;
-}
-
-// The day-over-day change of one history metric （前日比）: the
-// metric's collections first collapse to one point per JST
-// calendar day via dailyLatestSeries — the day's last collection
-// wins, the same reduction the trend charts plot — and the delta
-// is the latest day's value minus the previous calendar day's.
-// Null when either side has no numeric point: a metric whose
-// collection only started today (X, collected from 2026-11-10)
-// has no previous day yet, and a day the collection skipped
-// leaves nothing honest to compare against — in both cases the
-// displays show "—" until the days line up.
-export function historyDailyDelta(rows, key) {
+// The change of one history metric between its two most recent
+// collections: rows are ordered by collected_at and collections
+// where the metric is missing (null) are skipped, exactly like the
+// trend series. Null when the metric has fewer than two numeric
+// points — with a single collection there is nothing to compare.
+export function historyDelta(rows, key) {
   if (!Array.isArray(rows)) {
     return null;
   }
-  const sorted = rows
+  const points = rows
     .filter(
-      (row) => row && typeof row.collected_at === "string" && row.collected_at,
+      (row) =>
+        row &&
+        typeof row.collected_at === "string" &&
+        row.collected_at &&
+        isNum(row[key]),
     )
     .slice()
     .sort((a, b) =>
       a.collected_at < b.collected_at ? -1 : a.collected_at > b.collected_at ? 1 : 0,
-    );
-  const entries = [];
-  for (const row of sorted) {
-    const date = isNum(row[key]) ? jstDateKey(row.collected_at) : null;
-    if (date) {
-      entries.push({ date, views: row[key] });
-    }
-  }
-  const daily = dailyLatestSeries(entries);
-  if (!daily.length) {
+    )
+    .map((row) => row[key]);
+  if (points.length < 2) {
     return null;
   }
-  const latest = daily[daily.length - 1];
-  const previous = daily.find(
-    (point) => point.date === previousDayKey(latest.date),
-  );
-  if (!previous) {
-    return null;
-  }
-  return {
-    latest: latest.views,
-    previous: previous.views,
-    delta: latest.views - previous.views,
-  };
+  const latest = points[points.length - 1];
+  const previous = points[points.length - 2];
+  return { latest, previous, delta: latest - previous };
 }
 
 // The signed change label: "+12" / "-3" / "±0". Null for anything
@@ -838,20 +880,17 @@ export function formatDelta(delta) {
 }
 
 // KPI cards for the overview tab: the headline numbers of every
-// network plus the blog, each carrying the day-over-day change
-// （前日比） wherever the SNS history offers both the latest
-// day and the previous calendar day to compare — the 30-day
-// window cards （再生回数（過去30日） etc.) compare the same way,
-// today's 30-day figure against yesterday's. The blog numbers
-// come from the GA totals object ({ views, users, sessions });
-// no history exists for them, so they never carry a delta.
-// Every input tolerates being missing: values fall back to "—"
-// and deltas to null.
+// network plus the blog, each carrying the change since the
+// previous collection wherever the SNS history offers two points
+// to compare. The blog numbers come from the GA totals object
+// ({ views, users, sessions }); no history exists for them, so
+// they never carry a delta. Every input tolerates being missing:
+// values fall back to "—" and deltas to null.
 export function overviewKpis(detail, gaTotals, historyRows) {
   const ig = detail?.instagram ?? {};
   const yt = detail?.youtube ?? {};
   const deltaFor = (key) => {
-    const change = historyDailyDelta(historyRows, key);
+    const change = historyDelta(historyRows, key);
     return change ? formatDelta(change.delta) : null;
   };
   return [

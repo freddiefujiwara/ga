@@ -79,21 +79,21 @@
             <section class="table-wrap">
               <h2 class="section-title">主要KPI</h2>
               <div class="totals-row" id="kpi-cards"></div>
-              <p class="meta">変化は前日との差（前日比）です。フォロー解除だけは逆で、増えると赤、減ると緑で示します。</p>
+              <p class="meta">変化は前回の取得との差です。フォロー解除だけは逆で、増えると赤、減ると緑で示します。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">チャネルの大きさ</h2>
               <div id="channel-treemap" class="treemap"></div>
               <ul id="channel-legend" class="channel-legend"></ul>
-              <p class="meta">タイルの面積は各チャネルの大きさ（ブログは直近28日の利用者数、その他はフォロワー数、YouTubeは登録者数）、色が青いほど数が多いです。割合はSNS4チャネルのフォロワー合計に対する比率で、ブログは単位が違うため割合の対象外です。増減は前日との差（前日比）で、増えたら緑、減ったら赤で示します。</p>
-            </section>
-            <section class="table-wrap">
-              <h2 class="section-title">チャネル別トップ3</h2>
-              <div id="top-posts"></div>
+              <p class="meta">タイルの面積は各チャネルの大きさ（ブログは直近28日の利用者数、その他はフォロワー数、YouTubeは登録者数）、色が青いほど数が多いです。割合はSNS4チャネルのフォロワー合計に対する比率で、ブログは単位が違うため割合の対象外です。増減は前回の取得との差で、増えたら緑、減ったら赤で示します。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">推移</h2>
               <div id="sns-history"></div>
+            </section>
+            <section class="table-wrap">
+              <h2 class="section-title">チャネル別トップ3</h2>
+              <div id="top-posts"></div>
             </section>
           </div>
           <div id="tab-instagram" class="tab-panel" hidden>
@@ -158,6 +158,7 @@
                   <table class="data-table" id="sns-media-table">
                     <thead>
                       <tr>
+                        <th aria-label="サムネイル"></th>
                         <th class="sortable" data-sort-key="posted_at">投稿日時</th>
                         <th>キャプション</th>
                         <th>種類</th>
@@ -249,6 +250,7 @@
                 <table class="data-table">
                   <thead>
                     <tr>
+                      <th aria-label="サムネイル"></th>
                       <th>タイトル</th>
                       <th>公開日</th>
                       <th class="num">再生回数</th>

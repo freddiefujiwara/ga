@@ -29,6 +29,11 @@ import {
   mediaTypeLabel,
   youtubeVideos,
   youtubeTotals,
+  instagramThumbnailUrl,
+  mediaThumbnailShape,
+  youtubeThumbnailUrls,
+  isPlaceholderThumbnail,
+  thumbnailOrientation,
   youtubeHistorySeries,
   articleViewStats,
   snsErrorNotes,
@@ -329,16 +334,16 @@ describe("dailyLatestSeries", () => {
 });
 
 describe("threads tab", () => {
-  // A null row from before Threads collection started, then a
-  // numbered point on JST 2026-11-08 and another on JST
-  // 2026-11-09, so the day-over-day change has both days.
+  // Threads numbers only exist from the 2026-11-09 08:46 JST
+  // collection on; the earlier rows carry null, exactly like the
+  // real history sheet.
   const THREADS_ROWS = [
     {
-      collected_at: "2026-11-07T21:09:00.000Z",
+      collected_at: "2026-11-08T21:09:00.000Z",
       threads_followers: null,
     },
     {
-      collected_at: "2026-11-07T23:46:00.000Z",
+      collected_at: "2026-11-08T23:46:00.000Z",
       threads_followers: 252,
     },
     {
@@ -352,25 +357,22 @@ describe("threads tab", () => {
     expect(series).toHaveLength(1);
     expect(series[0].key).toBe("threads_followers");
     expect(series[0].label).toBe("Threads フォロワー");
-    // The numbered rows fall on JST 2026-11-08 and 2026-11-09,
-    // one point per day.
-    expect(series[0].points).toEqual([
-      { date: "20261108", views: 252 },
-      { date: "20261109", views: 255 },
-    ]);
+    // Both numbered rows fall on JST 2026/11/9, so the series
+    // collapses to that day's last value.
+    expect(series[0].points).toEqual([{ date: "20261109", views: 255 }]);
     expect(series[0].latest).toBe(255);
-    // The period follows the plotted points: the null row before
+    // The period follows the plotted point: the null row before
     // Threads collection started does not stretch it.
-    expect(series[0].firstAt).toBe("2026-11-07T23:46:00.000Z");
+    expect(series[0].firstAt).toBe("2026-11-09T05:00:00.000Z");
     expect(series[0].lastAt).toBe("2026-11-09T05:00:00.000Z");
   });
 
   it("threadsHistorySeries holds up with a single point", () => {
     const series = threadsHistorySeries([THREADS_ROWS[1]]);
     expect(series).toHaveLength(1);
-    expect(series[0].points).toEqual([{ date: "20261108", views: 252 }]);
-    expect(series[0].firstAt).toBe("2026-11-07T23:46:00.000Z");
-    expect(series[0].lastAt).toBe("2026-11-07T23:46:00.000Z");
+    expect(series[0].points).toEqual([{ date: "20261109", views: 252 }]);
+    expect(series[0].firstAt).toBe("2026-11-08T23:46:00.000Z");
+    expect(series[0].lastAt).toBe("2026-11-08T23:46:00.000Z");
   });
 
   it("threadsHistorySeries is empty until a Threads number exists", () => {
@@ -383,7 +385,7 @@ describe("threads tab", () => {
     const detail = { threads: { followers: 255 } };
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "255" },
-      { label: "前日比", value: "+3" },
+      { label: "前回比", value: "+3" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -400,7 +402,7 @@ describe("threads tab", () => {
     };
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "252" },
-      { label: "前日比", value: "+3" },
+      { label: "前回比", value: "+3" },
       { label: "表示回数（過去30日）", value: "53,342" },
       { label: "反応の合計（過去30日）", value: "808" },
     ]);
@@ -408,14 +410,14 @@ describe("threads tab", () => {
 
   it("threadsTotals signs drops and flats like the overview deltas", () => {
     const down = [
-      { collected_at: "2026-11-07T23:46:00.000Z", threads_followers: 255 },
+      { collected_at: "2026-11-08T23:46:00.000Z", threads_followers: 255 },
       { collected_at: "2026-11-09T05:00:00.000Z", threads_followers: 252 },
     ];
     expect(threadsTotals({ threads: { followers: 252 } }, down)[1].value).toBe(
       "-3",
     );
     const flat = [
-      { collected_at: "2026-11-07T23:46:00.000Z", threads_followers: 252 },
+      { collected_at: "2026-11-08T23:46:00.000Z", threads_followers: 252 },
       { collected_at: "2026-11-09T05:00:00.000Z", threads_followers: 252 },
     ];
     expect(threadsTotals({ threads: { followers: 252 } }, flat)[1].value).toBe(
@@ -427,13 +429,13 @@ describe("threads tab", () => {
     const detail = { threads: { followers: 252 } };
     expect(threadsTotals(detail, [THREADS_ROWS[1]])).toEqual([
       { label: "フォロワー", value: "252" },
-      { label: "前日比", value: "—" },
+      { label: "前回比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals(detail, [])).toEqual([
       { label: "フォロワー", value: "252" },
-      { label: "前日比", value: "—" },
+      { label: "前回比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -443,13 +445,13 @@ describe("threads tab", () => {
   it("threadsTotals tolerates a missing snapshot", () => {
     expect(threadsTotals(null, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "—" },
-      { label: "前日比", value: "+3" },
+      { label: "前回比", value: "+3" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals({}, null)).toEqual([
       { label: "フォロワー", value: "—" },
-      { label: "前日比", value: "—" },
+      { label: "前回比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -1043,6 +1045,58 @@ describe("youtube and error notes", () => {
     expect(youtubeVideos(DETAIL)).toHaveLength(1);
     expect(youtubeVideos(null)).toEqual([]);
     expect(youtubeVideos({ youtube: { recent_videos: "x" } })).toEqual([]);
+  });
+
+  it("instagramThumbnailUrl passes a collected URL through and nulls junk", () => {
+    expect(
+      instagramThumbnailUrl({ thumbnail_url: "https://example.com/t.jpg" }),
+    ).toBe("https://example.com/t.jpg");
+    expect(instagramThumbnailUrl({ thumbnail_url: "" })).toBeNull();
+    expect(instagramThumbnailUrl({ thumbnail_url: 42 })).toBeNull();
+    expect(instagramThumbnailUrl({})).toBeNull();
+    expect(instagramThumbnailUrl(null)).toBeNull();
+  });
+
+  it("mediaThumbnailShape stands reels up and squares the rest", () => {
+    expect(mediaThumbnailShape({ type: "REELS" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "REEL" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "VIDEO" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "IMAGE" })).toBe("square");
+    expect(mediaThumbnailShape({ type: "FEED" })).toBe("square");
+    expect(mediaThumbnailShape({ type: "CAROUSEL_ALBUM" })).toBe("square");
+    expect(mediaThumbnailShape(null)).toBe("square");
+  });
+
+  it("youtubeThumbnailUrls derives both candidates from the video id", () => {
+    expect(youtubeThumbnailUrls({ id: "abc123" })).toEqual([
+      "https://i.ytimg.com/vi/abc123/oardefault.jpg",
+      "https://i.ytimg.com/vi/abc123/oar2.jpg",
+    ]);
+    // A row that only carries its watch URL still yields its id.
+    expect(
+      youtubeThumbnailUrls({ url: "https://www.youtube.com/watch?v=xyz-789" }),
+    ).toEqual([
+      "https://i.ytimg.com/vi/xyz-789/oardefault.jpg",
+      "https://i.ytimg.com/vi/xyz-789/oar2.jpg",
+    ]);
+    expect(youtubeThumbnailUrls({ id: "" })).toEqual([]);
+    expect(youtubeThumbnailUrls({})).toEqual([]);
+    expect(youtubeThumbnailUrls(null)).toEqual([]);
+  });
+
+  it("isPlaceholderThumbnail recognises only the 120x90 stub", () => {
+    expect(isPlaceholderThumbnail(120, 90)).toBe(true);
+    expect(isPlaceholderThumbnail(1080, 1920)).toBe(false);
+    expect(isPlaceholderThumbnail(120, 120)).toBe(false);
+    expect(isPlaceholderThumbnail(0, 0)).toBe(false);
+  });
+
+  it("thumbnailOrientation reads the loaded image's own aspect", () => {
+    expect(thumbnailOrientation(1080, 1920)).toBe("vertical");
+    expect(thumbnailOrientation(1920, 1080)).toBe("horizontal");
+    expect(thumbnailOrientation(100, 100)).toBe("horizontal");
+    expect(thumbnailOrientation(0, 100)).toBeNull();
+    expect(thumbnailOrientation(null, null)).toBeNull();
   });
 
   it("youtubeHistorySeries charts only the rows that carry a subscriber count", () => {

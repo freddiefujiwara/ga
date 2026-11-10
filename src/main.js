@@ -45,6 +45,11 @@ import {
   mediaTypeLabel,
   youtubeVideos,
   youtubeTotals,
+  instagramThumbnailUrl,
+  mediaThumbnailShape,
+  youtubeThumbnailUrls,
+  isPlaceholderThumbnail,
+  thumbnailOrientation,
   snsErrorNotes,
   instagramDailyFollowsError,
   followChartDays,
@@ -730,7 +735,7 @@ function fillKpiBoxes(items) {
       const good = item.invert ? sign < 0 : sign > 0;
       const bad = item.invert ? sign > 0 : sign < 0;
       delta.className = "kpi-delta" + (good ? " up" : bad ? " down" : "");
-      delta.textContent = `前日比 ${item.delta}`;
+      delta.textContent = `前回比 ${item.delta}`;
       box.appendChild(delta);
     }
     wrap.appendChild(box);
@@ -794,8 +799,8 @@ function renderTopPosts() {
 // genre tiles use, scaled by the figure. Each tile draws the
 // lines its size can hold (see tileLabelLevel): the channel
 // name and the count ride on every tile, down to micro type,
-// and the roomiest tiles add a sub line with the day-over-day
-// change (coloured green / red by direction)
+// and the roomiest tiles add a sub line with the change since
+// the previous collection (coloured green / red by direction)
 // and the channel's share of the combined SNS followers. The
 // legend under the map lists every channel's exact figures,
 // so a channel still awaiting collection reads there too.
@@ -827,7 +832,7 @@ function renderChannelTreemap() {
     div.title =
       `${tile.name}：${tile.metricLabel} ${tile.valueLabel}` +
       (tile.shareLabel ? `（${tile.shareLabel}）` : "") +
-      (tile.deltaLabel ? ` 前日比 ${tile.deltaLabel}` : "");
+      (tile.deltaLabel ? ` 前回比 ${tile.deltaLabel}` : "");
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
     div.classList.add(`level-${level}`);
     if (level === "micro-v" || level === "micro-h") {
@@ -853,7 +858,7 @@ function renderChannelTreemap() {
         delta.className =
           "treemap-tile-delta" +
           (tile.tone !== "neutral" ? ` ${tile.tone}` : "");
-        delta.textContent = `前日比 ${tile.deltaLabel}`;
+        delta.textContent = `前回比 ${tile.deltaLabel}`;
         sub.appendChild(delta);
       }
       if (tile.shareLabel) {
@@ -900,7 +905,7 @@ function renderChannelTreemap() {
         delta.className =
           "kpi-delta" +
           (entry.delta > 0 ? " up" : entry.delta < 0 ? " down" : "");
-        delta.textContent = `前日比 ${entry.deltaLabel}`;
+        delta.textContent = `前回比 ${entry.deltaLabel}`;
         li.appendChild(delta);
       }
     }
@@ -1024,6 +1029,65 @@ function renderMediaGenreTabs() {
   });
 }
 
+// One post-list thumbnail: a fixed-size frame the row height
+// never depends on, with the image cover-cropped into it. `shape`
+// names the frame's aspect — "vertical" (reels), "square"
+// (photos) or "horizontal" (wide videos). `candidates` are image
+// URLs in order of preference: one that fails to load falls
+// through to the next, and when none is left the frame simply
+// stays empty, so a missing or expired image never breaks the
+// row. With `autoShape` (YouTube, whose URL shape serves both
+// orientations) a candidate that loads as YouTube's 120x90
+// placeholder also falls through, and the frame adopts the
+// loaded image's own aspect once it arrives.
+function thumbnailCell({ candidates = [], shape = "square", autoShape = false }) {
+  const td = document.createElement("td");
+  td.className = "thumb-cell";
+  const frame = document.createElement("span");
+  frame.className = `thumb-frame thumb-${shape}`;
+  const urls = candidates.filter(
+    (url) => typeof url === "string" && url.length > 0,
+  );
+  if (urls.length) {
+    const img = document.createElement("img");
+    img.className = "thumb-img";
+    img.alt = "";
+    img.loading = "lazy";
+    let index = 0;
+    const advance = () => {
+      index += 1;
+      if (index < urls.length) {
+        img.src = urls[index];
+      } else {
+        img.remove();
+      }
+    };
+    img.addEventListener("error", advance);
+    img.addEventListener("load", () => {
+      if (
+        autoShape &&
+        isPlaceholderThumbnail(img.naturalWidth, img.naturalHeight)
+      ) {
+        advance();
+        return;
+      }
+      if (autoShape) {
+        const orientation = thumbnailOrientation(
+          img.naturalWidth,
+          img.naturalHeight,
+        );
+        if (orientation) {
+          frame.className = `thumb-frame thumb-${orientation}`;
+        }
+      }
+    });
+    img.src = urls[0];
+    frame.appendChild(img);
+  }
+  td.appendChild(frame);
+  return td;
+}
+
 function renderMediaTable() {
   const tbody = document.getElementById("sns-media-body");
   tbody.innerHTML = "";
@@ -1035,7 +1099,7 @@ function renderMediaTable() {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 11;
+    td.colSpan = 12;
     td.textContent = "データがありません";
     tr.appendChild(td);
     tbody.appendChild(tr);
@@ -1049,6 +1113,12 @@ function renderMediaTable() {
   };
   for (const media of rows) {
     const tr = document.createElement("tr");
+    tr.appendChild(
+      thumbnailCell({
+        candidates: [instagramThumbnailUrl(media)],
+        shape: mediaThumbnailShape(media),
+      }),
+    );
     const dateTd = document.createElement("td");
     dateTd.className = "nowrap";
     dateTd.textContent = formatJstDateTime(media.posted_at);
@@ -1259,7 +1329,7 @@ function renderYoutube(detail) {
   if (!videos.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 5;
+    td.colSpan = 6;
     td.textContent = "データがありません";
     tr.appendChild(td);
     tbody.appendChild(tr);
@@ -1267,6 +1337,13 @@ function renderYoutube(detail) {
   }
   for (const video of videos) {
     const tr = document.createElement("tr");
+    tr.appendChild(
+      thumbnailCell({
+        candidates: youtubeThumbnailUrls(video),
+        shape: "horizontal",
+        autoShape: true,
+      }),
+    );
     const titleTd = document.createElement("td");
     if (video.url) {
       const link = document.createElement("a");
