@@ -1,22 +1,34 @@
 // Channel tiles for the overview tab, plus the genre treemap.
 //
-// The overview's channel map has one tile per SNS channel —
-// Instagram, YouTube, Threads and X — with the tile area
-// proportional to the channel's follower count (subscribers
-// for YouTube). The metrics differ per channel, so every tile
-// and legend row names its metric alongside the number. Tile
-// colour is the blue heat scale the genre tiles use (see
-// genreHeatBackground), scaled by follower count: the largest
-// channel is the bluest. The change since the previous
+// The overview's channel map has one tile per channel —
+// Instagram, the blog, YouTube, Threads and X — with the tile
+// area proportional to the channel's size: follower counts for
+// the SNS channels (subscribers for YouTube), and for the blog
+// its GA user count over the last 28 days, which is the size
+// figure the blog has. That figure is not a follower count, so
+// the blog's tile and legend row always name it as such
+// (利用者), and the blog stays out of the share percentages:
+// each share is a share of the four SNS channels' combined
+// followers, the same total the hero counts, so mixing a user
+// count into that denominator would quietly move every other
+// channel's percentage. The metrics differ per channel, so
+// every tile and legend row names its metric alongside the
+// number. Tile colour is the blue heat scale the genre tiles
+// use (see genreHeatBackground), scaled by follower count: the
+// largest channel is the bluest. The change since the previous
 // collection, where the history offers one, rides along as a
 // "前回比" line coloured by direction: up = green, down = red,
 // flat or unknown = plain — the same delta the overview's KPI
-// cards show. The blog is not a tile: its GA user count is not
-// a follower count, so it stays in the KPI cards below. The
-// channels differ by orders of magnitude, so the smallest
-// tiles cannot carry text; the legend under the map lists
-// every channel's exact figures, as it does for the genre
-// maps.
+// cards show.
+//
+// Every tile carries its name and figure, however small the
+// tile: the layout below guarantees each tile a minimum size
+// (see layoutWithLabelRoom) and the label levels fall back to
+// micro type — tiny horizontal lines, a single line, or a
+// vertical line on tall narrow tiles — rather than leaving a
+// tile blank for the legend to speak for. The legend under
+// the map still lists every channel's exact figures, as it
+// does for the genre maps.
 //
 // The genre sections reuse the squarified treemap layout below,
 // sized by each genre's per-item average: averages sit within
@@ -78,15 +90,25 @@ export function channelAudiences(detail, gaTotals, historyRows) {
       delta: deltaFor("x_followers"),
     },
   ];
-  return entries.map((entry) => ({
-    ...entry,
-    valueLabel: formatCount(entry.value),
-    deltaLabel: formatDelta(entry.delta),
-    note:
-      (entry.id === "threads" || entry.id === "x") && entry.value === null
-        ? "集計待ち"
-        : null,
-  }));
+  return entries.map((entry) => {
+    const valueLabel = formatCount(entry.value);
+    return {
+      ...entry,
+      valueLabel,
+      // The figure as a tile shows it: the blog's number is a
+      // user count, not followers, so its tile always carries
+      // the word 利用者 in front of the number, at any size.
+      valueText:
+        entry.id === "blog" && entry.value !== null
+          ? `利用者 ${valueLabel}`
+          : valueLabel,
+      deltaLabel: formatDelta(entry.delta),
+      note:
+        (entry.id === "threads" || entry.id === "x") && entry.value === null
+          ? "集計待ち"
+          : null,
+    };
+  });
 }
 
 // The colour class for a change: "up" (green), "down" (red), or
@@ -177,9 +199,91 @@ export function squarifiedLayout(items, width = 100, height = 100) {
   return rects;
 }
 
-// A tile only carries its text label when it is big enough for the
-// words to fit; smaller tiles stay blank and the legend below the
-// map speaks for them. Coordinates are percentages of the map.
+// --- Minimum tile sizes ---------------------------------------
+// Every tile carries its name and figure, however small: the
+// owner asked for the words on the tile itself, in type as
+// small as it takes, instead of a blank tile only the legend
+// speaks for. A micro label fits a tile in one of three
+// shapes — two tiny horizontal lines, one horizontal line, or
+// one vertical line down a tall narrow tile — and the sizes
+// below are what each shape needs on the smallest map the
+// page serves: a phone-width box, ~350px wide and at its
+// 180px floor height, so 1% of width ≈ 3.5px and 1% of
+// height ≈ 1.8px. Two micro lines (a 9px name over a 10px
+// figure) plus the tile's padding need ~39 × 25px; a single
+// line needs a ~70px run; a vertical line needs a ~28px-wide
+// column at least ~50px tall to run down. On wider screens
+// the box grows in both axes, so a tile that fits at the
+// floor fits there too. Coordinates are percentages.
+export const TILE_MIN_W = 11;
+export const TILE_MIN_H = 14;
+export const TILE_MIN_V_W = 8;
+export const TILE_MIN_V_H = 28;
+export const TILE_MIN_LINE_W = 20;
+export const TILE_MIN_LINE_H = 10;
+
+// Whether a rectangle can carry a micro label in one of the
+// three shapes above.
+export function tileLabelFits(rect) {
+  if (!rect || !isNum(rect.w) || !isNum(rect.h)) {
+    return false;
+  }
+  if (rect.w >= TILE_MIN_W && rect.h >= TILE_MIN_H) {
+    return true;
+  }
+  if (
+    rect.w >= TILE_MIN_V_W &&
+    rect.h >= TILE_MIN_V_H &&
+    rect.h >= rect.w * 2
+  ) {
+    return true;
+  }
+  return rect.w >= TILE_MIN_LINE_W && rect.h >= TILE_MIN_LINE_H;
+}
+
+// The value shares tried as a floor under the layout values,
+// smallest first. Raising the floor lifts the smallest values
+// towards it, which widens the strip they share and lengthens
+// their slice of it; the order of the values — and so of the
+// tile sizes — never changes, only the contrast softens.
+const TILE_FLOOR_SHARES = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1];
+
+// Squarified layout with a minimum tile size: lays the items
+// out plainly, and while any tile is too small for a micro
+// label, retries with the next floor share. The first layout
+// whose tiles all fit wins; if none fits everywhere (ratios
+// past ~30:1 can defeat every floor), the last layout — the
+// one with the largest small tiles — is used and the labels
+// still render in micro type as a best effort. The rects
+// carry the floored value; callers read their display
+// figures from their own entries, never from the rect.
+export function layoutWithLabelRoom(items) {
+  const valid = (Array.isArray(items) ? items : []).filter(
+    (item) => item && isNum(item.value) && item.value > 0,
+  );
+  if (!valid.length) {
+    return [];
+  }
+  const total = valid.reduce((sum, item) => sum + item.value, 0);
+  let rects = squarifiedLayout(valid, 100, 100);
+  for (const share of TILE_FLOOR_SHARES) {
+    if (rects.every(tileLabelFits)) {
+      break;
+    }
+    const floor = total * share;
+    rects = squarifiedLayout(
+      valid.map((item) => ({ ...item, value: Math.max(item.value, floor) })),
+      100,
+      100,
+    );
+  }
+  return rects;
+}
+
+// A tile only carries its full-size text label when it is big
+// enough for the words to fit; smaller tiles fall back to the
+// micro labels, never to blank. Coordinates are percentages
+// of the map.
 export function hasLabelRoom(rect) {
   return Boolean(rect) && rect.w >= 10 && rect.h >= 16;
 }
@@ -215,20 +319,28 @@ export function genreHeatBackground(avg, min, max) {
   return `color-mix(in srgb, ${GENRE_HEAT_BLUE} ${mix}%, var(--surface-elevated))`;
 }
 
-// How much of its text a genre tile may carry, decided from the
-// tile's own size so nothing is drawn that cannot fit: "full"
-// (name + average + total), "value" (name + average), "name"
-// (name only) or "none" (blank tile; the legend speaks for it).
-// Coordinates are percentages of the map box, which is 5:2 with
-// a 180px floor height. The thresholds come from the text stack
-// at that floor: the tile's vertical padding is 16px, a name line
-// ~21px, the big average figure ~30px and the small total line
-// ~18px, so the full stack needs ~85px (~47% of 180) and even the
-// name alone ~37px (~21%). The width floors keep the average
-// figure (up to six glyphs, ~75px on a phone-width map) on one
-// line. The checks run widest-and-tallest first; the map only
-// grows past the floor on wider screens, so a level granted here
-// still fits there, where the fonts cap out.
+// How much of its text a tile carries, decided from the
+// tile's own size: "full" (name + figure + sub line), "value"
+// (name + the big figure), "name" (name + figure in compact
+// type), then the micro shapes for tiles too small for the
+// compact stack — "micro-v" (one vertical line, name and
+// figure together, down a tall narrow tile), "micro-h" (one
+// horizontal line on a wide flat tile) and "micro" (two tiny
+// lines). Every real tile earns at least a micro level, so
+// no tile is left blank; "none" remains only for junk input.
+// Coordinates are percentages of the map box, which is 5:2
+// with a 180px floor height. The full / value / name
+// thresholds come from the text stack at that floor: the
+// tile's vertical padding is 16px, a name line ~21px, the
+// big figure ~30px and the small sub line ~18px, so the full
+// stack needs ~85px (~47% of 180) and even the name alone
+// ~37px (~21%). The width floors keep the big figure (up to
+// six glyphs, ~75px on a phone-width map) on one line. The
+// micro thresholds are the minimum sizes the layout works
+// to guarantee (see tileLabelFits). The checks run
+// widest-and-tallest first; the map only grows past the
+// floor on wider screens, so a level granted here still
+// fits there, where the fonts cap out.
 export function tileLabelLevel(rect) {
   if (!rect || !isNum(rect.w) || !isNum(rect.h)) {
     return "none";
@@ -242,28 +354,45 @@ export function tileLabelLevel(rect) {
   if (rect.w >= 14 && rect.h >= 20) {
     return "name";
   }
-  return "none";
+  if (
+    rect.w < TILE_MIN_W &&
+    rect.w >= TILE_MIN_V_W &&
+    rect.h >= TILE_MIN_V_H &&
+    rect.h >= rect.w * 2
+  ) {
+    return "micro-v";
+  }
+  if (rect.h < TILE_MIN_H && rect.w >= TILE_MIN_LINE_W) {
+    return "micro-h";
+  }
+  return "micro";
 }
 
 // Channel treemap for the overview tab: { tiles, legend }
-// over the four SNS channels in their fixed order (the blog is
-// left out — its GA user count is not a follower count; it
-// stays in the KPI cards). Each channel carries its share of
-// the four channels' combined followers, which is what the
-// tile areas show: the share rides on every legend row and on
-// roomy tiles. Tiles exist only for positive counts; each
-// carries the blue heat background scaled across the counts on
-// show (the genre tiles' scale, here on follower counts) and a
-// labelLevel from tileLabelLevel, so the renderer draws only
-// the lines that fit. The legend lists every channel,
+// over the channels in their fixed order — the four SNS
+// channels plus the blog, whose tile is sized by its 28-day
+// user count, the size figure it has (see the header
+// comment). Each SNS channel carries its share of the four
+// channels' combined followers: the share rides on every SNS
+// legend row and on roomy tiles. The blog carries no share —
+// its figure is a different unit, so a percentage would mix
+// units into the follower total the hero counts. Tiles exist
+// only for positive counts and are laid out with a minimum
+// size (layoutWithLabelRoom), so even the smallest tile
+// carries its name and figure in micro type; each tile also
+// carries the blue heat background scaled across the counts
+// on show (the genre tiles' scale, here on the figures) and
+// a labelLevel from tileLabelLevel, so the renderer draws
+// only the lines that fit. The legend lists every channel,
 // including zero / uncollected ones (集計待ち), in the
 // fixed channel order.
-export function channelTreemap(detail, historyRows) {
-  const channels = channelAudiences(detail, null, historyRows).filter(
-    (channel) => channel.id !== "blog",
-  );
-  const total = channels.reduce(
-    (sum, channel) => sum + (isNum(channel.value) ? channel.value : 0),
+export function channelTreemap(detail, gaTotals, historyRows) {
+  const channels = channelAudiences(detail, gaTotals, historyRows);
+  const snsTotal = channels.reduce(
+    (sum, channel) =>
+      channel.id === "blog"
+        ? sum
+        : sum + (isNum(channel.value) ? channel.value : 0),
     0,
   );
   const counts = channels
@@ -273,8 +402,8 @@ export function channelTreemap(detail, historyRows) {
   const heatMax = counts.length ? Math.max(...counts) : null;
   const legend = channels.map((channel) => {
     const share =
-      isNum(channel.value) && total > 0
-        ? Math.round((channel.value / total) * 1000) / 10
+      channel.id !== "blog" && isNum(channel.value) && snsTotal > 0
+        ? Math.round((channel.value / snsTotal) * 1000) / 10
         : null;
     return {
       ...channel,
@@ -284,12 +413,10 @@ export function channelTreemap(detail, historyRows) {
     };
   });
   const byId = new Map(legend.map((channel) => [channel.id, channel]));
-  const tiles = squarifiedLayout(
+  const tiles = layoutWithLabelRoom(
     legend
       .filter((channel) => isNum(channel.value) && channel.value > 0)
       .map((channel) => ({ id: channel.id, value: channel.value })),
-    100,
-    100,
   ).map((rect) => {
     const channel = byId.get(rect.id);
     const labelLevel = tileLabelLevel(rect);
@@ -307,23 +434,24 @@ export function channelTreemap(detail, historyRows) {
   return { tiles, legend };
 }
 
-// Genre treemap for the Instagram / blog genre sections: the
-// same look as the channel map, one tile per genre row. `pick`
-// maps a stat row to { name, avg, avgText, totalText } — the
-// tile area is the per-item average (Instagram: avg views per
-// post; blog: views per article), because the average is the
-// axis genres are compared on; the total rides along as the
-// tile's sub line and the legend's second figure. avgText is
-// the worded average line ("平均再生 1,234" / "1記事あたり 56")
-// and totalText the total line ("合計 12,345"). Tiles exist
-// only for positive averages; each carries a labelLevel from
-// tileLabelLevel, and the renderer draws only the lines that
-// level allows, so no text is squeezed into a tile it cannot
-// fit. Each tile also carries a heat background (see
-// genreHeatBackground) scaled across the averages on show. The
-// legend lists every row, in the rows' order, so a genre whose
-// average is zero or missing — or whose tile is too small for
-// its figures — still reads there.
+// Genre treemap for the genre sections (Instagram, blog,
+// Threads, X): the same look as the channel map, one tile per
+// genre row. `pick` maps a stat row to { name, avg, avgText,
+// totalText } — the tile area is the per-item average
+// (Instagram: avg views per post; blog: views per article),
+// because the average is the axis genres are compared on; the
+// total rides along as the tile's sub line and the legend's
+// second figure. avgText is the worded average line
+// ("平均再生 1,234" / "1記事あたり 56") and totalText the
+// total line ("合計 12,345"). Tiles exist only for positive
+// averages and are laid out with a minimum size
+// (layoutWithLabelRoom); each carries a labelLevel from
+// tileLabelLevel, and the renderer draws the lines that level
+// allows — down to micro type, never blank. Each tile also
+// carries a heat background (see genreHeatBackground) scaled
+// across the averages on show. The legend lists every row,
+// in the rows' order, so a genre whose average is zero or
+// missing still reads there in full.
 export function genreTreemap(rows, pick) {
   const entries = (Array.isArray(rows) ? rows : [])
     .map((row) => {
@@ -344,12 +472,10 @@ export function genreTreemap(rows, pick) {
     .filter((avg) => isNum(avg) && avg > 0);
   const heatMin = tileAverages.length ? Math.min(...tileAverages) : null;
   const heatMax = tileAverages.length ? Math.max(...tileAverages) : null;
-  const tiles = squarifiedLayout(
+  const tiles = layoutWithLabelRoom(
     entries
       .map((entry, index) => ({ id: index, value: entry.avg }))
       .filter((item) => isNum(item.value) && item.value > 0),
-    100,
-    100,
   ).map((rect) => {
     const entry = byIndex.get(rect.id);
     const labelLevel = tileLabelLevel(rect);
