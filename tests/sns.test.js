@@ -29,6 +29,11 @@ import {
   mediaTypeLabel,
   youtubeVideos,
   youtubeTotals,
+  instagramThumbnailUrl,
+  mediaThumbnailShape,
+  youtubeThumbnailUrls,
+  isPlaceholderThumbnail,
+  thumbnailOrientation,
   youtubeHistorySeries,
   articleViewStats,
   snsErrorNotes,
@@ -1043,6 +1048,58 @@ describe("youtube and error notes", () => {
     expect(youtubeVideos(DETAIL)).toHaveLength(1);
     expect(youtubeVideos(null)).toEqual([]);
     expect(youtubeVideos({ youtube: { recent_videos: "x" } })).toEqual([]);
+  });
+
+  it("instagramThumbnailUrl passes a collected URL through and nulls junk", () => {
+    expect(
+      instagramThumbnailUrl({ thumbnail_url: "https://example.com/t.jpg" }),
+    ).toBe("https://example.com/t.jpg");
+    expect(instagramThumbnailUrl({ thumbnail_url: "" })).toBeNull();
+    expect(instagramThumbnailUrl({ thumbnail_url: 42 })).toBeNull();
+    expect(instagramThumbnailUrl({})).toBeNull();
+    expect(instagramThumbnailUrl(null)).toBeNull();
+  });
+
+  it("mediaThumbnailShape stands reels up and squares the rest", () => {
+    expect(mediaThumbnailShape({ type: "REELS" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "REEL" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "VIDEO" })).toBe("vertical");
+    expect(mediaThumbnailShape({ type: "IMAGE" })).toBe("square");
+    expect(mediaThumbnailShape({ type: "FEED" })).toBe("square");
+    expect(mediaThumbnailShape({ type: "CAROUSEL_ALBUM" })).toBe("square");
+    expect(mediaThumbnailShape(null)).toBe("square");
+  });
+
+  it("youtubeThumbnailUrls derives both candidates from the video id", () => {
+    expect(youtubeThumbnailUrls({ id: "abc123" })).toEqual([
+      "https://i.ytimg.com/vi/abc123/oardefault.jpg",
+      "https://i.ytimg.com/vi/abc123/oar2.jpg",
+    ]);
+    // A row that only carries its watch URL still yields its id.
+    expect(
+      youtubeThumbnailUrls({ url: "https://www.youtube.com/watch?v=xyz-789" }),
+    ).toEqual([
+      "https://i.ytimg.com/vi/xyz-789/oardefault.jpg",
+      "https://i.ytimg.com/vi/xyz-789/oar2.jpg",
+    ]);
+    expect(youtubeThumbnailUrls({ id: "" })).toEqual([]);
+    expect(youtubeThumbnailUrls({})).toEqual([]);
+    expect(youtubeThumbnailUrls(null)).toEqual([]);
+  });
+
+  it("isPlaceholderThumbnail recognises only the 120x90 stub", () => {
+    expect(isPlaceholderThumbnail(120, 90)).toBe(true);
+    expect(isPlaceholderThumbnail(1080, 1920)).toBe(false);
+    expect(isPlaceholderThumbnail(120, 120)).toBe(false);
+    expect(isPlaceholderThumbnail(0, 0)).toBe(false);
+  });
+
+  it("thumbnailOrientation reads the loaded image's own aspect", () => {
+    expect(thumbnailOrientation(1080, 1920)).toBe("vertical");
+    expect(thumbnailOrientation(1920, 1080)).toBe("horizontal");
+    expect(thumbnailOrientation(100, 100)).toBe("horizontal");
+    expect(thumbnailOrientation(0, 100)).toBeNull();
+    expect(thumbnailOrientation(null, null)).toBeNull();
   });
 
   it("youtubeHistorySeries charts only the rows that carry a subscriber count", () => {

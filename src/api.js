@@ -546,6 +546,79 @@ export function youtubeVideos(detail) {
   return Array.isArray(list) ? list : [];
 }
 
+// The still image for one Instagram post, as collected into
+// thumbnail_url (a reel's thumbnail, or a photo's own image).
+// The URLs are signed and expire; the hourly collection refreshes
+// them, so what the screen holds is at most one collection old.
+// A missing or non-string value yields null, and the row renders
+// an empty frame instead.
+export function instagramThumbnailUrl(media) {
+  const url = media?.thumbnail_url;
+  return typeof url === "string" && url.length > 0 ? url : null;
+}
+
+// The thumbnail frame shape an Instagram post needs: reels and
+// videos are vertical, everything else (photos, carousels) sits
+// in a square frame; the image is cover-cropped either way.
+export function mediaThumbnailShape(media) {
+  switch (media?.type) {
+    case "REELS":
+    case "REEL":
+    case "VIDEO":
+      return "vertical";
+    default:
+      return "square";
+  }
+}
+
+// The video id a YouTube thumbnail is derived from: the entry's
+// own id, or — for a row that only carries its watch URL — the
+// id inside that URL. Anything else yields null.
+function youtubeVideoId(video) {
+  if (video && typeof video.id === "string" && video.id.length > 0) {
+    return video.id;
+  }
+  const url = typeof video?.url === "string" ? video.url : "";
+  const match = url.match(/[?&]v=([\w-]{6,})/);
+  return match ? match[1] : null;
+}
+
+// YouTube thumbnail candidates for one video, best first, derived
+// from the video id (nothing extra is collected): oardefault is
+// the posted thumbnail in the video's original aspect — vertical
+// for Shorts, wide for regular videos — but only some videos have
+// one; the rest answer with YouTube's 120x90 placeholder (see
+// isPlaceholderThumbnail), so oar2, a frame in the same original
+// aspect, follows as the fallback. No id means no candidates.
+export function youtubeThumbnailUrls(video) {
+  const id = youtubeVideoId(video);
+  if (!id) {
+    return [];
+  }
+  return [
+    `https://i.ytimg.com/vi/${id}/oardefault.jpg`,
+    `https://i.ytimg.com/vi/${id}/oar2.jpg`,
+  ];
+}
+
+// Whether a loaded image is YouTube's 120x90 placeholder rather
+// than a real thumbnail: i.ytimg.com answers missing variants
+// with that fixed-size stub instead of an error.
+export function isPlaceholderThumbnail(naturalWidth, naturalHeight) {
+  return naturalWidth === 120 && naturalHeight === 90;
+}
+
+// The frame shape a loaded thumbnail's own aspect calls for:
+// taller than wide is "vertical" (Shorts), anything else —
+// including a square — is "horizontal". A size that is not two
+// positive numbers yields null (no opinion).
+export function thumbnailOrientation(naturalWidth, naturalHeight) {
+  if (!(naturalWidth > 0) || !(naturalHeight > 0)) {
+    return null;
+  }
+  return naturalHeight > naturalWidth ? "vertical" : "horizontal";
+}
+
 export function youtubeTotals(detail) {
   const yt = detail?.youtube ?? {};
   return [
