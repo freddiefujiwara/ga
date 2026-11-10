@@ -209,12 +209,13 @@ describe("overviewKpis", () => {
   });
 
   it("flags the already-published figures public for masking exemption", () => {
-    // The public set is exactly what the top page and the blog
-    // already publish: the follower total and breakdown, the
-    // Instagram post count, and the blog's own two numbers. The
-    // analysis cards (30-day views, follows, unfollows) stay
-    // unflagged, so privacy masking still blurs them — and the
-    // day-over-day deltas ride separately and stay masked too.
+    // The public set is exactly what the top page already
+    // publishes: the follower total and breakdown and the
+    // Instagram post count. The blog's two cards are 28-day GA
+    // rollups no public page prints, so they stay unflagged
+    // with the analysis cards (30-day views, follows,
+    // unfollows) — and the day-over-day deltas ride separately
+    // and stay masked too.
     const cards = overviewKpis(DETAIL, GA_TOTALS, HISTORY2);
     const publicLabels = cards
       .filter((c) => c.public === true)
@@ -223,8 +224,6 @@ describe("overviewKpis", () => {
       "SNS延べフォロワー数",
       "Instagram フォロワー",
       "YouTube 登録者",
-      "ブログ 表示回数（直近28日）",
-      "ブログ ユーザー（直近28日）",
       "投稿数",
     ]);
   });
@@ -237,13 +236,11 @@ describe("overviewKpis", () => {
       label: "ブログ 表示回数（直近28日）",
       value: "12,345",
       delta: null,
-      public: true,
     });
     expect(cards["ブログ ユーザー（直近28日）"]).toEqual({
       label: "ブログ ユーザー（直近28日）",
       value: "678",
       delta: null,
-      public: true,
     });
   });
 
@@ -337,11 +334,11 @@ describe("topPostsByChannel", () => {
     expect(byChannel["ブログ"][0].href).toBe(
       "https://freddiefujiwara.com/blog/a",
     );
-    // Only the blog's items are flagged public: per-article
-    // view counts are printed on the blog itself, while the
-    // SNS channels' per-post counts are not published there.
-    expect(byChannel["ブログ"].every((i) => i.public === true)).toBe(true);
-    for (const channel of ["Instagram", "YouTube", "Threads", "X"]) {
+    // No channel's items are flagged public: the per-post /
+    // per-article counts are platform and GA figures no public
+    // page prints with these values (the blog's are last-28-day
+    // rollups), so masking treats every row alike.
+    for (const channel of ["Instagram", "YouTube", "Threads", "X", "ブログ"]) {
       expect(byChannel[channel].every((i) => i.public === undefined)).toBe(
         true,
       );
