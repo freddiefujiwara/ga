@@ -12,6 +12,7 @@ import {
   fetchArticleTitles,
   pageRanking,
   fetchBlogMeta,
+  mergeBlogTitles,
   blogGenreStats,
   blogArticleList,
   fetchSnsDetail,
@@ -302,10 +303,16 @@ async function loadDashboard() {
       list.appendChild(li);
     }
   };
-  // Page rows show the article title (from the blog RSS) and link to
-  // the page itself, opening in a new tab. Split article paths are
-  // merged into a single row by pageRanking.
-  const titles = await titlesPromise;
+  // Page rows show the article title and link to the page itself,
+  // opening in a new tab. Split article paths are merged into a
+  // single row by pageRanking. The titles are the merged map of
+  // both blog title sources (RSS + the titles payload): the page
+  // ranking used to read the RSS alone, so one failed RSS fetch
+  // silently dropped every article back to its raw path even
+  // though the payload copy had arrived fine.
+  const rssTitles = await titlesPromise;
+  const meta = await metaPromise;
+  const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
   const pageList = document.getElementById("top-pages");
   pageList.innerHTML = "";
   for (const item of pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 10)) {
@@ -329,7 +336,6 @@ async function loadDashboard() {
   // The per-genre rollup joins the page rows with the tag map. It
   // renders only when the map actually arrived; blogGenreStats
   // returns nothing without one and the section says why instead.
-  const meta = await metaPromise;
   renderBlogGenres(pages, meta, titles);
   renderBlogArticles(pages, meta, titles);
   // The blog KPI row gains the article count and the per-article
@@ -493,10 +499,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     return;
   }
   // The RSS titles win; the titles payload fills any gap.
-  const titles = new Map(meta.titles);
-  for (const [id, title] of rssTitles) {
-    titles.set(id, title);
-  }
+  const titles = mergeBlogTitles(meta.titles, rssTitles);
   const rows = sortGenreRows(
     blogGenreStats(pagesResponse, meta.tags, titles, CONFIG.SITE_ORIGIN),
     blogGenreSort.key,
@@ -667,10 +670,7 @@ function renderBlogArticleTable() {
 function renderBlogArticles(pagesResponse, meta, rssTitles) {
   // The RSS titles win; the titles payload fills any gap — the
   // same merge the genre rollup makes.
-  const titles = new Map(meta ? meta.titles : []);
-  for (const [id, title] of rssTitles) {
-    titles.set(id, title);
-  }
+  const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
   blogArticles = blogArticleList(
     pagesResponse,
     meta ? meta.tags : null,
@@ -1900,9 +1900,15 @@ function renderFollowChart(detail) {
         entry.dataset.date = day.date;
         const dayLine = document.createElement("p");
         dayLine.className = "meta";
-        dayLine.textContent =
-          `${formatDateLabel(day.date)}：フォロー ${formatCount(day.follows)}` +
-          ` · フォロー解除 ${formatCount(day.unfollows)}`;
+        dayLine.append(`${formatDateLabel(day.date)}：フォロー `);
+        const followsCount = document.createElement("span");
+        followsCount.className = "follow-count-up";
+        followsCount.textContent = formatCount(day.follows);
+        dayLine.append(followsCount, " · フォロー解除 ");
+        const unfollowsCount = document.createElement("span");
+        unfollowsCount.className = "follow-count-down";
+        unfollowsCount.textContent = formatCount(day.unfollows);
+        dayLine.append(unfollowsCount);
         entry.appendChild(dayLine);
         const list = document.createElement("ul");
         list.className = "ranking";

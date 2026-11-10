@@ -537,6 +537,18 @@ textarea:disabled {
   background: rgb(77 163 255 / 0.12);
 }
 
+/* The posted-day list's counts: follows read as a gain (green),
+   unfollows as a loss (red), matching the chart's bars. */
+.follow-count-up {
+  color: var(--up);
+  font-weight: 700;
+}
+
+.follow-count-down {
+  color: var(--error);
+  font-weight: 700;
+}
+
 .chart-tooltip {
   position: fixed;
   transform: translate(-50%, -140%);

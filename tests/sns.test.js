@@ -1192,6 +1192,28 @@ describe("followChartDays", () => {
     expect(days[2].posts.map((p) => p.id)).toEqual(["m2"]);
   });
 
+  it("sorts a day's posts by views, most first", () => {
+    const detail = {
+      instagram: {
+        daily_follows: [{ date: "2026-11-07", follows: 3, unfollows: 1 }],
+        recent_media: [
+          { id: "small", posted_at: "2026-11-07T01:00:00Z", views: 120 },
+          { id: "big", posted_at: "2026-11-07T02:00:00Z", views: 5400 },
+          { id: "noviews", posted_at: "2026-11-07T03:00:00Z", views: null },
+          { id: "mid", posted_at: "2026-11-07T04:00:00Z", views: 800 },
+        ],
+      },
+    };
+    const days = followChartDays(detail);
+    // Most views first; a post without a view count goes last.
+    expect(days[0].posts.map((p) => p.id)).toEqual([
+      "big",
+      "mid",
+      "small",
+      "noviews",
+    ]);
+  });
+
   it("uses the JST calendar day, not the UTC day, for the mapping", () => {
     const detail = {
       instagram: {
