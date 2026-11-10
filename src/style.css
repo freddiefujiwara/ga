@@ -291,7 +291,7 @@ textarea:disabled {
   font-size: 13px;
 }
 
-/* Overview KPI change line ("前回比 +N"). */
+/* Overview KPI change line ("前日比 +N"). */
 .kpi-delta {
   font-size: 12px;
   color: var(--muted);
