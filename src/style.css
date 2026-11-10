@@ -308,11 +308,12 @@ textarea:disabled {
    / .privacy-mask blur out; elements marked .is-public stay
    readable — the percentages and ratios, and the figures the
    owner already publishes elsewhere (the top page's follower
-   counts, the blog's own numbers). The charts' numeric max
-   labels are hidden outright instead: SVG text does not blur
-   reliably on iOS Safari (the health app's lesson), and a
-   hidden label cannot leak its number. A max label marked
-   .is-public (the blog's daily chart) stays visible. */
+   counts and post count). The charts' numeric max labels are
+   hidden outright instead: SVG text does not blur reliably on
+   iOS Safari (the health app's lesson), and a hidden label
+   cannot leak its number. No chart marks its label .is-public
+   (the blog's figures are unpublished 28-day rollups), so the
+   :not() guard is the same formality the other rules carry. */
 :root[data-private="on"] .amount-value:not(.is-public),
 :root[data-private="on"] text.amount-value:not(.is-public),
 :root[data-private="on"] .privacy-mask:not(.is-public) {

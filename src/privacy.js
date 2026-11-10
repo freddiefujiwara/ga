@@ -4,11 +4,12 @@
 // except the ones marked .is-public. The exemptions are the
 // percentages and other ratios, and the figures the owner
 // already publishes elsewhere — the top page's follower counts
-// and post count, and the blog's own numbers (its article list
-// prints every article's view count) — so a screenshot can go
-// on the blog with those intact; only the unpublished analysis
-// (per-post platform counts, day-over-day changes, genre
-// rollups of the SNS tabs) is masked.
+// and post count (mirrored in sns-count.json) — so a screenshot
+// can go on the blog with those intact; only the unpublished
+// analysis (per-post platform counts, day-over-day changes,
+// genre rollups, and every blog-tab figure, which are GA
+// rollups over the last 28 days that no public page prints)
+// is masked.
 // The choice persists in local storage and the default is off
 // (numbers visible). While a temporary share link is being
 // viewed, masking is suspended — the viewer of a shared link

@@ -64,11 +64,15 @@ describe("buildLineChartSvg", () => {
     expect(svg).toContain("最大 42");
   });
 
-  it("can mark the max label public (the blog's daily chart)", () => {
+  it("never marks the max label public", () => {
+    // The chart builder has no public-label switch: every
+    // chart's figures are unpublished rollups, so the label
+    // always masks (the stylesheet hides it while masking).
     const svg = buildLineChartSvg([{ date: "20261105", views: 42 }], {
       publicMaxLabel: true,
     });
-    expect(svg).toContain('class="chart-max-label is-public"');
+    expect(svg).toContain('class="chart-max-label"');
+    expect(svg).not.toContain("is-public");
     expect(svg).toContain("最大 42");
   });
 });
