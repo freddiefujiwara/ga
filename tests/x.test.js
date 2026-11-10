@@ -85,13 +85,23 @@ describe("X shaping", () => {
   it("xTotals dashes everything while X is not collected yet", () => {
     const boxes = xTotals({}, []);
     expect(boxes).toEqual([
-      { label: "フォロワー", value: "—" },
+      { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "—" },
       { label: "投稿数（取得分）", value: "—" },
       { label: "表示合計（取得分）", value: "—" },
       { label: "平均表示（取得分）", value: "—" },
     ]);
     expect(xTotals(null, null)[0].value).toBe("—");
+  });
+
+  it("xTotals flags only the follower count public", () => {
+    // The follower count is published on the top page; the
+    // day-over-day change and the fetched-post sums are this
+    // page's own analysis and stay masked.
+    const flagged = xTotals(DETAIL, ROWS)
+      .filter((box) => box.public === true)
+      .map((box) => box.label);
+    expect(flagged).toEqual(["フォロワー"]);
   });
 
   it("xHistorySeries charts only the rows that carry a number", () => {

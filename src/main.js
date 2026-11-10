@@ -201,21 +201,27 @@ renderPrivacy();
 // A raw count as a masking-ready span: figures the renderers
 // splice into a line of text ride in one of these, so the
 // privacy CSS (which blurs .amount-value) reaches them too.
-function countSpan(value) {
+// A figure the owner already publishes elsewhere (the top
+// page's follower counts, the blog's own numbers) passes
+// isPublic and also takes .is-public, so masking leaves it
+// readable like the percentages.
+function countSpan(value, isPublic = false) {
   const span = document.createElement("span");
-  span.className = "amount-value";
+  span.className = "amount-value" + (isPublic ? " is-public" : "");
   span.textContent = formatCount(value);
   return span;
 }
 
 // The total-box value classes: every value is a raw count and
-// takes .amount-value, except a percentage （割合）, which also
-// takes .is-public so it stays readable while masking — the
-// asset / health exemption for ratios.
+// takes .amount-value, except a percentage （割合） and the
+// items flagged public (figures already published on the top
+// page or the blog), which also take .is-public so they stay
+// readable while masking — the asset / health exemption.
 function totalValueClass(item) {
   const isPercent =
     typeof item.value === "string" && item.value.trim().endsWith("%");
-  return "total-value amount-value" + (isPercent ? " is-public" : "");
+  const isPublic = isPercent || item.public === true;
+  return "total-value amount-value" + (isPublic ? " is-public" : "");
 }
 
 const auth = () => ({ idToken, shareToken });
@@ -365,8 +371,11 @@ async function loadDashboard() {
   document.getElementById("total-users").textContent = t.users.toLocaleString();
   document.getElementById("total-sessions").textContent =
     t.sessions.toLocaleString();
+  // The blog's daily figures are the blog's own published
+  // numbers, so the chart's max label is exempt from masking.
   document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
     dailySeries(daily),
+    { publicMaxLabel: true },
   );
   wireChartTooltip();
   const renderRanking = (elId, response, limit) => {
@@ -376,7 +385,9 @@ async function loadDashboard() {
       const li = document.createElement("li");
       li.textContent = item.name;
       const span = document.createElement("span");
-      span.className = "rank-value amount-value";
+      // Blog-tab figures are the blog's own published numbers:
+      // exempt from masking.
+      span.className = "rank-value amount-value is-public";
       span.textContent = item.views.toLocaleString();
       li.appendChild(span);
       list.appendChild(li);
@@ -403,7 +414,9 @@ async function loadDashboard() {
     link.textContent = item.label;
     li.appendChild(link);
     const span = document.createElement("span");
-    span.className = "rank-value amount-value";
+    // Per-article view counts are public (the blog's article
+    // list prints them), so masking exempts them.
+    span.className = "rank-value amount-value is-public";
     span.textContent = item.views.toLocaleString();
     li.appendChild(span);
     pageList.appendChild(li);
@@ -458,21 +471,28 @@ async function loadDashboard() {
 // lines: "micro-v" runs the line vertically down a tall narrow
 // tile, "micro-h" keeps it horizontal on a wide flat one. The
 // name and the figure share the single line.
-function tileOneLineLabel(level, name, valueText) {
+function tileOneLineLabel(level, name, valueText, isPublic = false) {
   const el = document.createElement("div");
   el.className =
     level === "micro-v" ? "treemap-tile-vlabel" : "treemap-tile-hlabel";
   // The name stays readable; only the figure is a raw count and
-  // rides in a masking-ready span.
+  // rides in a masking-ready span — unless the figure is one of
+  // the published ones, which takes .is-public instead.
   el.append(`${name} `);
   const value = document.createElement("span");
-  value.className = "amount-value";
+  value.className = "amount-value" + (isPublic ? " is-public" : "");
   value.textContent = valueText;
   el.appendChild(value);
   return el;
 }
 
-function renderGenreTreemap(mapEl, legendEl, map) {
+// Draws a genre (or, for the blog, tag) treemap and its legend.
+// With options.isPublic every figure also takes .is-public:
+// the blog genre section's figures are the blog's own published
+// numbers, while the SNS genre sections' stay masked.
+function renderGenreTreemap(mapEl, legendEl, map, options = {}) {
+  const valueClass = (base) =>
+    base + " amount-value" + (options.isPublic ? " is-public" : "");
   mapEl.innerHTML = "";
   if (!map.tiles.length) {
     const p = document.createElement("p");
@@ -502,19 +522,21 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
     div.classList.add(`level-${level}`);
     if (level === "micro-v" || level === "micro-h") {
-      div.appendChild(tileOneLineLabel(level, tile.name, tile.avgLabel));
+      div.appendChild(
+        tileOneLineLabel(level, tile.name, tile.avgLabel, options.isPublic),
+      );
     } else if (level !== "none") {
       const name = document.createElement("div");
       name.className = "treemap-tile-name";
       name.textContent = tile.name;
       div.appendChild(name);
       const value = document.createElement("div");
-      value.className = "treemap-tile-value amount-value";
+      value.className = valueClass("treemap-tile-value");
       value.textContent = tile.avgLabel;
       div.appendChild(value);
       if (level === "full") {
         const total = document.createElement("div");
-        total.className = "treemap-tile-sub amount-value";
+        total.className = valueClass("treemap-tile-sub");
         total.textContent = tile.totalText;
         div.appendChild(total);
       }
@@ -529,24 +551,24 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     name.textContent = entry.name;
     li.appendChild(name);
     const value = document.createElement("span");
-    value.className = "channel-legend-value amount-value";
+    value.className = valueClass("channel-legend-value");
     value.textContent = entry.avgText;
     li.appendChild(value);
     const total = document.createElement("span");
-    total.className = "channel-legend-note amount-value";
+    total.className = valueClass("channel-legend-note");
     total.textContent = entry.totalText;
     li.appendChild(total);
     legendEl.appendChild(li);
   }
 }
 
-function buildGenreTreemap(map, noteText) {
+function buildGenreTreemap(map, noteText, options = {}) {
   const frag = document.createDocumentFragment();
   const mapEl = document.createElement("div");
   mapEl.className = "treemap";
   const legendEl = document.createElement("ul");
   legendEl.className = "channel-legend";
-  renderGenreTreemap(mapEl, legendEl, map);
+  renderGenreTreemap(mapEl, legendEl, map, options);
   frag.appendChild(mapEl);
   frag.appendChild(legendEl);
   if (noteText) {
@@ -603,7 +625,9 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     return;
   }
   // The tiles (area = views per article) summarise the same
-  // rows the table below lists in full.
+  // rows the table below lists in full. Every figure here is a
+  // blog view count — the blog's own published numbers — so
+  // the whole section is exempt from privacy masking.
   wrap.appendChild(
     buildGenreTreemap(
       genreTreemap(rows, (row) => ({
@@ -613,6 +637,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
         totalText: `合計 ${formatCount(row.totalViews)}`,
       })),
       "タイルの面積は1記事あたり表示回数の大きさです。色が青いほど1記事あたり表示回数が多いです。",
+      { isPublic: true },
     ),
   );
   const table = document.createElement("table");
@@ -655,7 +680,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     tr.appendChild(tagTd);
     for (const value of [row.count, row.totalViews, row.perArticle]) {
       const td = document.createElement("td");
-      td.className = "num amount-value";
+      td.className = "num amount-value is-public";
       td.textContent = formatCount(value);
       tr.appendChild(td);
     }
@@ -668,7 +693,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
       link.textContent = row.top.title;
       topTd.appendChild(link);
       const span = document.createElement("span");
-      span.className = "rank-value amount-value";
+      span.className = "rank-value amount-value is-public";
       span.textContent = formatCount(row.top.views);
       topTd.appendChild(span);
     } else {
@@ -707,6 +732,7 @@ function renderBlogArticleGenreTabs() {
     total: blogArticles.length,
     options: articleGenreOptions(blogArticles),
     active: blogArticleGenreFilter,
+    publicCounts: true,
     onSelect: (genre) => {
       blogArticleGenreFilter = genre;
       renderBlogArticleGenreTabs();
@@ -749,7 +775,9 @@ function renderBlogArticleTable() {
       : "—";
     tr.appendChild(genreTd);
     const viewsTd = document.createElement("td");
-    viewsTd.className = "num amount-value";
+    // Per-article view counts are public (the blog's article
+    // list prints them), so masking exempts them.
+    viewsTd.className = "num amount-value is-public";
     viewsTd.textContent = formatCount(article.views);
     tr.appendChild(viewsTd);
     tbody.appendChild(tr);
@@ -772,7 +800,7 @@ function renderBlogArticles(pagesResponse, meta, rssTitles) {
   if (blogArticles.length) {
     articleRangeEl.append(
       "対象：直近28日間に表示された記事（全",
-      countSpan(blogArticles.length),
+      countSpan(blogArticles.length, true),
       "件）",
     );
   }
@@ -879,7 +907,8 @@ function renderTopPosts() {
         li.textContent = item.label;
       }
       const span = document.createElement("span");
-      span.className = "rank-value amount-value";
+      span.className =
+        "rank-value amount-value" + (item.public ? " is-public" : "");
       span.textContent = formatCount(item.value);
       li.appendChild(span);
       list.appendChild(li);
@@ -937,7 +966,11 @@ function renderChannelTreemap() {
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
     div.classList.add(`level-${level}`);
     if (level === "micro-v" || level === "micro-h") {
-      div.appendChild(tileOneLineLabel(level, tile.name, tile.valueText));
+      // Every channel figure here is a published one (the top
+      // page's follower counts, the blog's user count), so the
+      // tile figures are exempt from masking; only the 前日比
+      // sub line below stays masked.
+      div.appendChild(tileOneLineLabel(level, tile.name, tile.valueText, true));
       mapEl.appendChild(div);
       continue;
     }
@@ -947,7 +980,7 @@ function renderChannelTreemap() {
       name.textContent = tile.name;
       div.appendChild(name);
       const value = document.createElement("div");
-      value.className = "treemap-tile-value amount-value";
+      value.className = "treemap-tile-value amount-value is-public";
       value.textContent = tile.valueText;
       div.appendChild(value);
     }
@@ -992,7 +1025,7 @@ function renderChannelTreemap() {
       li.appendChild(note);
     } else {
       const value = document.createElement("span");
-      value.className = "channel-legend-value amount-value";
+      value.className = "channel-legend-value amount-value is-public";
       value.textContent = entry.valueLabel;
       li.appendChild(value);
       if (entry.shareLabel) {
@@ -1087,7 +1120,10 @@ function fillDemoRanking(elId, items) {
 // counts once per tag in the options but is still one article.
 // Clicking a button reports the genre (null for すべて) through
 // onSelect; the caller owns the filter state and re-renders.
-function renderGenreFilterTabs(wrap, { total, options, active, onSelect }) {
+function renderGenreFilterTabs(
+  wrap,
+  { total, options, active, onSelect, publicCounts = false },
+) {
   wrap.innerHTML = "";
   const buttons = [{ genre: null, name: "すべて", count: total }];
   for (const option of options) {
@@ -1106,8 +1142,10 @@ function renderGenreFilterTabs(wrap, { total, options, active, onSelect }) {
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", String(isActive));
     // The item count is a raw count: it rides in a masking span
-    // inside the button's label.
-    btn.append(`${entry.name}（`, countSpan(entry.count), "）");
+    // inside the button's label — unless the caller marks its
+    // counts public (the blog tab's article counts, which are
+    // the blog's own published numbers).
+    btn.append(`${entry.name}（`, countSpan(entry.count, publicCounts), "）");
     btn.addEventListener("click", () => onSelect(entry.genre));
     wrap.appendChild(btn);
   }
@@ -1509,7 +1547,7 @@ function renderYoutubeHistory() {
   head.className = "meta";
   head.append(
     `${item.label}：最新 `,
-    countSpan(item.latest),
+    countSpan(item.latest, true),
     `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
   );
   const chart = document.createElement("div");
@@ -1809,7 +1847,7 @@ function renderThreads() {
   head.className = "meta";
   head.append(
     `${item.label}：最新 `,
-    countSpan(item.latest),
+    countSpan(item.latest, true),
     `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
   );
   const chart = document.createElement("div");
@@ -1962,7 +2000,7 @@ function renderX() {
   head.className = "meta";
   head.append(
     `${item.label}：最新 `,
-    countSpan(item.latest),
+    countSpan(item.latest, true),
     `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
   );
   const chart = document.createElement("div");
@@ -2277,7 +2315,9 @@ function renderSnsHistory(response) {
     head.className = "meta";
     head.append(
       `${item.label}：最新 `,
-      countSpan(item.latest),
+      // The combined follower total is a published figure
+      // (the top page's hero); the other series stay masked.
+      countSpan(item.latest, item.key === "total_followers"),
       `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
     );
     const chart = document.createElement("div");
@@ -2312,13 +2352,15 @@ async function loadSnsHistory() {
 const chartTooltipEl = document.getElementById("chart-tooltip");
 
 function showChartTooltip(pointEl) {
-  // The date stays readable; the view count is a raw count and
-  // rides in a .privacy-mask span (tooltipText in chart.js
-  // composes the same wording as plain text for tests).
+  // The date stays readable; the view count rides in a
+  // .privacy-mask span (tooltipText in chart.js composes the
+  // same wording as plain text for tests) — exempted with
+  // .is-public, since this tooltip serves the blog's daily
+  // chart and its figures are the blog's published numbers.
   chartTooltipEl.textContent = "";
   chartTooltipEl.append(`${formatDateFull(pointEl.dataset.date)} · `);
   const count = document.createElement("span");
-  count.className = "privacy-mask";
+  count.className = "privacy-mask is-public";
   count.textContent = `${Number(pointEl.dataset.views).toLocaleString()}回`;
   chartTooltipEl.appendChild(count);
   const rect = pointEl.getBoundingClientRect();
