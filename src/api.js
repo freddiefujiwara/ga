@@ -753,7 +753,9 @@ export function followChartDays(detail) {
       date: key,
       follows: isNum(row.follows) ? row.follows : null,
       unfollows: isNum(row.unfollows) ? row.unfollows : null,
-      posts: postsByDate.get(key) ?? [],
+      // The day's posts read best-first, like the per-post
+      // table's default order.
+      posts: sortMedia(postsByDate.get(key) ?? [], "views", "desc"),
     });
   }
   return [...byDate.values()].sort((a, b) =>
@@ -1192,6 +1194,18 @@ export async function fetchBlogMeta(url, fetchImpl = fetch) {
     }
   }
   return meta;
+}
+
+// One title map out of the two blog title sources: the titles
+// payload (?o=titles) fills the map first and the RSS titles win
+// on overlap — the merge the blog tab's sections all share, so a
+// failure of either single fetch no longer blanks every title.
+export function mergeBlogTitles(metaTitles, rssTitles) {
+  const titles = new Map(metaTitles || []);
+  for (const [id, title] of rssTitles || []) {
+    titles.set(id, title);
+  }
+  return titles;
 }
 
 // Per-article view counts with the split paths merged, article

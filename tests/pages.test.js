@@ -4,6 +4,7 @@ import {
   pageDisplay,
   canonicalPageKey,
   pageRanking,
+  mergeBlogTitles,
 } from "../src/api.js";
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -162,6 +163,29 @@ describe("pageRanking", () => {
         views: 120,
       },
       { label: "トップページ", href: `${origin}/`, views: 100 },
+    ]);
+  });
+
+  it("labels articles from the titles payload when the RSS map is empty", () => {
+    // Regression: the ranking used to read the RSS titles alone,
+    // so one failed RSS fetch showed raw paths for every article
+    // even though the titles payload had arrived. loadDashboard
+    // now hands pageRanking the merged map.
+    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
+    const payloadTitles = new Map([[idB, "2026-10-31 川口の行きたい店まとめ"]]);
+    const ranking = pageRanking(
+      response([row(`/blog/${idB}`, 270), row("/", 880)]),
+      mergeBlogTitles(payloadTitles, new Map()),
+      origin,
+      10,
+    );
+    expect(ranking).toEqual([
+      { label: "トップページ", href: `${origin}/`, views: 880 },
+      {
+        label: "2026-10-31 川口の行きたい店まとめ",
+        href: `${origin}/blog/${idB}`,
+        views: 270,
+      },
     ]);
   });
 

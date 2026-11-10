@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   parseBlogMeta,
   fetchBlogMeta,
+  mergeBlogTitles,
   articlePageViews,
   blogGenreStats,
   blogArticleList,
@@ -101,6 +102,36 @@ describe("fetchBlogMeta", () => {
     const meta = await fetchBlogMeta("https://example.com/exec?o=titles", fetchImpl);
     expect(meta.tags.size).toBe(0);
     expect(meta.titles.size).toBe(0);
+  });
+});
+
+describe("mergeBlogTitles", () => {
+  it("fills gaps from the titles payload and lets RSS win on overlap", () => {
+    const metaTitles = new Map([
+      [ID_UNNEI, "ペイロード側のタイトル"],
+      [ID_CHINESE, "中国語レッスン5回目"],
+    ]);
+    const rssTitles = new Map([[ID_UNNEI, "RSS側のタイトル"]]);
+    const merged = mergeBlogTitles(metaTitles, rssTitles);
+    expect(merged.get(ID_UNNEI)).toBe("RSS側のタイトル");
+    expect(merged.get(ID_CHINESE)).toBe("中国語レッスン5回目");
+    expect(merged.size).toBe(2);
+  });
+
+  it("keeps the payload titles when the RSS fetch came back empty", () => {
+    // The page ranking's failure mode: RSS empty must not blank
+    // the titles the payload delivered.
+    const merged = mergeBlogTitles(TITLES, new Map());
+    expect(merged.get(ID_KAWAGUCHI)).toBe("川口の行きたい店まとめ");
+    expect(merged.size).toBe(TITLES.size);
+  });
+
+  it("tolerates missing maps on either side", () => {
+    expect(mergeBlogTitles(null, null).size).toBe(0);
+    expect(mergeBlogTitles(undefined, TITLES).get(ID_UNNEI)).toBe(
+      "ブログ運営の裏側：運用費の話",
+    );
+    expect(mergeBlogTitles(TITLES, undefined).size).toBe(TITLES.size);
   });
 });
 
