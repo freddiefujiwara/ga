@@ -611,12 +611,6 @@ textarea:disabled {
   font-weight: 600;
 }
 
-/* Genre average bars: genre names run longer than the demo
-   labels, so the label column gets more room. */
-.genre-bars .demo-bar-label {
-  flex: 0 0 9.5em;
-}
-
 /* Age/gender pyramid: male bars extend left from the center age
    label, female bars right, both on one shared scale. The grid
    keeps the label column a fixed width so the two bar areas line
@@ -771,5 +765,19 @@ textarea:disabled {
 .ranking a:hover {
   color: var(--link-active);
   text-decoration: underline;
+}
+
+/* Per-post link icon (the Instagram table's リンク column): a
+   compact ↗ that opens the post itself, labelled for assistive
+   tech via title / aria-label in the markup. */
+.post-link-icon {
+  color: var(--link);
+  text-decoration: none;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.post-link-icon:hover {
+  color: var(--link-active);
 }
 

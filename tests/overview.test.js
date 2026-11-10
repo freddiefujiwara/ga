@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { historyDelta, formatDelta, overviewKpis, topMedia } from "../src/api.js";
+import {
+  historyDelta,
+  formatDelta,
+  overviewKpis,
+  topMedia,
+  topPostsByChannel,
+} from "../src/api.js";
 
 // A snapshot in the sns_detail contract shape (same numbers as the
 // DETAIL fixture in sns.test.js, trimmed to what the overview reads).
@@ -129,7 +135,39 @@ describe("overviewKpis", () => {
     expect(cards["フォロー（過去30日）"]).toEqual({ label: "フォロー（過去30日）", value: "120", delta: "+2" });
     // The snapshot value is null and the history has only one
     // numeric point, so neither a value nor a delta is available.
-    expect(cards["フォロー解除（過去30日）"]).toEqual({ label: "フォロー解除（過去30日）", value: "—", delta: null });
+    expect(cards["フォロー解除（過去30日）"]).toEqual({ label: "フォロー解除（過去30日）", value: "—", delta: null, invert: true });
+  });
+
+  it("flags only the unfollows card for inverted delta colours", () => {
+    const cards = overviewKpis(DETAIL, GA_TOTALS, HISTORY2);
+    for (const card of cards) {
+      if (card.label === "フォロー解除（過去30日）") {
+        expect(card.invert).toBe(true);
+      } else {
+        expect(card.invert).toBeUndefined();
+      }
+    }
+    // With two numeric unfollow points the delta itself is a
+    // plain signed change; the inversion lives in the flag, so
+    // an increase still reads "+5" and the renderer colours it
+    // red.
+    const rows = [
+      { collected_at: "2026-11-08T19:00:00.000Z", unfollows_30d: 40 },
+      { collected_at: "2026-11-09T01:00:00.000Z", unfollows_30d: 45 },
+    ];
+    const detail = {
+      ...DETAIL,
+      instagram: { ...DETAIL.instagram, unfollows_30d: 45 },
+    };
+    const card = overviewKpis(detail, GA_TOTALS, rows).find(
+      (c) => c.label === "フォロー解除（過去30日）",
+    );
+    expect(card).toEqual({
+      label: "フォロー解除（過去30日）",
+      value: "45",
+      delta: "+5",
+      invert: true,
+    });
   });
 
   it("blog cards come from the GA totals and never carry a delta", () => {
@@ -165,6 +203,86 @@ describe("overviewKpis", () => {
     );
     expect(noGa["ブログ 表示回数（直近28日）"].value).toBe("—");
     expect(noGa["SNS延べフォロワー数"].delta).toBe("+5");
+  });
+});
+
+describe("topPostsByChannel", () => {
+  const FULL = {
+    ...DETAIL,
+    youtube: {
+      subscribers: 9,
+      recent_videos: [
+        { id: "v1", title: "小さい動画", views: 10, url: "https://www.youtube.com/watch?v=v1" },
+        { id: "v2", title: "大きい動画", views: 800, url: "https://www.youtube.com/watch?v=v2" },
+        { id: "v3", title: "中くらいの動画", views: 300, url: "https://www.youtube.com/watch?v=v3" },
+        { id: "v4", title: "四番目の動画", views: 50, url: "https://www.youtube.com/watch?v=v4" },
+      ],
+    },
+    threads: {
+      followers: 252,
+      recent_posts: [
+        { id: "t1", text: "表示の少ない投稿", views: 20, permalink: "https://www.threads.net/t1" },
+        { id: "t2", text: "表示の多い投稿", views: 900, permalink: "https://www.threads.net/t2" },
+      ],
+    },
+    x: {
+      followers: 321,
+      recent_posts: [
+        { id: "x1", text: "表示の多いポスト", views: 700, url: "https://x.com/i/web/status/x1" },
+        { id: "x2", text: "リンクなしポスト", views: 100, url: null },
+      ],
+    },
+  };
+  const BLOG_TOP = [
+    { label: "一番読まれた記事", href: "https://freddiefujiwara.com/blog/a", views: 400 },
+    { label: "二番目の記事", href: "https://freddiefujiwara.com/blog/b", views: 200 },
+    { label: "三番目の記事", href: "https://freddiefujiwara.com/blog/c", views: 90 },
+    { label: "四番目の記事", href: "https://freddiefujiwara.com/blog/d", views: 10 },
+  ];
+
+  it("lists every channel with its own metric name, three items each", () => {
+    const sections = topPostsByChannel(FULL, BLOG_TOP);
+    expect(sections.map((s) => [s.channel, s.metric])).toEqual([
+      ["Instagram", "再生回数"],
+      ["YouTube", "再生回数"],
+      ["Threads", "表示回数"],
+      ["X", "表示回数"],
+      ["ブログ", "表示回数"],
+    ]);
+    const byChannel = Object.fromEntries(
+      sections.map((s) => [s.channel, s.items]),
+    );
+    expect(byChannel["Instagram"].map((i) => i.value)).toEqual([9000, 5000, 1500]);
+    expect(byChannel["Instagram"][0]).toEqual({
+      label: "一番見られた投稿",
+      href: "https://www.instagram.com/reel/b/",
+      value: 9000,
+    });
+    expect(byChannel["YouTube"].map((i) => i.label)).toEqual([
+      "大きい動画",
+      "中くらいの動画",
+      "四番目の動画",
+    ]);
+    expect(byChannel["Threads"].map((i) => i.value)).toEqual([900, 20]);
+    expect(byChannel["X"][0]).toEqual({
+      label: "表示の多いポスト",
+      href: "https://x.com/i/web/status/x1",
+      value: 700,
+    });
+    // A post without a URL keeps a null href (rendered unlinked).
+    expect(byChannel["X"][1].href).toBeNull();
+    // The blog keeps the caller's ranking and stops at three.
+    expect(byChannel["ブログ"].map((i) => i.value)).toEqual([400, 200, 90]);
+    expect(byChannel["ブログ"][0].href).toBe(
+      "https://freddiefujiwara.com/blog/a",
+    );
+  });
+
+  it("tolerates missing data with empty item lists", () => {
+    const sections = topPostsByChannel(null);
+    expect(sections).toHaveLength(5);
+    expect(sections.every((s) => s.items.length === 0)).toBe(true);
+    expect(topPostsByChannel(FULL, "nope")[4].items).toEqual([]);
   });
 });
 

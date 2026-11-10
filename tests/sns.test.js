@@ -29,6 +29,8 @@ import {
   mediaTypeLabel,
   youtubeVideos,
   youtubeTotals,
+  youtubeHistorySeries,
+  articleViewStats,
   snsErrorNotes,
   instagramDailyFollows,
   instagramDailyFollowsError,
@@ -1038,6 +1040,37 @@ describe("youtube and error notes", () => {
     expect(youtubeVideos(DETAIL)).toHaveLength(1);
     expect(youtubeVideos(null)).toEqual([]);
     expect(youtubeVideos({ youtube: { recent_videos: "x" } })).toEqual([]);
+  });
+
+  it("youtubeHistorySeries charts only the rows that carry a subscriber count", () => {
+    const rows = [
+      { collected_at: "2026-11-09T00:00:00.000Z", youtube_subscribers: null },
+      { collected_at: "2026-11-09T12:00:00.000Z", youtube_subscribers: 9 },
+      { collected_at: "2026-11-10T00:00:00.000Z", youtube_subscribers: 10 },
+    ];
+    const series = youtubeHistorySeries(rows);
+    expect(series).toHaveLength(1);
+    expect(series[0].label).toBe("YouTube 登録者");
+    expect(series[0].latest).toBe(10);
+    expect(series[0].points).toHaveLength(2);
+    expect(youtubeHistorySeries([])).toEqual([]);
+    expect(youtubeHistorySeries(null)).toEqual([]);
+  });
+
+  it("articleViewStats counts articles and averages their views", () => {
+    expect(
+      articleViewStats([
+        { views: 100 },
+        { views: 51 },
+        { views: null },
+      ]),
+    ).toEqual({ count: 3, totalViews: 151, perArticle: 50 });
+    expect(articleViewStats([])).toEqual({
+      count: 0,
+      totalViews: 0,
+      perArticle: null,
+    });
+    expect(articleViewStats(null).count).toBe(0);
   });
 
   it("snsErrorNotes only surfaces non-empty error strings", () => {
