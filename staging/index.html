@@ -16,8 +16,28 @@
     <meta name="twitter:description" content="freddiefujiwara.com のアクセス解析（GA4）" />
     <link rel="icon"
   href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23000'/%3E%3Ctext x='32' y='42' font-size='34' text-anchor='middle' fill='white' font-family='system-ui'%3EF%3C/text%3E" />
+    <script>
+      // Restore the original URL when redirected from 404.html on GitHub Pages.
+      (function () {
+        const query = window.location.search;
+        if (!query.startsWith("?/") || query.length < 3) {
+          return;
+        }
+
+        const path = query
+          .slice(2)
+          .split("&")
+          .map((part) => part.replace(/~and~/g, "&"))
+          .join("?")
+          .replace(/~1/g, ".")
+          .replace(/~0/g, "~");
+
+        const newUrl = `${window.location.pathname}${path}${window.location.hash}`;
+        window.history.replaceState(null, "", newUrl);
+      })();
+    </script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/social/staging/assets/index-E61n7aoY.js"></script>
+    <script type="module" crossorigin src="/social/staging/assets/index-Cwghl4ZU.js"></script>
     <link rel="stylesheet" crossorigin href="/social/staging/assets/index-TJLg5L-K.css">
   </head>
   <body>
