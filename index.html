@@ -37,8 +37,8 @@
       })();
     </script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script type="module" crossorigin src="/social/assets/index-C-pcivuI.js"></script>
-    <link rel="stylesheet" crossorigin href="/social/assets/index-Vopf2k-S.css">
+    <script type="module" crossorigin src="/social/assets/index-D2REb9TY.js"></script>
+    <link rel="stylesheet" crossorigin href="/social/assets/index-DHkUmaaq.css">
   </head>
   <body>
     <div class="layout">
@@ -46,6 +46,7 @@
         <h1>アクセス解析</h1>
         <div class="header-actions">
           <div class="header-buttons">
+            <button id="privacy-toggle" class="theme-toggle" type="button">数値を隠す</button>
             <button id="theme-toggle" class="theme-toggle" type="button">ライト</button>
             <button id="logout" class="theme-toggle" type="button" hidden>ログアウト</button>
           </div>
@@ -186,23 +187,23 @@
               <div class="totals-row">
                 <div class="total-box">
                   <div class="total-label">表示回数</div>
-                  <div class="total-value" id="total-views">-</div>
+                  <div class="total-value amount-value" id="total-views">-</div>
                 </div>
                 <div class="total-box">
                   <div class="total-label">ユーザー</div>
-                  <div class="total-value" id="total-users">-</div>
+                  <div class="total-value amount-value" id="total-users">-</div>
                 </div>
                 <div class="total-box">
                   <div class="total-label">セッション</div>
-                  <div class="total-value" id="total-sessions">-</div>
+                  <div class="total-value amount-value" id="total-sessions">-</div>
                 </div>
                 <div class="total-box">
                   <div class="total-label">記事数（表示のあった記事）</div>
-                  <div class="total-value" id="total-articles">-</div>
+                  <div class="total-value amount-value" id="total-articles">-</div>
                 </div>
                 <div class="total-box">
                   <div class="total-label">1記事あたり表示回数</div>
-                  <div class="total-value" id="total-per-article">-</div>
+                  <div class="total-value amount-value" id="total-per-article">-</div>
                 </div>
               </div>
               <div id="daily-chart" class="chart-wrap"></div>
