@@ -16,6 +16,7 @@ import {
   dimensionRanking,
   fetchArticleTitles,
   pageRanking,
+  pageSpeedRanking,
   fetchBlogMeta,
   mergeBlogTitles,
   blogGenreStats,
@@ -374,6 +375,17 @@ async function loadDashboard() {
   const pagesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     limit: 250,
   });
+  // Per-article display times (the article_render metric pair).
+  // Served from the history sheet's blog_speed tab; until the
+  // first displays are recorded the report answers with no rows
+  // and the section stays hidden, so a rejection here must never
+  // break the blog tab — the catch is attached up front.
+  const speedPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    dimensions: "pagePath",
+    metrics: "customEvent:render_ms,eventCount",
+    limit: 250,
+  });
+  speedPromise.catch(() => {});
   const sourcesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     dimensions: "sessionDefaultChannelGroup",
     limit: 8,
@@ -477,7 +489,7 @@ function loadBlogSections(
   sourcesPromise
     .then((sources) => renderRanking("top-sources", sources, 8))
     .catch(() => {});
-  fillBlogPages(pagesPromise, titlesPromise, metaPromise);
+  fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise);
 }
 
 // The page ranking and everything joined to it: the blog tab's
@@ -485,7 +497,7 @@ function loadBlogSections(
 // and the per-article table. They share one input set — the GA
 // page rows plus the two title sources — so they land together,
 // when the slowest of the three arrives.
-async function fillBlogPages(pagesPromise, titlesPromise, metaPromise) {
+async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise) {
   let pages;
   let rssTitles;
   let meta;
@@ -529,6 +541,39 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise) {
   // section in the per-channel top lists.
   overviewState.blogTop = pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 3);
   renderTopPosts();
+  // The display-time ranking rides its own report; it fills in
+  // when it lands and reveals its section only when at least one
+  // article has a recorded display time. Any failure leaves the
+  // section hidden.
+  if (speedPromise) {
+    speedPromise
+      .then((speed) => {
+        const items = pageSpeedRanking(speed, titles, CONFIG.SITE_ORIGIN, 10);
+        if (!items.length) {
+          return;
+        }
+        const speedList = document.getElementById("top-speed");
+        speedList.innerHTML = "";
+        for (const item of items) {
+          const li = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = item.href;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = item.label;
+          li.appendChild(link);
+          const span = document.createElement("span");
+          // Per-article display times are blog figures like the
+          // view counts above: masked outside share links.
+          span.className = "rank-value amount-value";
+          span.textContent = `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件）`;
+          li.appendChild(span);
+          speedList.appendChild(li);
+        }
+        document.getElementById("speed-section").hidden = false;
+      })
+      .catch(() => {});
+  }
   // The per-genre rollup joins the page rows with the tag map. It
   // renders only when the map actually arrived; blogGenreStats
   // returns nothing without one and the section says why instead.
