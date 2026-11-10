@@ -60,6 +60,14 @@ describe("boot display", () => {
     expect(html).toContain('<div id="top-posts"></div>');
   });
 
+  it("orders the overview チャネル別トップ3 above 推移", () => {
+    const overviewAt = html.indexOf('id="tab-overview"');
+    const topAt = html.indexOf("チャネル別トップ3", overviewAt);
+    const trendAt = html.indexOf(">推移<", overviewAt);
+    expect(topAt).toBeGreaterThan(-1);
+    expect(trendAt).toBeGreaterThan(topAt);
+  });
+
   it("gives the blog KPI row its article boxes and YouTube its trend slot", () => {
     expect(html).toContain('id="total-articles"');
     expect(html).toContain('id="total-per-article"');

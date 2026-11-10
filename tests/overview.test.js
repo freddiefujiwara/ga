@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  historyDelta,
+  historyDailyDelta,
   formatDelta,
   overviewKpis,
   topMedia,
@@ -31,11 +31,13 @@ const DETAIL = {
   threads: { followers: null },
 };
 
-// Two history collections; unfollows_30d only has a number in the
-// first one, so no delta can be computed for it.
+// Two history collections on consecutive JST calendar days
+// (2026-11-08 and 2026-11-09), so the day-over-day change can be
+// computed; unfollows_30d only has a number on the first day, so
+// no delta can be computed for it.
 const HISTORY2 = [
   {
-    collected_at: "2026-11-08T19:00:00.000Z",
+    collected_at: "2026-11-07T19:00:00.000Z",
     total_followers: 2000,
     ig_followers: 1991,
     youtube_subscribers: 9,
@@ -58,14 +60,14 @@ const HISTORY2 = [
 
 const GA_TOTALS = { views: 12345, users: 678, sessions: 901 };
 
-describe("historyDelta", () => {
-  it("compares the two most recent numeric points", () => {
-    expect(historyDelta(HISTORY2, "total_followers")).toEqual({
+describe("historyDailyDelta", () => {
+  it("compares the latest day with the previous calendar day", () => {
+    expect(historyDailyDelta(HISTORY2, "total_followers")).toEqual({
       latest: 2005,
       previous: 2000,
       delta: 5,
     });
-    expect(historyDelta(HISTORY2, "views_30d")).toEqual({
+    expect(historyDailyDelta(HISTORY2, "views_30d")).toEqual({
       latest: 576645,
       previous: 570000,
       delta: 6645,
@@ -74,10 +76,25 @@ describe("historyDelta", () => {
 
   it("sorts out-of-order rows before comparing", () => {
     const shuffled = [HISTORY2[1], HISTORY2[0]];
-    expect(historyDelta(shuffled, "ig_followers")).toEqual({
+    expect(historyDailyDelta(shuffled, "ig_followers")).toEqual({
       latest: 1995,
       previous: 1991,
       delta: 4,
+    });
+  });
+
+  it("takes each day's last collection as that day's value", () => {
+    const rows = [
+      { collected_at: "2026-11-07T15:00:00.000Z", media_count: 100 },
+      { collected_at: "2026-11-07T21:00:00.000Z", media_count: 120 },
+      { collected_at: "2026-11-08T15:00:00.000Z", media_count: 150 },
+      { collected_at: "2026-11-08T21:00:00.000Z", media_count: 140 },
+    ];
+    // JST days 2026-11-08 (…, 120) and 2026-11-09 (…, 140).
+    expect(historyDailyDelta(rows, "media_count")).toEqual({
+      latest: 140,
+      previous: 120,
+      delta: 20,
     });
   });
 
@@ -87,21 +104,42 @@ describe("historyDelta", () => {
       { collected_at: "2026-11-08T19:00:00.000Z", media_count: null },
       { collected_at: "2026-11-09T01:00:00.000Z", media_count: 2420 },
     ];
-    expect(historyDelta(rows, "media_count")).toEqual({
+    expect(historyDailyDelta(rows, "media_count")).toEqual({
       latest: 2420,
       previous: 2418,
       delta: 2,
     });
   });
 
+  it("is null when every point falls on a single day", () => {
+    // Both collections are on JST 2026-11-09, so there is no
+    // previous day to compare against yet.
+    const rows = [
+      { collected_at: "2026-11-08T19:00:00.000Z", total_followers: 2000 },
+      { collected_at: "2026-11-09T01:00:00.000Z", total_followers: 2005 },
+    ];
+    expect(historyDailyDelta(rows, "total_followers")).toBeNull();
+  });
+
+  it("is null when the previous calendar day has no point", () => {
+    // Points on JST 2026-11-07 and 2026-11-09, nothing on the
+    // day in between: no day-over-day comparison is offered
+    // rather than silently comparing across the gap.
+    const rows = [
+      { collected_at: "2026-11-06T19:00:00.000Z", total_followers: 1990 },
+      { collected_at: "2026-11-08T19:00:00.000Z", total_followers: 2005 },
+    ];
+    expect(historyDailyDelta(rows, "total_followers")).toBeNull();
+  });
+
   it("is null with fewer than two numeric points", () => {
-    expect(historyDelta([HISTORY2[0]], "total_followers")).toBeNull();
-    // unfollows_30d has a number in only one of the two rows.
-    expect(historyDelta(HISTORY2, "unfollows_30d")).toBeNull();
-    expect(historyDelta(HISTORY2, "no_such_key")).toBeNull();
-    expect(historyDelta([], "total_followers")).toBeNull();
-    expect(historyDelta(null, "total_followers")).toBeNull();
-    expect(historyDelta("nope", "total_followers")).toBeNull();
+    expect(historyDailyDelta([HISTORY2[0]], "total_followers")).toBeNull();
+    // unfollows_30d has a number on only one of the two days.
+    expect(historyDailyDelta(HISTORY2, "unfollows_30d")).toBeNull();
+    expect(historyDailyDelta(HISTORY2, "no_such_key")).toBeNull();
+    expect(historyDailyDelta([], "total_followers")).toBeNull();
+    expect(historyDailyDelta(null, "total_followers")).toBeNull();
+    expect(historyDailyDelta("nope", "total_followers")).toBeNull();
   });
 });
 
@@ -123,7 +161,7 @@ describe("formatDelta", () => {
 });
 
 describe("overviewKpis", () => {
-  it("shows every KPI with the change since the previous collection", () => {
+  it("shows every KPI with the day-over-day change", () => {
     const cards = Object.fromEntries(
       overviewKpis(DETAIL, GA_TOTALS, HISTORY2).map((c) => [c.label, c]),
     );
@@ -152,7 +190,7 @@ describe("overviewKpis", () => {
     // an increase still reads "+5" and the renderer colours it
     // red.
     const rows = [
-      { collected_at: "2026-11-08T19:00:00.000Z", unfollows_30d: 40 },
+      { collected_at: "2026-11-07T19:00:00.000Z", unfollows_30d: 40 },
       { collected_at: "2026-11-09T01:00:00.000Z", unfollows_30d: 45 },
     ];
     const detail = {
