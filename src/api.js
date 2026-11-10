@@ -1233,6 +1233,39 @@ export function pageRanking(response, titles, origin, limit = 10) {
     .slice(0, limit);
 }
 
+// Build the per-article display-time ranking from the speed
+// report (pagePath x [render_ms total, sample count], served by
+// social-gas from its blog_speed tab): split article paths merge
+// under the canonical key with totals and samples summed, the
+// average is total / samples, slowest first. Articles with no
+// recorded display are absent from the report and stay absent
+// here. Returns [{ label, href, avgMs, samples }] ready to
+// render.
+export function pageSpeedRanking(response, titles, origin, limit = 10) {
+  const merged = new Map();
+  for (const row of rowsOf(response)) {
+    const path = row.dimensionValues[0].value;
+    const total = Number(row.metricValues[0].value) || 0;
+    const samples = Number(row.metricValues[1].value) || 0;
+    if (!samples) {
+      continue;
+    }
+    const key = canonicalPageKey(path);
+    const entry = merged.get(key) || { total: 0, samples: 0 };
+    entry.total += total;
+    entry.samples += samples;
+    merged.set(key, entry);
+  }
+  return [...merged.entries()]
+    .map(([key, entry]) => ({
+      ...pageDisplay(key, titles, origin),
+      avgMs: Math.round(entry.total / entry.samples),
+      samples: entry.samples,
+    }))
+    .sort((a, b) => b.avgMs - a.avgMs)
+    .slice(0, limit);
+}
+
 // --- Blog article tags (blog-gas titles payload) ---
 //
 // The blog API's lightweight titles payload ({ ids, titles, tags })

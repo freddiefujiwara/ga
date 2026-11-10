@@ -4,6 +4,7 @@ import {
   pageDisplay,
   canonicalPageKey,
   pageRanking,
+  pageSpeedRanking,
   mergeBlogTitles,
 } from "../src/api.js";
 
@@ -200,5 +201,53 @@ describe("pageRanking", () => {
       { label: "持ち物リスト", href: `${origin}/list-of-stuff/`, views: 50 },
       { label: "ブログ トップ", href: `${origin}/blog/`, views: 40 },
     ]);
+  });
+});
+
+describe("pageSpeedRanking", () => {
+  const titles = parseRssTitles(RSS);
+  const origin = "https://freddiefujiwara.com";
+  const row = (path, total, samples) => ({
+    dimensionValues: [{ value: path }],
+    metricValues: [{ value: String(total) }, { value: String(samples) }],
+  });
+  const response = (rows) => ({ ok: true, data: { rows } });
+
+  it("merges split paths, averages, and sorts slowest first", () => {
+    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
+    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
+    const ranking = pageSpeedRanking(
+      response([
+        row(`/${idA}`, 30000, 10),
+        row(`/blog/${idA}`, 10000, 10),
+        row(`/blog/${idB}`, 9000, 3),
+      ]),
+      titles,
+      origin,
+      10,
+    );
+    expect(ranking).toEqual([
+      {
+        label: "2026-10-31 川口の行きたい店まとめ",
+        href: `${origin}/blog/${idB}`,
+        avgMs: 3000,
+        samples: 3,
+      },
+      {
+        label: "2026-11-02 Museのご紹介 & 使い方",
+        href: `${origin}/blog/${idA}`,
+        avgMs: 2000,
+        samples: 20,
+      },
+    ]);
+  });
+
+  it("skips zero-sample rows and tolerates a missing response", () => {
+    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
+    expect(
+      pageSpeedRanking(response([row(`/blog/${idA}`, 0, 0)]), titles, origin, 10),
+    ).toEqual([]);
+    expect(pageSpeedRanking(null, titles, origin, 10)).toEqual([]);
+    expect(pageSpeedRanking({ ok: false }, titles, origin, 10)).toEqual([]);
   });
 });
