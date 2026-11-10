@@ -1,16 +1,22 @@
-// Channel sizes for the overview tab, plus the genre treemap.
+// Channel tiles for the overview tab, plus the genre treemap.
 //
-// Each channel contributes one entry whose size is its audience.
-// The metrics differ per channel (followers for Instagram /
-// Threads, subscribers for YouTube, the blog's last-28-days
-// users from GA), so every entry names its metric alongside the
-// number. The overview shows the sizes as horizontal bars — the
-// channels differ by orders of magnitude, which a treemap's
-// tiles squeezed into unreadable slivers. Bar / tile colour
-// follows the change since the previous SNS collection, where
-// the history offers one: up = green, down = red, flat or
-// unknown = neutral. The blog has no history, so it is always
-// neutral.
+// The overview's channel map has one tile per SNS channel —
+// Instagram, YouTube, Threads and X — with the tile area
+// proportional to the channel's follower count (subscribers
+// for YouTube). The metrics differ per channel, so every tile
+// and legend row names its metric alongside the number. Tile
+// colour is the blue heat scale the genre tiles use (see
+// genreHeatBackground), scaled by follower count: the largest
+// channel is the bluest. The change since the previous
+// collection, where the history offers one, rides along as a
+// "前回比" line coloured by direction: up = green, down = red,
+// flat or unknown = plain — the same delta the overview's KPI
+// cards show. The blog is not a tile: its GA user count is not
+// a follower count, so it stays in the KPI cards below. The
+// channels differ by orders of magnitude, so the smallest
+// tiles cannot carry text; the legend under the map lists
+// every channel's exact figures, as it does for the genre
+// maps.
 //
 // The genre sections reuse the squarified treemap layout below,
 // sized by each genre's per-item average: averages sit within
@@ -239,28 +245,66 @@ export function tileLabelLevel(rect) {
   return "none";
 }
 
-// Bar rows for the overview's channel sizes: the channel
-// audiences in their fixed order, each with pct (the bar length,
-// scaled so the largest channel is 100) and tone (the colour of
-// the change since the previous collection). A channel without a
-// value yet — Threads while its followers are not collected —
-// gets an empty bar (pct 0) and keeps its "集計待ち" note; once a
-// value arrives it takes its place among the bars.
-export function channelBars(detail, gaTotals, historyRows) {
-  const channels = channelAudiences(detail, gaTotals, historyRows);
-  const max = channels.reduce(
-    (biggest, channel) =>
-      isNum(channel.value) && channel.value > biggest ? channel.value : biggest,
+// Channel treemap for the overview tab: { tiles, legend }
+// over the four SNS channels in their fixed order (the blog is
+// left out — its GA user count is not a follower count; it
+// stays in the KPI cards). Each channel carries its share of
+// the four channels' combined followers, which is what the
+// tile areas show: the share rides on every legend row and on
+// roomy tiles. Tiles exist only for positive counts; each
+// carries the blue heat background scaled across the counts on
+// show (the genre tiles' scale, here on follower counts) and a
+// labelLevel from tileLabelLevel, so the renderer draws only
+// the lines that fit. The legend lists every channel,
+// including zero / uncollected ones (集計待ち), in the
+// fixed channel order.
+export function channelTreemap(detail, historyRows) {
+  const channels = channelAudiences(detail, null, historyRows).filter(
+    (channel) => channel.id !== "blog",
+  );
+  const total = channels.reduce(
+    (sum, channel) => sum + (isNum(channel.value) ? channel.value : 0),
     0,
   );
-  return channels.map((channel) => ({
-    ...channel,
-    pct:
-      isNum(channel.value) && max > 0
-        ? Math.round((channel.value / max) * 1000) / 10
-        : 0,
-    tone: deltaTone(channel.delta),
-  }));
+  const counts = channels
+    .map((channel) => channel.value)
+    .filter((value) => isNum(value) && value > 0);
+  const heatMin = counts.length ? Math.min(...counts) : null;
+  const heatMax = counts.length ? Math.max(...counts) : null;
+  const legend = channels.map((channel) => {
+    const share =
+      isNum(channel.value) && total > 0
+        ? Math.round((channel.value / total) * 1000) / 10
+        : null;
+    return {
+      ...channel,
+      share,
+      shareLabel: share === null ? null : `全体の ${share}%`,
+      tone: deltaTone(channel.delta),
+    };
+  });
+  const byId = new Map(legend.map((channel) => [channel.id, channel]));
+  const tiles = squarifiedLayout(
+    legend
+      .filter((channel) => isNum(channel.value) && channel.value > 0)
+      .map((channel) => ({ id: channel.id, value: channel.value })),
+    100,
+    100,
+  ).map((rect) => {
+    const channel = byId.get(rect.id);
+    const labelLevel = tileLabelLevel(rect);
+    return {
+      ...channel,
+      heat: genreHeatBackground(channel.value, heatMin, heatMax),
+      x: rect.x,
+      y: rect.y,
+      w: rect.w,
+      h: rect.h,
+      labelLevel,
+      labelRoom: labelLevel !== "none",
+    };
+  });
+  return { tiles, legend };
 }
 
 // Genre treemap for the Instagram / blog genre sections: the

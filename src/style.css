@@ -306,8 +306,9 @@ textarea:disabled {
   color: var(--error);
 }
 
-/* Channel-size treemap (overview tab). Tiles are positioned in
-   percentages of the map box, so the layout holds at any width. */
+/* Treemaps: the overview's channel map and the genre sections.
+   Tiles are positioned in percentages of the map box, so the
+   layout holds at any width. */
 .treemap {
   position: relative;
   width: 100%;
@@ -325,12 +326,12 @@ textarea:disabled {
   background: var(--surface-elevated);
 }
 
-.treemap-tile.up {
-  background: color-mix(in srgb, var(--up) 30%, var(--surface-elevated));
+.treemap-tile-delta.up {
+  color: var(--up);
 }
 
-.treemap-tile.down {
-  background: color-mix(in srgb, var(--error) 30%, var(--surface-elevated));
+.treemap-tile-delta.down {
+  color: var(--error);
 }
 
 .treemap-tile-name {
@@ -556,41 +557,6 @@ textarea:disabled {
    labels, so the label column gets more room. */
 .genre-bars .demo-bar-label {
   flex: 0 0 9.5em;
-}
-
-/* Channel-size bars (overview tab): the fill takes the change
-   tone (up = green, down = red), and the label column fits the
-   channel name plus its metric. */
-.demo-bar-fill.up {
-  background: var(--up);
-}
-
-.demo-bar-fill.down {
-  background: var(--error);
-}
-
-.channel-bars .demo-bar-label {
-  flex: 0 0 11em;
-  white-space: normal;
-}
-
-.channel-bar-name {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.channel-bar-metric {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.channel-bars .demo-bar-value {
-  flex: 0 0 5em;
-}
-
-.channel-bar-delta {
-  flex: 0 0 6.5em;
-  margin-top: 0;
 }
 
 /* Age/gender pyramid: male bars extend left from the center age
