@@ -613,6 +613,17 @@ export function threadsErrorNotes(detail) {
     .filter((value) => typeof value === "string" && value.length > 0);
 }
 
+// The YouTube subscriber trend for the YouTube tab: the same
+// history rows, a single series — the counterpart of
+// threadsHistorySeries / xHistorySeries, so the YouTube tab
+// shows its follower trend the same way the other channel tabs
+// show theirs.
+export function youtubeHistorySeries(rows) {
+  return shapeHistorySeries(rows, [
+    { key: "youtube_subscribers", label: "YouTube 登録者" },
+  ]);
+}
+
 // The X follower trend for the X tab: the same history rows, a
 // single series. X numbers only exist since the tweet-gas sync
 // was connected, so — like Threads — the rows before that
@@ -629,15 +640,31 @@ export function xHistorySeries(rows) {
 // number there is nothing to compare, so the change box shows
 // "—". X has no account-wide 30-day totals in the collection
 // (the API tweet-gas reads reports per-post numbers only), so
-// the follower pair is the whole row.
+// the rest of the row is summed from the fetched posts
+// themselves and labelled 取得分: the post count, their combined
+// views and the per-post average — the average that otherwise
+// only appears inside the genre section.
 export function xTotals(detail, historyRows) {
   const x = detail?.x ?? {};
   const change = historyDelta(historyRows, "x_followers");
+  const posts = xPosts(detail);
+  const viewed = posts.filter((post) => isNum(post?.views));
+  const totalViews = viewed.length
+    ? viewed.reduce((sum, post) => sum + post.views, 0)
+    : null;
   return [
     { label: "フォロワー", value: formatCount(x.followers) },
     {
       label: "前回比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
+    },
+    { label: "投稿数（取得分）", value: formatCount(posts.length || null) },
+    { label: "表示合計（取得分）", value: formatCount(totalViews) },
+    {
+      label: "平均表示（取得分）",
+      value: formatCount(
+        totalViews === null ? null : Math.round(totalViews / viewed.length),
+      ),
     },
   ];
 }
@@ -838,6 +865,11 @@ export function overviewKpis(detail, gaTotals, historyRows) {
       label: "フォロー解除（過去30日）",
       value: formatCount(ig.unfollows_30d),
       delta: deltaFor("unfollows_30d"),
+      // More unfollows is worse, so this card's change is
+      // coloured the other way round (an increase reads red, a
+      // decrease green). fillKpiBoxes applies the inversion;
+      // every other card colours an increase green.
+      invert: true,
     },
   ];
 }
@@ -851,6 +883,71 @@ export function topMedia(detail, limit = 5) {
     ? detail.instagram.recent_media
     : [];
   return sortMedia(rows, "views", "desc").slice(0, limit);
+}
+
+// The overview's per-channel top lists: the most-viewed items of
+// every channel, each under its channel's name and the metric
+// that channel actually reports — Instagram and YouTube count
+// 再生回数, Threads and X count 表示回数, and the blog counts its
+// articles' 表示回数. Every item is shaped the same way,
+// { label, href, value }, with href null when the item carries
+// no link, so a single renderer serves all five sections. The
+// blog rows are ranked by the caller (pageRanking over the GA
+// report) and arrive ready-made as { label, href, views }; only
+// the first `limit` are kept, in the caller's order.
+export function topPostsByChannel(detail, blogItems = [], limit = 3) {
+  const top = (rows, toItem) =>
+    sortMedia(rows, "views", "desc").slice(0, limit).map(toItem);
+  return [
+    {
+      channel: "Instagram",
+      metric: "再生回数",
+      items: topMedia(detail, limit).map((media) => ({
+        label:
+          captionHead(media.caption) || mediaTypeLabel(media.type) || "投稿",
+        href: media.permalink ?? null,
+        value: media.views,
+      })),
+    },
+    {
+      channel: "YouTube",
+      metric: "再生回数",
+      items: top(youtubeVideos(detail), (video) => ({
+        label: video.title || "動画",
+        href: video.url ?? null,
+        value: video.views,
+      })),
+    },
+    {
+      channel: "Threads",
+      metric: "表示回数",
+      items: top(threadsPosts(detail), (post) => ({
+        label: captionHead(post.text) || "投稿",
+        href: post.permalink ?? null,
+        value: post.views,
+      })),
+    },
+    {
+      channel: "X",
+      metric: "表示回数",
+      items: top(xPosts(detail), (post) => ({
+        label: captionHead(post.text) || "投稿",
+        href: post.url ?? null,
+        value: post.views,
+      })),
+    },
+    {
+      channel: "ブログ",
+      metric: "表示回数",
+      items: (Array.isArray(blogItems) ? blogItems : [])
+        .slice(0, limit)
+        .map((item) => ({
+          label: item.label,
+          href: item.href ?? null,
+          value: item.views,
+        })),
+    },
+  ];
 }
 
 // --- Report shaping helpers (pure, unit-tested) ---
@@ -1152,4 +1249,22 @@ export function blogArticleList(response, tags, titles, origin) {
       };
     })
     .sort((a, b) => b.views - a.views || a.title.localeCompare(b.title));
+}
+
+// Count / total / per-article views over a blogArticleList, for
+// the blog tab's KPI row: the article count and the per-article
+// average sit next to the GA totals there, so the average does
+// not live only inside the genre section. perArticle is null
+// when there are no articles at all.
+export function articleViewStats(articles) {
+  const rows = Array.isArray(articles) ? articles : [];
+  const totalViews = rows.reduce(
+    (sum, article) => sum + (isNum(article?.views) ? article.views : 0),
+    0,
+  );
+  return {
+    count: rows.length,
+    totalViews,
+    perArticle: rows.length ? Math.round(totalViews / rows.length) : null,
+  };
 }

@@ -50,6 +50,24 @@ describe("boot display", () => {
     expect(bootBody).toContain("showLoading()");
   });
 
+  it("orders the overview 主要KPI above チャネルの大きさ, with per-channel top lists", () => {
+    const overviewAt = html.indexOf('id="tab-overview"');
+    const kpiAt = html.indexOf("主要KPI", overviewAt);
+    const sizeAt = html.indexOf("チャネルの大きさ", overviewAt);
+    expect(kpiAt).toBeGreaterThan(-1);
+    expect(sizeAt).toBeGreaterThan(kpiAt);
+    expect(html).toContain("チャネル別トップ3");
+    expect(html).toContain('<div id="top-posts"></div>');
+  });
+
+  it("gives the blog KPI row its article boxes and YouTube its trend slot", () => {
+    expect(html).toContain('id="total-articles"');
+    expect(html).toContain('id="total-per-article"');
+    expect(html).toContain('id="youtube-history"');
+    expect(mainJs).toContain("articleViewStats(blogArticles)");
+    expect(mainJs).toContain("youtubeHistorySeries(overviewState.historyRows)");
+  });
+
   it("shows the collection time above the tabs, fed from sns_detail", () => {
     const dashboardAt = html.indexOf('id="dashboard"');
     const asOfAt = html.indexOf('id="data-asof"');

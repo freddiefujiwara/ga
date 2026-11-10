@@ -29,7 +29,9 @@ import {
   xPosts,
   xErrorNotes,
   overviewKpis,
-  topMedia,
+  topPostsByChannel,
+  youtubeHistorySeries,
+  articleViewStats,
   formatCount,
   formatSeconds,
   formatJstDateTime,
@@ -68,7 +70,6 @@ import {
   filterArticlesByGenre,
   mediaDateRange,
   sortGenreRows,
-  genreAverageBars,
   formatRate,
 } from "./genres.js";
 import {
@@ -316,12 +317,25 @@ async function loadDashboard() {
     li.appendChild(span);
     pageList.appendChild(li);
   }
+  // The same ranking, top 3 only, feeds the overview's blog
+  // section in the per-channel top lists.
+  overviewState.blogTop = pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 3);
+  renderTopPosts();
   // The per-genre rollup joins the page rows with the tag map. It
   // renders only when the map actually arrived; blogGenreStats
   // returns nothing without one and the section says why instead.
   const meta = await metaPromise;
   renderBlogGenres(pages, meta, titles);
   renderBlogArticles(pages, meta, titles);
+  // The blog KPI row gains the article count and the per-article
+  // average over the same article list the 記事ごと table shows.
+  const articleStats = articleViewStats(blogArticles);
+  document.getElementById("total-articles").textContent = articleStats.count
+    ? formatCount(articleStats.count)
+    : "-";
+  document.getElementById("total-per-article").textContent = formatCount(
+    articleStats.perArticle,
+  );
   renderRanking("top-sources", sources, 8);
   loadingEl.hidden = true;
   gateEl.hidden = true;
@@ -338,9 +352,10 @@ async function loadDashboard() {
 
 // --- Genre visuals (Instagram / blog genre sections) ---
 // Both genre sections lead with the visuals, in the same order:
-// a treemap whose tile area is the genre's per-item average, the
-// legend directly under the tiles, then a bar chart comparing
-// the same average; the full table follows below. Each tile
+// a treemap whose tile area is the genre's per-item average and
+// the legend directly under the tiles; the full table follows
+// below (its 平均 column carries the same average as a number,
+// so no separate bar list repeats it). Each tile
 // draws the text lines its size can hold (see tileLabelLevel):
 // the name and the figure ride on every tile, down to micro
 // type on the smallest ones, and the legend under the map
@@ -442,43 +457,6 @@ function buildGenreTreemap(map, noteText) {
   return frag;
 }
 
-function renderGenreBars(barsEl, bars) {
-  barsEl.innerHTML = "";
-  for (const bar of bars) {
-    const row = document.createElement("div");
-    row.className = "demo-bar";
-    const label = document.createElement("span");
-    label.className = "demo-bar-label";
-    label.textContent = bar.name;
-    const track = document.createElement("div");
-    track.className = "demo-bar-track";
-    const fill = document.createElement("div");
-    fill.className = "demo-bar-fill";
-    fill.style.width = `${bar.pct}%`;
-    track.appendChild(fill);
-    const value = document.createElement("span");
-    value.className = "demo-bar-value";
-    value.textContent = bar.valueLabel;
-    row.appendChild(label);
-    row.appendChild(track);
-    row.appendChild(value);
-    barsEl.appendChild(row);
-  }
-}
-
-function buildGenreBars(bars, labelText) {
-  const frag = document.createDocumentFragment();
-  const label = document.createElement("p");
-  label.className = "meta";
-  label.textContent = labelText;
-  const barsEl = document.createElement("div");
-  barsEl.className = "demo-bars genre-bars";
-  renderGenreBars(barsEl, bars);
-  frag.appendChild(label);
-  frag.appendChild(barsEl);
-  return frag;
-}
-
 // --- Blog genre rollup (blog tab) ---
 // Joins the GA page rows with the blog's article tag map. Without
 // the map there is nothing honest to group by: the section then
@@ -526,8 +504,8 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     wrap.appendChild(p);
     return;
   }
-  // The tiles (area = views per article) and the average bars
-  // summarise the same rows the table below lists in full.
+  // The tiles (area = views per article) summarise the same
+  // rows the table below lists in full.
   wrap.appendChild(
     buildGenreTreemap(
       genreTreemap(rows, (row) => ({
@@ -538,9 +516,6 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
       })),
       "タイルの面積は1記事あたり表示回数の大きさです。色が青いほど1記事あたり表示回数が多いです。",
     ),
-  );
-  wrap.appendChild(
-    buildGenreBars(genreAverageBars(rows, "perArticle"), "1記事あたり表示回数"),
   );
   const table = document.createElement("table");
   table.className = "data-table";
@@ -718,7 +693,15 @@ function renderBlogArticles(pagesResponse, meta, rssTitles) {
 // its result here and re-renders; whatever has not arrived yet
 // shows as "—" and carries no change line.
 
-const overviewState = { gaTotals: null, detail: null, historyRows: null };
+const overviewState = {
+  gaTotals: null,
+  detail: null,
+  historyRows: null,
+  // The blog's top articles for the overview's per-channel top
+  // lists, ranked from the GA page rows when the report lands
+  // (null until then; the blog section shows "—").
+  blogTop: null,
+};
 
 function fillKpiBoxes(items) {
   const wrap = document.getElementById("kpi-cards");
@@ -736,13 +719,17 @@ function fillKpiBoxes(items) {
     box.appendChild(value);
     if (item.delta) {
       const delta = document.createElement("div");
-      delta.className =
-        "kpi-delta" +
-        (item.delta.startsWith("+")
-          ? " up"
-          : item.delta.startsWith("-")
-            ? " down"
-            : "");
+      // An increase is green and a decrease red — except on the
+      // cards flagged invert (フォロー解除）, where an increase
+      // is the bad direction and takes the red instead.
+      const sign = item.delta.startsWith("+")
+        ? 1
+        : item.delta.startsWith("-")
+          ? -1
+          : 0;
+      const good = item.invert ? sign < 0 : sign > 0;
+      const bad = item.invert ? sign > 0 : sign < 0;
+      delta.className = "kpi-delta" + (good ? " up" : bad ? " down" : "");
       delta.textContent = `前回比 ${item.delta}`;
       box.appendChild(delta);
     }
@@ -750,35 +737,53 @@ function fillKpiBoxes(items) {
   }
 }
 
+// The overview's top lists, one per channel: each channel's
+// three most-viewed items under a heading that names the
+// channel and the metric it reports (再生回数 for Instagram and
+// YouTube, 表示回数 for Threads, X and the blog). The sections
+// come from topPostsByChannel; a channel with nothing collected
+// yet keeps its heading and a "—" row. The blog's rows land
+// with the GA report (overviewState.blogTop), the rest with the
+// SNS snapshot, and renderOverview re-runs as each arrives.
 function renderTopPosts() {
-  const list = document.getElementById("top-posts");
-  list.innerHTML = "";
-  const posts = topMedia(overviewState.detail, 5);
-  if (!posts.length) {
-    const li = document.createElement("li");
-    li.textContent = "—";
-    list.appendChild(li);
-    return;
-  }
-  for (const media of posts) {
-    const li = document.createElement("li");
-    const label =
-      captionHead(media.caption) || mediaTypeLabel(media.type) || "投稿";
-    if (media.permalink) {
-      const link = document.createElement("a");
-      link.href = media.permalink;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = label;
-      li.appendChild(link);
-    } else {
-      li.textContent = label;
+  const wrap = document.getElementById("top-posts");
+  wrap.innerHTML = "";
+  const sections = topPostsByChannel(
+    overviewState.detail,
+    overviewState.blogTop,
+    3,
+  );
+  for (const section of sections) {
+    const head = document.createElement("h3");
+    head.className = "subsection-title";
+    head.textContent = `${section.channel}（${section.metric}）`;
+    wrap.appendChild(head);
+    const list = document.createElement("ol");
+    list.className = "ranking";
+    if (!section.items.length) {
+      const li = document.createElement("li");
+      li.textContent = "—";
+      list.appendChild(li);
     }
-    const span = document.createElement("span");
-    span.className = "rank-value";
-    span.textContent = formatCount(media.views);
-    li.appendChild(span);
-    list.appendChild(li);
+    for (const item of section.items) {
+      const li = document.createElement("li");
+      if (item.href) {
+        const link = document.createElement("a");
+        link.href = item.href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = item.label;
+        li.appendChild(link);
+      } else {
+        li.textContent = item.label;
+      }
+      const span = document.createElement("span");
+      span.className = "rank-value";
+      span.textContent = formatCount(item.value);
+      li.appendChild(span);
+      list.appendChild(li);
+    }
+    wrap.appendChild(list);
   }
 }
 
@@ -1069,7 +1074,10 @@ function renderMediaTable() {
       link.href = media.permalink;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
-      link.textContent = "開く";
+      link.className = "post-link-icon";
+      link.textContent = "↗";
+      link.title = "Instagramで開く";
+      link.setAttribute("aria-label", "Instagramで開く");
       linkTd.appendChild(link);
     } else {
       linkTd.textContent = "—";
@@ -1190,10 +1198,6 @@ function renderGenreTable(detail) {
       totalText: `合計 ${formatCount(row.totalViews)}`,
     })),
   );
-  renderGenreBars(
-    document.getElementById("sns-genre-bars"),
-    genreAverageBars(rows, "avgViews"),
-  );
   updateGenreHeaders();
   const tbody = document.getElementById("sns-genre-body");
   tbody.innerHTML = "";
@@ -1289,6 +1293,36 @@ function renderYoutube(detail) {
   }
 }
 
+// The YouTube tab's subscriber trend, drawn from the same
+// history rows as the other channel tabs' trends (X and Threads
+// render theirs inside renderX / renderThreads). renderSns and
+// loadSnsHistory both call it, so whichever load lands second
+// completes the picture; until a row carries a subscriber count
+// the section shows its empty state.
+function renderYoutubeHistory() {
+  const wrap = document.getElementById("youtube-history");
+  wrap.innerHTML = "";
+  const series = youtubeHistorySeries(overviewState.historyRows);
+  if (!series.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "履歴はまだありません（取得のたびに貯まっていきます）";
+    wrap.appendChild(p);
+    return;
+  }
+  const item = series[0];
+  const head = document.createElement("p");
+  head.className = "meta";
+  head.textContent =
+    `${item.label}：最新 ${formatCount(item.latest)}` +
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  const chart = document.createElement("div");
+  chart.className = "chart-wrap";
+  chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+  wrap.appendChild(head);
+  wrap.appendChild(chart);
+}
+
 // --- Threads tab ---
 // The Threads tab reads the same two loads as the overview: the
 // follower count, the last-30-days account totals and the recent
@@ -1315,7 +1349,8 @@ let threadsGenreSort = { key: "totalViews", dir: "desc" };
 // --- Post genre sections (Threads / X) ---
 // The same construction as the Instagram tab's ジャンル別 —
 // treemap (tile area = the genre's average views, heat colour
-// on the same average), legend, average bars, then the table —
+// on the same average), legend, then the table (its 平均表示
+// column carries the average as a number) —
 // over the fetched posts, classified by the shared rules over
 // each post's text. Threads and X numbers are lifetime counts,
 // so there is no period selector; the section rebuilds on
@@ -1355,9 +1390,6 @@ function renderPostGenres(wrap, stats, sortState, rerender) {
       })),
       "タイルの面積は平均表示回数の大きさです。色が青いほど平均表示回数が多いです。",
     ),
-  );
-  wrap.appendChild(
-    buildGenreBars(genreAverageBars(rows, "avgViews"), "平均表示回数"),
   );
   const table = document.createElement("table");
   table.className = "data-table";
@@ -1950,6 +1982,7 @@ function renderSns(detail) {
   wireGenreControls();
   renderGenreTable(detail);
   renderYoutube(detail);
+  renderYoutubeHistory();
   renderThreads();
   renderX();
   const notes = document.getElementById("sns-notes");
@@ -2036,6 +2069,7 @@ async function loadSnsHistory() {
     renderSnsHistory(null);
   }
   renderOverview();
+  renderYoutubeHistory();
   renderThreads();
   renderX();
 }

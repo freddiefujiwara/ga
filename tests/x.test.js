@@ -62,11 +62,34 @@ describe("X shaping", () => {
     expect(boxes["前回比"]).toBe("+21");
   });
 
+  it("xTotals sums the fetched posts into count / total / average boxes", () => {
+    const detail = {
+      x: {
+        followers: 321,
+        recent_posts: [
+          { id: "1", views: 500 },
+          { id: "2", views: 301 },
+          { id: "3", views: null },
+        ],
+      },
+    };
+    const boxes = Object.fromEntries(
+      xTotals(detail, []).map((box) => [box.label, box.value]),
+    );
+    expect(boxes["投稿数（取得分）"]).toBe("3");
+    // Only the posts with a view count feed the total / average.
+    expect(boxes["表示合計（取得分）"]).toBe("801");
+    expect(boxes["平均表示（取得分）"]).toBe("401");
+  });
+
   it("xTotals dashes everything while X is not collected yet", () => {
     const boxes = xTotals({}, []);
     expect(boxes).toEqual([
       { label: "フォロワー", value: "—" },
       { label: "前回比", value: "—" },
+      { label: "投稿数（取得分）", value: "—" },
+      { label: "表示合計（取得分）", value: "—" },
+      { label: "平均表示（取得分）", value: "—" },
     ]);
     expect(xTotals(null, null)[0].value).toBe("—");
   });
