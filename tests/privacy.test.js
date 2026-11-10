@@ -84,10 +84,10 @@ describe("privacy wiring", () => {
     expect(themeAt).toBeGreaterThan(privacyAt);
   });
 
-  it("exempts the blog tab's static total values (published figures)", () => {
-    // The blog tab's numbers are the blog's own published
-    // figures, so its static total boxes carry .is-public on
-    // top of the masking classes.
+  it("masks the blog tab's static total values (unpublished figures)", () => {
+    // The blog tab's numbers are GA rollups over the last 28
+    // days that no public page prints, so its static total
+    // boxes carry only the masking classes — no .is-public.
     for (const id of [
       "total-views",
       "total-users",
@@ -96,6 +96,9 @@ describe("privacy wiring", () => {
       "total-per-article",
     ]) {
       expect(html).toContain(
+        `class="total-value amount-value" id="${id}"`,
+      );
+      expect(html).not.toContain(
         `class="total-value amount-value is-public" id="${id}"`,
       );
     }
@@ -103,20 +106,23 @@ describe("privacy wiring", () => {
 
   it("wires the published-figure exemptions into the renderers", () => {
     // Channel treemap tiles and legend values are the top
-    // page's published follower counts.
-    expect(mainJs).toContain('"treemap-tile-value amount-value is-public"');
-    expect(mainJs).toContain('"channel-legend-value amount-value is-public"');
-    // Per-article view counts and the blog genre table are the
-    // blog's published figures.
-    expect(mainJs).toContain('viewsTd.className = "num amount-value is-public"');
-    expect(mainJs).toContain('td.className = "num amount-value is-public"');
+    // page's published follower counts — except the blog's
+    // tile and legend row, whose 28-day user count is not
+    // published anywhere and masks.
+    expect(mainJs).toContain('"treemap-tile-value amount-value"');
+    expect(mainJs).toContain('tile.id !== "blog" ? " is-public" : ""');
+    expect(mainJs).toContain('entry.id !== "blog" ? " is-public" : ""');
+    // The blog tab's figures (per-article counts, genre table,
+    // rankings, daily chart) carry no exemption any more.
+    expect(mainJs).toContain('viewsTd.className = "num amount-value"');
+    expect(mainJs).toContain('td.className = "num amount-value"');
+    expect(mainJs).not.toContain('"num amount-value is-public"');
+    expect(mainJs).not.toContain("publicMaxLabel");
     // Only the combined follower trend's latest value is
     // exempt among the overview trends.
     expect(mainJs).toContain(
       'countSpan(item.latest, item.key === "total_followers")',
     );
-    // The blog's daily chart keeps its max label readable.
-    expect(mainJs).toContain("{ publicMaxLabel: true }");
   });
 
   it("drives the module from the stored preference in main.js", () => {
@@ -128,14 +134,17 @@ describe("privacy wiring", () => {
   it("hides the toggle in share sessions — and the stylesheet honours it", () => {
     // main.js hides the toggle whenever a share token is in
     // play (masking is suspended there, so the toggle must not
-    // be offered).
-    expect(mainJs).toContain("privacyBtn.hidden = Boolean(shareToken)");
-    // The toggle carries .theme-toggle, whose display rule
-    // would beat the UA stylesheet's [hidden] mapping and keep
-    // the button on screen — the bug this guards: the button
-    // showed in share sessions, and pressing it flipped the
-    // label while nothing ever blurred.
+    // be offered) — and also until the session kind settles, so
+    // the button never flashes during loading only to vanish
+    // once a share session is confirmed.
+    expect(mainJs).toContain(
+      "privacyBtn.hidden = !sessionSettled || Boolean(shareToken)",
+    );
+    expect(mainJs).toContain("sessionSettled = true");
+    // The markup starts the toggle hidden for the same reason:
+    // nothing may show it before the script settles the entry.
     expect(html).toContain('id="privacy-toggle" class="theme-toggle"');
+    expect(html).toContain('type="button" hidden>数値を隠す</button>');
     expect(css).toMatch(/\.theme-toggle \{[^}]*display: inline-flex/);
     // The stylesheet therefore restores the attribute's force
     // with an !important rule no class display can override.
@@ -183,9 +192,9 @@ describe("privacy wiring", () => {
     expect(css).toContain(':root[data-private="on"] .amount-value:not(.is-public)');
     expect(css).toContain(':root[data-private="on"] .privacy-mask:not(.is-public)');
     expect(css).toContain("filter: blur(5px)");
-    // The in-chart max label stays hidden while masking —
-    // unless the chart's figures are published (the blog's
-    // daily chart marks its label .is-public).
+    // The in-chart max label stays hidden while masking (no
+    // chart marks its label .is-public any more; the selector
+    // keeps the :not() guard the other rules use).
     expect(css).toContain(
       ':root[data-private="on"] .chart-max-label:not(.is-public)',
     );

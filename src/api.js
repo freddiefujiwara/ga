@@ -942,11 +942,13 @@ export function overviewKpis(detail, gaTotals, historyRows) {
   // The `public` flag marks the figures the owner already
   // publishes elsewhere — the top page's hero (the combined
   // follower total, the per-channel follower breakdown and the
-  // Instagram post count, all mirrored in sns-count.json) and
-  // the blog's own numbers — so privacy masking exempts the
-  // value (rendered as .is-public). The day-over-day change
-  // lines are this page's own analysis and stay masked either
-  // way; they render separately from the value.
+  // Instagram post count, all mirrored in sns-count.json) — so
+  // privacy masking exempts the value (rendered as .is-public).
+  // The blog's two cards are GA rollups over the last 28 days;
+  // no public page prints them, so they stay masked like the
+  // other analysis figures. The day-over-day change lines are
+  // this page's own analysis and stay masked either way; they
+  // render separately from the value.
   return [
     {
       label: "SNS延べフォロワー数",
@@ -970,13 +972,11 @@ export function overviewKpis(detail, gaTotals, historyRows) {
       label: "ブログ 表示回数（直近28日）",
       value: gaTotals ? formatCount(gaTotals.views) : "—",
       delta: null,
-      public: true,
     },
     {
       label: "ブログ ユーザー（直近28日）",
       value: gaTotals ? formatCount(gaTotals.users) : "—",
       delta: null,
-      public: true,
     },
     {
       label: "再生回数（過去30日）",
@@ -1078,10 +1078,10 @@ export function topPostsByChannel(detail, blogItems = [], limit = 3) {
           label: item.label,
           href: item.href ?? null,
           value: item.views,
-          // Per-article view counts are public: the blog's own
-          // article list prints each article's count next to its
-          // title, so masking exempts the blog rows here too.
-          public: true,
+          // No public flag: the per-article counts here are GA
+          // figures over the last 28 days, which no public page
+          // prints, so masking treats them like the other
+          // channels' per-post counts.
         })),
     },
   ];
