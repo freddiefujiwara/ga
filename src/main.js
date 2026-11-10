@@ -341,12 +341,25 @@ async function loadDashboard() {
 // a treemap whose tile area is the genre's per-item average, the
 // legend directly under the tiles, then a bar chart comparing
 // the same average; the full table follows below. Each tile
-// draws only the text lines its size can hold (see
-// tileLabelLevel); the legend under the map lists every genre's
-// average and total, so nothing is lost on the small tiles.
+// draws the text lines its size can hold (see tileLabelLevel):
+// the name and the figure ride on every tile, down to micro
+// type on the smallest ones, and the legend under the map
+// lists every genre's exact average and total.
 // Tile colour is a heat scale on the same average (see
 // genreHeatBackground): the biggest average on show is the
 // bluest, the smallest keeps the plain tile colour.
+
+// One-line micro label for the tiles too small for the stacked
+// lines: "micro-v" runs the line vertically down a tall narrow
+// tile, "micro-h" keeps it horizontal on a wide flat one. The
+// name and the figure share the single line.
+function tileOneLineLabel(level, name, valueText) {
+  const el = document.createElement("div");
+  el.className =
+    level === "micro-v" ? "treemap-tile-vlabel" : "treemap-tile-hlabel";
+  el.textContent = `${name} ${valueText}`;
+  return el;
+}
 
 function renderGenreTreemap(mapEl, legendEl, map) {
   mapEl.innerHTML = "";
@@ -367,27 +380,28 @@ function renderGenreTreemap(mapEl, legendEl, map) {
       div.style.background = tile.heat;
     }
     div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
-    // Draw only the lines this tile's size can hold: the level
-    // comes from tileLabelLevel, and a line that is not drawn
-    // cannot overflow. The legend below carries every figure.
+    // Draw the lines this tile's level allows: the name and
+    // the figure always ride, in type sized to the tile; the
+    // total line joins only on the roomiest tiles.
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
-    if (level !== "none") {
+    div.classList.add(`level-${level}`);
+    if (level === "micro-v" || level === "micro-h") {
+      div.appendChild(tileOneLineLabel(level, tile.name, tile.avgLabel));
+    } else if (level !== "none") {
       const name = document.createElement("div");
       name.className = "treemap-tile-name";
       name.textContent = tile.name;
       div.appendChild(name);
-    }
-    if (level === "full" || level === "value") {
       const value = document.createElement("div");
       value.className = "treemap-tile-value";
       value.textContent = tile.avgLabel;
       div.appendChild(value);
-    }
-    if (level === "full") {
-      const total = document.createElement("div");
-      total.className = "treemap-tile-sub";
-      total.textContent = tile.totalText;
-      div.appendChild(total);
+      if (level === "full") {
+        const total = document.createElement("div");
+        total.className = "treemap-tile-sub";
+        total.textContent = tile.totalText;
+        div.appendChild(total);
+      }
     }
     mapEl.appendChild(div);
   }
@@ -769,22 +783,23 @@ function renderTopPosts() {
 }
 
 // The channel sizes at the top of the overview, as a treemap:
-// tile area = the channel's followers (subscribers for
-// YouTube), tile colour = the blue heat scale the genre tiles
-// use, scaled by follower count. Each tile draws only the
+// tile area = the channel's size figure (followers, or
+// subscribers for YouTube; the blog's 28-day user count, named
+// as 利用者 on its tile), tile colour = the blue heat scale the
+// genre tiles use, scaled by the figure. Each tile draws the
 // lines its size can hold (see tileLabelLevel): the channel
-// name, the count, and — on the roomiest tiles — a sub
-// line with the change since the previous collection (coloured
-// green / red by direction) and the channel's share of the
-// combined total. The legend under the map lists every
-// channel's exact figures, so a channel whose tile is too
-// small for text — or still awaiting collection — still
-// reads there.
+// name and the count ride on every tile, down to micro type,
+// and the roomiest tiles add a sub line with the change since
+// the previous collection (coloured green / red by direction)
+// and the channel's share of the combined SNS followers. The
+// legend under the map lists every channel's exact figures,
+// so a channel still awaiting collection reads there too.
 function renderChannelTreemap() {
   const mapEl = document.getElementById("channel-treemap");
   const legendEl = document.getElementById("channel-legend");
   const { tiles, legend } = channelTreemap(
     overviewState.detail,
+    overviewState.gaTotals,
     overviewState.historyRows,
   );
   mapEl.innerHTML = "";
@@ -809,16 +824,20 @@ function renderChannelTreemap() {
       (tile.shareLabel ? `（${tile.shareLabel}）` : "") +
       (tile.deltaLabel ? ` 前回比 ${tile.deltaLabel}` : "");
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
+    div.classList.add(`level-${level}`);
+    if (level === "micro-v" || level === "micro-h") {
+      div.appendChild(tileOneLineLabel(level, tile.name, tile.valueText));
+      mapEl.appendChild(div);
+      continue;
+    }
     if (level !== "none") {
       const name = document.createElement("div");
       name.className = "treemap-tile-name";
       name.textContent = tile.name;
       div.appendChild(name);
-    }
-    if (level === "full" || level === "value") {
       const value = document.createElement("div");
       value.className = "treemap-tile-value";
-      value.textContent = tile.valueLabel;
+      value.textContent = tile.valueText;
       div.appendChild(value);
     }
     if (level === "full") {

@@ -367,6 +367,64 @@ textarea:disabled {
   white-space: nowrap;
 }
 
+/* Compact and micro tile labels: smaller type and tighter
+   padding, so the name and the figure fit tiles the layout
+   could not grow past the standard thresholds. The figure
+   may wrap at a space (the blog's 利用者 255 puts the word
+   on its own line) rather than clip the number itself. */
+.treemap-tile.level-name {
+  padding: 4px 6px;
+}
+
+.treemap-tile.level-name .treemap-tile-name {
+  font-size: 11px;
+}
+
+.treemap-tile.level-name .treemap-tile-value {
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.treemap-tile.level-micro {
+  padding: 2px 3px;
+}
+
+.treemap-tile.level-micro .treemap-tile-name {
+  font-size: 9px;
+}
+
+.treemap-tile.level-micro .treemap-tile-value {
+  font-size: 10px;
+  line-height: 1.15;
+  white-space: normal;
+}
+
+/* One-line micro labels: a vertical line down a tall narrow
+   tile, or a single horizontal line on a wide flat one. */
+.treemap-tile.level-micro-v,
+.treemap-tile.level-micro-h {
+  padding: 2px 3px;
+}
+
+.treemap-tile-vlabel {
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  max-height: 100%;
+}
+
+.treemap-tile-hlabel {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .channel-legend {
   list-style: none;
   margin: 8px 0;
