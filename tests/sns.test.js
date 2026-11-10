@@ -387,7 +387,7 @@ describe("threads tab", () => {
   it("threadsTotals shows the current count and the change", () => {
     const detail = { threads: { followers: 255 } };
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
-      { label: "フォロワー", value: "255" },
+      { label: "フォロワー", value: "255", public: true },
       { label: "前日比", value: "+3" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
@@ -404,7 +404,7 @@ describe("threads tab", () => {
       },
     };
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
-      { label: "フォロワー", value: "252" },
+      { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "+3" },
       { label: "表示回数（過去30日）", value: "53,342" },
       { label: "反応の合計（過去30日）", value: "808" },
@@ -431,13 +431,13 @@ describe("threads tab", () => {
   it("threadsTotals dashes the change until two points exist", () => {
     const detail = { threads: { followers: 252 } };
     expect(threadsTotals(detail, [THREADS_ROWS[1]])).toEqual([
-      { label: "フォロワー", value: "252" },
+      { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals(detail, [])).toEqual([
-      { label: "フォロワー", value: "252" },
+      { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
@@ -447,13 +447,13 @@ describe("threads tab", () => {
 
   it("threadsTotals tolerates a missing snapshot", () => {
     expect(threadsTotals(null, THREADS_ROWS)).toEqual([
-      { label: "フォロワー", value: "—" },
+      { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "+3" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals({}, null)).toEqual([
-      { label: "フォロワー", value: "—" },
+      { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "—" },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
@@ -647,6 +647,17 @@ describe("totals and overview", () => {
     expect(cards["フォロワー以外（過去30日）"]).toBe("94.5%");
     expect(cards["反応の合計（過去30日）"]).toBe("9,100");
     expect(cards["フォロー解除（過去30日）"]).toBe("—");
+  });
+
+  it("snsOverview flags only the published figures public", () => {
+    // The follower count and the post count are the top page's
+    // published figures; the 30-day analysis cards stay
+    // unflagged so masking still blurs them. (The フォロワー以外
+    // percentage is exempt by its % value, not by this flag.)
+    const flagged = snsOverview(DETAIL)
+      .filter((c) => c.public === true)
+      .map((c) => c.label);
+    expect(flagged).toEqual(["Instagram フォロワー", "Instagram 投稿数"]);
   });
 
   it("snsOverview tolerates a missing response", () => {
@@ -1037,7 +1048,7 @@ describe("media rows", () => {
 describe("youtube and error notes", () => {
   it("youtubeTotals formats the channel numbers", () => {
     expect(youtubeTotals(DETAIL)).toEqual([
-      { label: "登録者", value: "9" },
+      { label: "登録者", value: "9", public: true },
       { label: "総再生回数", value: "12,345" },
       { label: "動画本数", value: "21" },
     ]);

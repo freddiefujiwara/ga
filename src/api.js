@@ -279,8 +279,12 @@ export function snsOverview(detail) {
   const ig = detail?.instagram ?? {};
   const interactions = ig.interactions_30d ?? {};
   return [
-    { label: "Instagram フォロワー", value: formatCount(ig.freddiefujiwara) },
-    { label: "Instagram 投稿数", value: formatCount(ig.media_count) },
+    // The follower count and the post count are public figures:
+    // the top page publishes both (the hero's follower breakdown
+    // and 投稿数, and sns-count.json), so privacy masking
+    // exempts them (the `public` flag, rendered as .is-public).
+    { label: "Instagram フォロワー", value: formatCount(ig.freddiefujiwara), public: true },
+    { label: "Instagram 投稿数", value: formatCount(ig.media_count), public: true },
     { label: "再生回数（過去30日）", value: formatCount(ig.views_30d) },
     { label: "リーチ（過去30日）", value: formatCount(ig.reach_30d) },
     { label: "反応した人数（過去30日）", value: formatCount(ig.accounts_engaged_30d) },
@@ -622,7 +626,9 @@ export function thumbnailOrientation(naturalWidth, naturalHeight) {
 export function youtubeTotals(detail) {
   const yt = detail?.youtube ?? {};
   return [
-    { label: "登録者", value: formatCount(yt.subscribers) },
+    // The subscriber count is one of the top page's published
+    // follower figures, so masking exempts it.
+    { label: "登録者", value: formatCount(yt.subscribers), public: true },
     { label: "総再生回数", value: formatCount(yt.total_views) },
     { label: "動画本数", value: formatCount(yt.video_count) },
   ];
@@ -642,7 +648,9 @@ export function threadsTotals(detail, historyRows) {
   const change = historyDailyDelta(historyRows, "threads_followers");
   const interactions = th.interactions_30d ?? {};
   return [
-    { label: "フォロワー", value: formatCount(th.followers) },
+    // The follower count is one of the top page's published
+    // follower figures, so masking exempts it.
+    { label: "フォロワー", value: formatCount(th.followers), public: true },
     {
       label: "前日比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
@@ -728,7 +736,9 @@ export function xTotals(detail, historyRows) {
     ? viewed.reduce((sum, post) => sum + post.views, 0)
     : null;
   return [
-    { label: "フォロワー", value: formatCount(x.followers) },
+    // The follower count is one of the top page's published
+    // follower figures, so masking exempts it.
+    { label: "フォロワー", value: formatCount(x.followers), public: true },
     {
       label: "前日比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
@@ -929,31 +939,44 @@ export function overviewKpis(detail, gaTotals, historyRows) {
     const change = historyDailyDelta(historyRows, key);
     return change ? formatDelta(change.delta) : null;
   };
+  // The `public` flag marks the figures the owner already
+  // publishes elsewhere — the top page's hero (the combined
+  // follower total, the per-channel follower breakdown and the
+  // Instagram post count, all mirrored in sns-count.json) and
+  // the blog's own numbers — so privacy masking exempts the
+  // value (rendered as .is-public). The day-over-day change
+  // lines are this page's own analysis and stay masked either
+  // way; they render separately from the value.
   return [
     {
       label: "SNS延べフォロワー数",
       value: formatCount(snsTotalFollowers(detail)),
       delta: deltaFor("total_followers"),
+      public: true,
     },
     {
       label: "Instagram フォロワー",
       value: formatCount(ig.freddiefujiwara),
       delta: deltaFor("ig_followers"),
+      public: true,
     },
     {
       label: "YouTube 登録者",
       value: formatCount(yt.subscribers),
       delta: deltaFor("youtube_subscribers"),
+      public: true,
     },
     {
       label: "ブログ 表示回数（直近28日）",
       value: gaTotals ? formatCount(gaTotals.views) : "—",
       delta: null,
+      public: true,
     },
     {
       label: "ブログ ユーザー（直近28日）",
       value: gaTotals ? formatCount(gaTotals.users) : "—",
       delta: null,
+      public: true,
     },
     {
       label: "再生回数（過去30日）",
@@ -964,6 +987,7 @@ export function overviewKpis(detail, gaTotals, historyRows) {
       label: "投稿数",
       value: formatCount(ig.media_count),
       delta: deltaFor("media_count"),
+      public: true,
     },
     {
       label: "フォロー（過去30日）",
@@ -1054,6 +1078,10 @@ export function topPostsByChannel(detail, blogItems = [], limit = 3) {
           label: item.label,
           href: item.href ?? null,
           value: item.views,
+          // Per-article view counts are public: the blog's own
+          // article list prints each article's count next to its
+          // title, so masking exempts the blog rows here too.
+          public: true,
         })),
     },
   ];

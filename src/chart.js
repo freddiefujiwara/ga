@@ -78,7 +78,14 @@ export function buildLineChartSvg(points, options = {}) {
       return `<text class="chart-axis-label" x="${x}" y="${height - 6}" text-anchor="${anchor}">${formatDateLabel(points[i].date)}</text>`;
     })
     .join("");
-  const maxLabel = `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
+  // With options.publicMaxLabel the max label also carries
+  // .is-public: the blog tab's daily chart shows figures the
+  // blog itself publishes, so privacy masking leaves its label
+  // visible instead of hiding it like the other charts'.
+  const maxLabelClass = options.publicMaxLabel
+    ? "chart-max-label is-public"
+    : "chart-max-label";
+  const maxLabel = `<text class="${maxLabelClass}" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
 }
 

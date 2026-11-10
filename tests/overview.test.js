@@ -165,11 +165,11 @@ describe("overviewKpis", () => {
     const cards = Object.fromEntries(
       overviewKpis(DETAIL, GA_TOTALS, HISTORY2).map((c) => [c.label, c]),
     );
-    expect(cards["SNS延べフォロワー数"]).toEqual({ label: "SNS延べフォロワー数", value: "2,000", delta: "+5" });
-    expect(cards["Instagram フォロワー"]).toEqual({ label: "Instagram フォロワー", value: "1,991", delta: "+4" });
-    expect(cards["YouTube 登録者"]).toEqual({ label: "YouTube 登録者", value: "9", delta: "+1" });
+    expect(cards["SNS延べフォロワー数"]).toEqual({ label: "SNS延べフォロワー数", value: "2,000", delta: "+5", public: true });
+    expect(cards["Instagram フォロワー"]).toEqual({ label: "Instagram フォロワー", value: "1,991", delta: "+4", public: true });
+    expect(cards["YouTube 登録者"]).toEqual({ label: "YouTube 登録者", value: "9", delta: "+1", public: true });
     expect(cards["再生回数（過去30日）"]).toEqual({ label: "再生回数（過去30日）", value: "576,645", delta: "+6,645" });
-    expect(cards["投稿数"]).toEqual({ label: "投稿数", value: "2,420", delta: "+1" });
+    expect(cards["投稿数"]).toEqual({ label: "投稿数", value: "2,420", delta: "+1", public: true });
     expect(cards["フォロー（過去30日）"]).toEqual({ label: "フォロー（過去30日）", value: "120", delta: "+2" });
     // The snapshot value is null and the history has only one
     // numeric point, so neither a value nor a delta is available.
@@ -208,6 +208,27 @@ describe("overviewKpis", () => {
     });
   });
 
+  it("flags the already-published figures public for masking exemption", () => {
+    // The public set is exactly what the top page and the blog
+    // already publish: the follower total and breakdown, the
+    // Instagram post count, and the blog's own two numbers. The
+    // analysis cards (30-day views, follows, unfollows) stay
+    // unflagged, so privacy masking still blurs them — and the
+    // day-over-day deltas ride separately and stay masked too.
+    const cards = overviewKpis(DETAIL, GA_TOTALS, HISTORY2);
+    const publicLabels = cards
+      .filter((c) => c.public === true)
+      .map((c) => c.label);
+    expect(publicLabels).toEqual([
+      "SNS延べフォロワー数",
+      "Instagram フォロワー",
+      "YouTube 登録者",
+      "ブログ 表示回数（直近28日）",
+      "ブログ ユーザー（直近28日）",
+      "投稿数",
+    ]);
+  });
+
   it("blog cards come from the GA totals and never carry a delta", () => {
     const cards = Object.fromEntries(
       overviewKpis(DETAIL, GA_TOTALS, HISTORY2).map((c) => [c.label, c]),
@@ -216,11 +237,13 @@ describe("overviewKpis", () => {
       label: "ブログ 表示回数（直近28日）",
       value: "12,345",
       delta: null,
+      public: true,
     });
     expect(cards["ブログ ユーザー（直近28日）"]).toEqual({
       label: "ブログ ユーザー（直近28日）",
       value: "678",
       delta: null,
+      public: true,
     });
   });
 
@@ -314,6 +337,15 @@ describe("topPostsByChannel", () => {
     expect(byChannel["ブログ"][0].href).toBe(
       "https://freddiefujiwara.com/blog/a",
     );
+    // Only the blog's items are flagged public: per-article
+    // view counts are printed on the blog itself, while the
+    // SNS channels' per-post counts are not published there.
+    expect(byChannel["ブログ"].every((i) => i.public === true)).toBe(true);
+    for (const channel of ["Instagram", "YouTube", "Threads", "X"]) {
+      expect(byChannel[channel].every((i) => i.public === undefined)).toBe(
+        true,
+      );
+    }
   });
 
   it("tolerates missing data with empty item lists", () => {

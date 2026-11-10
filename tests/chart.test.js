@@ -63,6 +63,14 @@ describe("buildLineChartSvg", () => {
     expect(svg).toContain('class="chart-max-label"');
     expect(svg).toContain("最大 42");
   });
+
+  it("can mark the max label public (the blog's daily chart)", () => {
+    const svg = buildLineChartSvg([{ date: "20261105", views: 42 }], {
+      publicMaxLabel: true,
+    });
+    expect(svg).toContain('class="chart-max-label is-public"');
+    expect(svg).toContain("最大 42");
+  });
 });
 
 describe("date formatting", () => {
