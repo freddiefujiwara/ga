@@ -291,6 +291,24 @@ textarea:disabled {
   font-size: 13px;
 }
 
+/* Privacy masking (the asset / health apps' convention): with
+   data-private="on" on <html>, raw counts carrying .amount-value
+   / .privacy-mask blur out; elements marked .is-public — the
+   percentages and ratios — stay readable. The charts' numeric
+   max labels are hidden outright instead: SVG text does not
+   blur reliably on iOS Safari (the health app's lesson), and a
+   hidden label cannot leak its number. */
+:root[data-private="on"] .amount-value:not(.is-public),
+:root[data-private="on"] text.amount-value:not(.is-public),
+:root[data-private="on"] .privacy-mask:not(.is-public) {
+  filter: blur(5px);
+  user-select: none;
+}
+
+:root[data-private="on"] .chart-max-label {
+  display: none;
+}
+
 /* Overview KPI change line ("前日比 +N"). */
 .kpi-delta {
   font-size: 12px;

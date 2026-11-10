@@ -78,7 +78,7 @@ export function buildLineChartSvg(points, options = {}) {
       return `<text class="chart-axis-label" x="${x}" y="${height - 6}" text-anchor="${anchor}">${formatDateLabel(points[i].date)}</text>`;
     })
     .join("");
-  const maxLabel = `<text x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
+  const maxLabel = `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
 }
 
@@ -154,7 +154,7 @@ export function buildFollowChartSvg(days, options = {}) {
     })
     .join("");
   const maxLabels =
-    `<text x="${pad}" y="${pad - 8}" font-size="11">最大フォロー ${maxFollows}</text>` +
-    `<text x="${pad}" y="${height - padBottom + 13}" font-size="11">最大解除 ${maxUnfollows}</text>`;
+    `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大フォロー ${maxFollows}</text>` +
+    `<text class="chart-max-label" x="${pad}" y="${height - padBottom + 13}" font-size="11">最大解除 ${maxUnfollows}</text>`;
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}">${parts.join("")}${axisLabels}${maxLabels}</svg>`;
 }

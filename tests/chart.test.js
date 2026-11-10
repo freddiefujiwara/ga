@@ -57,6 +57,12 @@ describe("buildLineChartSvg", () => {
     expect(svg).toContain("<polyline");
     expect(svg).toContain("最大 1");
   });
+
+  it("marks the max label so privacy masking can hide it", () => {
+    const svg = buildLineChartSvg([{ date: "20261105", views: 42 }]);
+    expect(svg).toContain('class="chart-max-label"');
+    expect(svg).toContain("最大 42");
+  });
 });
 
 describe("date formatting", () => {
@@ -113,6 +119,8 @@ describe("buildFollowChartSvg", () => {
     expect(svg).toContain("最大解除 5");
     expect(svg).toContain(">11/7<");
     expect(svg).toContain(">11/8<");
+    // Both max labels carry the class privacy masking hides.
+    expect(count(svg, 'class="chart-max-label"')).toBe(2);
   });
 
   it("scales both sides to the larger maximum", () => {

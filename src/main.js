@@ -3,6 +3,11 @@ import { CONFIG } from "./config.js";
 import { decodeJwtPayload } from "./auth.js";
 import { THEME_KEY, resolveTheme, nextTheme, applyTheme } from "./theme.js";
 import {
+  PRIVACY_KEY,
+  resolvePrivacy,
+  applyPrivacy,
+} from "./privacy.js";
+import {
   fetchReport,
   validateShareToken,
   shareAction,
@@ -59,7 +64,7 @@ import {
   buildLineChartSvg,
   buildFollowChartSvg,
   formatDateLabel,
-  tooltipText,
+  formatDateFull,
 } from "./chart.js";
 import {
   genreStatsForMedia,
@@ -116,6 +121,7 @@ const expiredEl = document.getElementById("share-expired");
 const accountEl = document.getElementById("account");
 const logoutBtn = document.getElementById("logout");
 const themeBtn = document.getElementById("theme-toggle");
+const privacyBtn = document.getElementById("privacy-toggle");
 const gateErrorEl = document.getElementById("gate-error");
 const shareCardEl = document.getElementById("share-card");
 const shareIssuedEl = document.getElementById("share-issued");
@@ -142,6 +148,75 @@ themeBtn.addEventListener("click", () => {
   localStorage.setItem(THEME_KEY, theme);
   applyTheme(document.documentElement, themeBtn, theme);
 });
+
+// --- Privacy masking (raw counts blur out for screenshots) ---
+// Same arrangement as the asset / health apps: the stored
+// preference lives in local storage (default off), the toggle
+// flips data-private on <html>, and while a temporary share
+// link is being viewed the masking is suspended and the toggle
+// hidden — a share viewer always sees the numbers, and the
+// stored preference itself is never rewritten by a visit.
+let privacy = resolvePrivacy(localStorage.getItem(PRIVACY_KEY));
+
+// Whether masking is in effect right now: the preference is on
+// and no share session is suspending it.
+const maskingOn = () => privacy && !shareToken;
+
+// Treemap tiles repeat their figures in the native title
+// tooltip, which CSS cannot blur; while masking is on the tile
+// renderers leave the title off, and this sweep handles the
+// tiles already on screen when the toggle flips.
+function suspendTileTitles(on) {
+  for (const el of document.querySelectorAll(".treemap-tile")) {
+    if (on) {
+      if (el.title) {
+        el.dataset.privacyTitle = el.title;
+        el.removeAttribute("title");
+      }
+    } else if (el.dataset.privacyTitle) {
+      el.title = el.dataset.privacyTitle;
+      delete el.dataset.privacyTitle;
+    }
+  }
+}
+
+function renderPrivacy() {
+  applyPrivacy(
+    document.documentElement,
+    privacyBtn,
+    privacy,
+    Boolean(shareToken),
+  );
+  privacyBtn.hidden = Boolean(shareToken);
+  suspendTileTitles(maskingOn());
+}
+
+privacyBtn.addEventListener("click", () => {
+  privacy = !privacy;
+  localStorage.setItem(PRIVACY_KEY, privacy ? "on" : "off");
+  renderPrivacy();
+});
+renderPrivacy();
+
+// A raw count as a masking-ready span: figures the renderers
+// splice into a line of text ride in one of these, so the
+// privacy CSS (which blurs .amount-value) reaches them too.
+function countSpan(value) {
+  const span = document.createElement("span");
+  span.className = "amount-value";
+  span.textContent = formatCount(value);
+  return span;
+}
+
+// The total-box value classes: every value is a raw count and
+// takes .amount-value, except a percentage （割合）, which also
+// takes .is-public so it stays readable while masking — the
+// asset / health exemption for ratios.
+function totalValueClass(item) {
+  const isPercent =
+    typeof item.value === "string" && item.value.trim().endsWith("%");
+  return "total-value amount-value" + (isPercent ? " is-public" : "");
+}
 
 const auth = () => ({ idToken, shareToken });
 
@@ -249,6 +324,10 @@ function showExpired() {
 }
 
 async function loadDashboard() {
+  // The session kind is settled by the time the dashboard loads:
+  // restate the privacy masking for it (a share session suspends
+  // masking and hides the toggle).
+  renderPrivacy();
   // Article titles come from the blog RSS feed; fetched in parallel
   // and never allowed to block (or break) the numbers.
   const titlesPromise = fetchArticleTitles(CONFIG.BLOG_RSS_URL);
@@ -297,7 +376,7 @@ async function loadDashboard() {
       const li = document.createElement("li");
       li.textContent = item.name;
       const span = document.createElement("span");
-      span.className = "rank-value";
+      span.className = "rank-value amount-value";
       span.textContent = item.views.toLocaleString();
       li.appendChild(span);
       list.appendChild(li);
@@ -324,7 +403,7 @@ async function loadDashboard() {
     link.textContent = item.label;
     li.appendChild(link);
     const span = document.createElement("span");
-    span.className = "rank-value";
+    span.className = "rank-value amount-value";
     span.textContent = item.views.toLocaleString();
     li.appendChild(span);
     pageList.appendChild(li);
@@ -383,7 +462,13 @@ function tileOneLineLabel(level, name, valueText) {
   const el = document.createElement("div");
   el.className =
     level === "micro-v" ? "treemap-tile-vlabel" : "treemap-tile-hlabel";
-  el.textContent = `${name} ${valueText}`;
+  // The name stays readable; only the figure is a raw count and
+  // rides in a masking-ready span.
+  el.append(`${name} `);
+  const value = document.createElement("span");
+  value.className = "amount-value";
+  value.textContent = valueText;
+  el.appendChild(value);
   return el;
 }
 
@@ -405,7 +490,12 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     if (tile.heat) {
       div.style.background = tile.heat;
     }
-    div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
+    // The title repeats the figures as a hover tooltip, which
+    // CSS cannot blur; while masking is on it is left off (the
+    // legend below the map carries the same figures, masked).
+    if (!maskingOn()) {
+      div.title = `${tile.name}：${tile.avgText}、${tile.totalText}`;
+    }
     // Draw the lines this tile's level allows: the name and
     // the figure always ride, in type sized to the tile; the
     // total line joins only on the roomiest tiles.
@@ -419,12 +509,12 @@ function renderGenreTreemap(mapEl, legendEl, map) {
       name.textContent = tile.name;
       div.appendChild(name);
       const value = document.createElement("div");
-      value.className = "treemap-tile-value";
+      value.className = "treemap-tile-value amount-value";
       value.textContent = tile.avgLabel;
       div.appendChild(value);
       if (level === "full") {
         const total = document.createElement("div");
-        total.className = "treemap-tile-sub";
+        total.className = "treemap-tile-sub amount-value";
         total.textContent = tile.totalText;
         div.appendChild(total);
       }
@@ -439,11 +529,11 @@ function renderGenreTreemap(mapEl, legendEl, map) {
     name.textContent = entry.name;
     li.appendChild(name);
     const value = document.createElement("span");
-    value.className = "channel-legend-value";
+    value.className = "channel-legend-value amount-value";
     value.textContent = entry.avgText;
     li.appendChild(value);
     const total = document.createElement("span");
-    total.className = "channel-legend-note";
+    total.className = "channel-legend-note amount-value";
     total.textContent = entry.totalText;
     li.appendChild(total);
     legendEl.appendChild(li);
@@ -565,7 +655,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
     tr.appendChild(tagTd);
     for (const value of [row.count, row.totalViews, row.perArticle]) {
       const td = document.createElement("td");
-      td.className = "num";
+      td.className = "num amount-value";
       td.textContent = formatCount(value);
       tr.appendChild(td);
     }
@@ -578,7 +668,7 @@ function renderBlogGenres(pagesResponse, meta, rssTitles) {
       link.textContent = row.top.title;
       topTd.appendChild(link);
       const span = document.createElement("span");
-      span.className = "rank-value";
+      span.className = "rank-value amount-value";
       span.textContent = formatCount(row.top.views);
       topTd.appendChild(span);
     } else {
@@ -659,7 +749,7 @@ function renderBlogArticleTable() {
       : "—";
     tr.appendChild(genreTd);
     const viewsTd = document.createElement("td");
-    viewsTd.className = "num";
+    viewsTd.className = "num amount-value";
     viewsTd.textContent = formatCount(article.views);
     tr.appendChild(viewsTd);
     tbody.appendChild(tr);
@@ -677,10 +767,15 @@ function renderBlogArticles(pagesResponse, meta, rssTitles) {
     titles,
     CONFIG.SITE_ORIGIN,
   );
-  document.getElementById("blog-article-range").textContent =
-    blogArticles.length
-      ? `対象：直近28日間に表示された記事（全${blogArticles.length}件）`
-      : "";
+  const articleRangeEl = document.getElementById("blog-article-range");
+  articleRangeEl.textContent = "";
+  if (blogArticles.length) {
+    articleRangeEl.append(
+      "対象：直近28日間に表示された記事（全",
+      countSpan(blogArticles.length),
+      "件）",
+    );
+  }
   // A fresh load resets the per-article genre filter to すべて.
   blogArticleGenreFilter = null;
   renderBlogArticleGenreTabs();
@@ -718,7 +813,7 @@ function fillKpiBoxes(items) {
     label.className = "total-label";
     label.textContent = item.label;
     const value = document.createElement("div");
-    value.className = "total-value";
+    value.className = totalValueClass(item);
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
@@ -734,7 +829,8 @@ function fillKpiBoxes(items) {
           : 0;
       const good = item.invert ? sign < 0 : sign > 0;
       const bad = item.invert ? sign > 0 : sign < 0;
-      delta.className = "kpi-delta" + (good ? " up" : bad ? " down" : "");
+      delta.className =
+        "kpi-delta amount-value" + (good ? " up" : bad ? " down" : "");
       delta.textContent = `前日比 ${item.delta}`;
       box.appendChild(delta);
     }
@@ -783,7 +879,7 @@ function renderTopPosts() {
         li.textContent = item.label;
       }
       const span = document.createElement("span");
-      span.className = "rank-value";
+      span.className = "rank-value amount-value";
       span.textContent = formatCount(item.value);
       li.appendChild(span);
       list.appendChild(li);
@@ -829,10 +925,15 @@ function renderChannelTreemap() {
     if (tile.heat) {
       div.style.background = tile.heat;
     }
-    div.title =
-      `${tile.name}：${tile.metricLabel} ${tile.valueLabel}` +
-      (tile.shareLabel ? `（${tile.shareLabel}）` : "") +
-      (tile.deltaLabel ? ` 前日比 ${tile.deltaLabel}` : "");
+    // The title repeats the figures as a hover tooltip, which
+    // CSS cannot blur; while masking is on it is left off (the
+    // legend below the map carries the same figures, masked).
+    if (!maskingOn()) {
+      div.title =
+        `${tile.name}：${tile.metricLabel} ${tile.valueLabel}` +
+        (tile.shareLabel ? `（${tile.shareLabel}）` : "") +
+        (tile.deltaLabel ? ` 前日比 ${tile.deltaLabel}` : "");
+    }
     const level = tile.labelLevel ?? (tile.labelRoom ? "full" : "none");
     div.classList.add(`level-${level}`);
     if (level === "micro-v" || level === "micro-h") {
@@ -846,7 +947,7 @@ function renderChannelTreemap() {
       name.textContent = tile.name;
       div.appendChild(name);
       const value = document.createElement("div");
-      value.className = "treemap-tile-value";
+      value.className = "treemap-tile-value amount-value";
       value.textContent = tile.valueText;
       div.appendChild(value);
     }
@@ -856,7 +957,7 @@ function renderChannelTreemap() {
       if (tile.deltaLabel) {
         const delta = document.createElement("span");
         delta.className =
-          "treemap-tile-delta" +
+          "treemap-tile-delta amount-value" +
           (tile.tone !== "neutral" ? ` ${tile.tone}` : "");
         delta.textContent = `前日比 ${tile.deltaLabel}`;
         sub.appendChild(delta);
@@ -891,7 +992,7 @@ function renderChannelTreemap() {
       li.appendChild(note);
     } else {
       const value = document.createElement("span");
-      value.className = "channel-legend-value";
+      value.className = "channel-legend-value amount-value";
       value.textContent = entry.valueLabel;
       li.appendChild(value);
       if (entry.shareLabel) {
@@ -903,7 +1004,7 @@ function renderChannelTreemap() {
       if (entry.deltaLabel) {
         const delta = document.createElement("span");
         delta.className =
-          "kpi-delta" +
+          "kpi-delta amount-value" +
           (entry.delta > 0 ? " up" : entry.delta < 0 ? " down" : "");
         delta.textContent = `前日比 ${entry.deltaLabel}`;
         li.appendChild(delta);
@@ -949,7 +1050,7 @@ function fillTotalBoxes(elId, items) {
     label.className = "total-label";
     label.textContent = item.label;
     const value = document.createElement("div");
-    value.className = "total-value";
+    value.className = totalValueClass(item);
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
@@ -970,7 +1071,7 @@ function fillDemoRanking(elId, items) {
     const li = document.createElement("li");
     li.textContent = item.name;
     const span = document.createElement("span");
-    span.className = "rank-value";
+    span.className = "rank-value amount-value";
     span.textContent = formatCount(item.value);
     li.appendChild(span);
     list.appendChild(li);
@@ -988,11 +1089,12 @@ function fillDemoRanking(elId, items) {
 // onSelect; the caller owns the filter state and re-renders.
 function renderGenreFilterTabs(wrap, { total, options, active, onSelect }) {
   wrap.innerHTML = "";
-  const buttons = [{ genre: null, label: `すべて（${total}）` }];
+  const buttons = [{ genre: null, name: "すべて", count: total }];
   for (const option of options) {
     buttons.push({
       genre: option.genre,
-      label: `${option.genre}（${option.count}）`,
+      name: option.genre,
+      count: option.count,
     });
   }
   for (const entry of buttons) {
@@ -1003,7 +1105,9 @@ function renderGenreFilterTabs(wrap, { total, options, active, onSelect }) {
     btn.classList.toggle("active", isActive);
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", String(isActive));
-    btn.textContent = entry.label;
+    // The item count is a raw count: it rides in a masking span
+    // inside the button's label.
+    btn.append(`${entry.name}（`, countSpan(entry.count), "）");
     btn.addEventListener("click", () => onSelect(entry.genre));
     wrap.appendChild(btn);
   }
@@ -1107,7 +1211,7 @@ function renderMediaTable() {
   }
   const numCell = (value, format = formatCount) => {
     const td = document.createElement("td");
-    td.className = "num";
+    td.className = "num amount-value";
     td.textContent = format(value);
     return td;
   };
@@ -1253,11 +1357,16 @@ function renderGenreTable(detail) {
   );
   const rangeEl = document.getElementById("sns-genre-range");
   const range = mediaDateRange(media);
-  rangeEl.textContent = !media.length
-    ? "この期間の投稿はありません"
-    : range
-      ? `対象：${formatJstDate(range.from)}〜${formatJstDate(range.to)}の投稿（全${media.length}件）`
-      : "";
+  rangeEl.textContent = "";
+  if (!media.length) {
+    rangeEl.textContent = "この期間の投稿はありません";
+  } else if (range) {
+    rangeEl.append(
+      `対象：${formatJstDate(range.from)}〜${formatJstDate(range.to)}の投稿（全`,
+      countSpan(media.length),
+      "件）",
+    );
+  }
   renderGenreTreemap(
     document.getElementById("sns-genre-treemap"),
     document.getElementById("sns-genre-legend"),
@@ -1282,6 +1391,14 @@ function renderGenreTable(detail) {
   }
   const numCell = (text) => {
     const td = document.createElement("td");
+    td.className = "num amount-value";
+    td.textContent = text;
+    return td;
+  };
+  // Rate cells （保存率・いいね率） are ratios: they stay
+  // readable while masking, so they take no .amount-value.
+  const rateCell = (text) => {
+    const td = document.createElement("td");
     td.className = "num";
     td.textContent = text;
     return td;
@@ -1295,8 +1412,8 @@ function renderGenreTable(detail) {
     tr.appendChild(numCell(formatCount(row.count)));
     tr.appendChild(numCell(formatCount(row.totalViews)));
     tr.appendChild(numCell(formatCount(row.avgViews)));
-    tr.appendChild(numCell(formatRate(row.saveRate)));
-    tr.appendChild(numCell(formatRate(row.likeRate)));
+    tr.appendChild(rateCell(formatRate(row.saveRate)));
+    tr.appendChild(rateCell(formatRate(row.likeRate)));
     const topTd = document.createElement("td");
     if (row.top) {
       if (row.top.permalink) {
@@ -1310,7 +1427,7 @@ function renderGenreTable(detail) {
         topTd.textContent = row.top.title;
       }
       const span = document.createElement("span");
-      span.className = "rank-value";
+      span.className = "rank-value amount-value";
       span.textContent = formatCount(row.top.views);
       topTd.appendChild(span);
     } else {
@@ -1362,7 +1479,7 @@ function renderYoutube(detail) {
     tr.appendChild(dateTd);
     for (const value of [video.views, video.likes, video.comments]) {
       const td = document.createElement("td");
-      td.className = "num";
+      td.className = "num amount-value";
       td.textContent = formatCount(value);
       tr.appendChild(td);
     }
@@ -1390,9 +1507,11 @@ function renderYoutubeHistory() {
   const item = series[0];
   const head = document.createElement("p");
   head.className = "meta";
-  head.textContent =
-    `${item.label}：最新 ${formatCount(item.latest)}` +
-    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  head.append(
+    `${item.label}：最新 `,
+    countSpan(item.latest),
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
+  );
   const chart = document.createElement("div");
   chart.className = "chart-wrap";
   chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
@@ -1495,6 +1614,14 @@ function renderPostGenres(wrap, stats, sortState, rerender) {
   const tbody = document.createElement("tbody");
   const numCell = (text) => {
     const td = document.createElement("td");
+    td.className = "num amount-value";
+    td.textContent = text;
+    return td;
+  };
+  // The rate cell （いいね率） is a ratio: it stays readable
+  // while masking, so it takes no .amount-value.
+  const rateCell = (text) => {
+    const td = document.createElement("td");
     td.className = "num";
     td.textContent = text;
     return td;
@@ -1508,7 +1635,7 @@ function renderPostGenres(wrap, stats, sortState, rerender) {
     tr.appendChild(numCell(formatCount(row.count)));
     tr.appendChild(numCell(formatCount(row.totalViews)));
     tr.appendChild(numCell(formatCount(row.avgViews)));
-    tr.appendChild(numCell(formatRate(row.likeRate)));
+    tr.appendChild(rateCell(formatRate(row.likeRate)));
     const topTd = document.createElement("td");
     if (row.top) {
       if (row.top.permalink) {
@@ -1522,7 +1649,7 @@ function renderPostGenres(wrap, stats, sortState, rerender) {
         topTd.textContent = row.top.title;
       }
       const span = document.createElement("span");
-      span.className = "rank-value";
+      span.className = "rank-value amount-value";
       span.textContent = formatCount(row.top.views);
       topTd.appendChild(span);
     } else {
@@ -1586,10 +1713,15 @@ function renderThreadsPostsGenreTabs() {
 function renderThreadsPosts() {
   const tbody = document.getElementById("threads-posts-body");
   tbody.innerHTML = "";
-  document.getElementById("threads-posts-range").textContent =
-    threadsPostRows.length
-      ? `対象：直近の投稿（全${threadsPostRows.length}件）`
-      : "";
+  const threadsRangeEl = document.getElementById("threads-posts-range");
+  threadsRangeEl.textContent = "";
+  if (threadsPostRows.length) {
+    threadsRangeEl.append(
+      "対象：直近の投稿（全",
+      countSpan(threadsPostRows.length),
+      "件）",
+    );
+  }
   const rows = sortMedia(
     filterThreadsByGenre(threadsPostRows, threadsGenreFilter),
     threadsSort.key,
@@ -1605,7 +1737,7 @@ function renderThreadsPosts() {
   } else {
     const numCell = (value) => {
       const td = document.createElement("td");
-      td.className = "num";
+      td.className = "num amount-value";
       td.textContent = formatCount(value);
       return td;
     };
@@ -1675,9 +1807,11 @@ function renderThreads() {
   const item = series[0];
   const head = document.createElement("p");
   head.className = "meta";
-  head.textContent =
-    `${item.label}：最新 ${formatCount(item.latest)}` +
-    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  head.append(
+    `${item.label}：最新 `,
+    countSpan(item.latest),
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
+  );
   const chart = document.createElement("div");
   chart.className = "chart-wrap";
   chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
@@ -1740,9 +1874,15 @@ function renderXPostsGenreTabs() {
 function renderXPosts() {
   const tbody = document.getElementById("x-posts-body");
   tbody.innerHTML = "";
-  document.getElementById("x-posts-range").textContent = xPostRows.length
-    ? `対象：直近の投稿（全${xPostRows.length}件）`
-    : "";
+  const xRangeEl = document.getElementById("x-posts-range");
+  xRangeEl.textContent = "";
+  if (xPostRows.length) {
+    xRangeEl.append(
+      "対象：直近の投稿（全",
+      countSpan(xPostRows.length),
+      "件）",
+    );
+  }
   const rows = sortMedia(
     filterXByGenre(xPostRows, xGenreFilter),
     xSort.key,
@@ -1758,7 +1898,7 @@ function renderXPosts() {
   } else {
     const numCell = (value) => {
       const td = document.createElement("td");
-      td.className = "num";
+      td.className = "num amount-value";
       td.textContent = formatCount(value);
       return td;
     };
@@ -1820,9 +1960,11 @@ function renderX() {
   const item = series[0];
   const head = document.createElement("p");
   head.className = "meta";
-  head.textContent =
-    `${item.label}：最新 ${formatCount(item.latest)}` +
-    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+  head.append(
+    `${item.label}：最新 `,
+    countSpan(item.latest),
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
+  );
   const chart = document.createElement("div");
   chart.className = "chart-wrap";
   chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
@@ -1902,11 +2044,11 @@ function renderFollowChart(detail) {
         dayLine.className = "meta";
         dayLine.append(`${formatDateLabel(day.date)}：フォロー `);
         const followsCount = document.createElement("span");
-        followsCount.className = "follow-count-up";
+        followsCount.className = "follow-count-up amount-value";
         followsCount.textContent = formatCount(day.follows);
         dayLine.append(followsCount, " · フォロー解除 ");
         const unfollowsCount = document.createElement("span");
-        unfollowsCount.className = "follow-count-down";
+        unfollowsCount.className = "follow-count-down amount-value";
         unfollowsCount.textContent = formatCount(day.unfollows);
         dayLine.append(unfollowsCount);
         entry.appendChild(dayLine);
@@ -1927,7 +2069,7 @@ function renderFollowChart(detail) {
             li.textContent = label;
           }
           const span = document.createElement("span");
-          span.className = "rank-value";
+          span.className = "rank-value amount-value";
           span.textContent = formatCount(media.views);
           li.appendChild(span);
           list.appendChild(li);
@@ -1994,7 +2136,7 @@ function renderSns(detail) {
     const div = document.createElement("div");
     div.className = "pyramid-row";
     const maleValue = document.createElement("span");
-    maleValue.className = "pyramid-value pyramid-value-left";
+    maleValue.className = "pyramid-value pyramid-value-left amount-value";
     maleValue.textContent = formatCount(band.male.value);
     const maleTrack = document.createElement("div");
     maleTrack.className = "pyramid-track pyramid-track-left";
@@ -2007,7 +2149,7 @@ function renderSns(detail) {
     age.textContent = band.ageLabel;
     const unknown = document.createElement("span");
     unknown.className = "pyramid-unknown";
-    unknown.textContent = `不明 ${formatCount(band.unknown)}`;
+    unknown.append("不明 ", countSpan(band.unknown));
     age.appendChild(unknown);
     const femaleTrack = document.createElement("div");
     femaleTrack.className = "pyramid-track pyramid-track-right";
@@ -2016,7 +2158,7 @@ function renderSns(detail) {
     femaleFill.style.width = `${band.female.pct}%`;
     femaleTrack.appendChild(femaleFill);
     const femaleValue = document.createElement("span");
-    femaleValue.className = "pyramid-value pyramid-value-right";
+    femaleValue.className = "pyramid-value pyramid-value-right amount-value";
     femaleValue.textContent = formatCount(band.female.value);
     div.appendChild(maleValue);
     div.appendChild(maleTrack);
@@ -2038,7 +2180,7 @@ function renderSns(detail) {
     fill.style.width = `${row.pct}%`;
     track.appendChild(fill);
     const value = document.createElement("span");
-    value.className = "demo-bar-value";
+    value.className = "demo-bar-value amount-value";
     value.textContent = formatCount(row.value);
     div.appendChild(label);
     div.appendChild(track);
@@ -2054,9 +2196,15 @@ function renderSns(detail) {
     : [];
   snsDetail = detail;
   const mediaRange = mediaDateRange(snsMediaRows);
-  document.getElementById("sns-media-range").textContent = mediaRange
-    ? `対象：${formatJstDate(mediaRange.from)}〜${formatJstDate(mediaRange.to)}の投稿（全${snsMediaRows.length}件）`
-    : "";
+  const mediaRangeEl = document.getElementById("sns-media-range");
+  mediaRangeEl.textContent = "";
+  if (mediaRange) {
+    mediaRangeEl.append(
+      `対象：${formatJstDate(mediaRange.from)}〜${formatJstDate(mediaRange.to)}の投稿（全`,
+      countSpan(snsMediaRows.length),
+      "件）",
+    );
+  }
   // A fresh snapshot resets the per-post genre filter to すべて.
   snsGenreFilter = null;
   renderMediaGenreTabs();
@@ -2127,9 +2275,11 @@ function renderSnsHistory(response) {
   for (const item of series) {
     const head = document.createElement("p");
     head.className = "meta";
-    head.textContent =
-      `${item.label}：最新 ${formatCount(item.latest)}` +
-      `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`;
+    head.append(
+      `${item.label}：最新 `,
+      countSpan(item.latest),
+      `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
+    );
     const chart = document.createElement("div");
     chart.className = "chart-wrap";
     chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
@@ -2162,10 +2312,15 @@ async function loadSnsHistory() {
 const chartTooltipEl = document.getElementById("chart-tooltip");
 
 function showChartTooltip(pointEl) {
-  chartTooltipEl.textContent = tooltipText({
-    date: pointEl.dataset.date,
-    views: pointEl.dataset.views,
-  });
+  // The date stays readable; the view count is a raw count and
+  // rides in a .privacy-mask span (tooltipText in chart.js
+  // composes the same wording as plain text for tests).
+  chartTooltipEl.textContent = "";
+  chartTooltipEl.append(`${formatDateFull(pointEl.dataset.date)} · `);
+  const count = document.createElement("span");
+  count.className = "privacy-mask";
+  count.textContent = `${Number(pointEl.dataset.views).toLocaleString()}回`;
+  chartTooltipEl.appendChild(count);
   const rect = pointEl.getBoundingClientRect();
   chartTooltipEl.style.left = `${rect.left + rect.width / 2}px`;
   chartTooltipEl.style.top = `${rect.top}px`;
@@ -2236,6 +2391,7 @@ function initGoogleSignIn() {
 logoutBtn.addEventListener("click", () => {
   idToken = null;
   shareToken = null;
+  renderPrivacy();
   clearSavedIdToken();
   clearSavedShareToken();
   if (window.google && window.google.accounts) {
@@ -2324,6 +2480,7 @@ async function enterWithShareToken(token, fromHash) {
     return;
   }
   shareToken = null;
+  renderPrivacy();
   // A dead token must not linger in storage: it would shadow the
   // sign-in restore on every later visit.
   clearSavedShareToken();
