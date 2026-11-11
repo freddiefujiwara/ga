@@ -11,6 +11,8 @@ import {
   fetchReport,
   validateShareToken,
   shareAction,
+  exchangeSession,
+  revokeSession,
   totalsOf,
   dailySeries,
   dimensionRanking,
@@ -101,8 +103,9 @@ import {
 } from "./share.js";
 import {
   bootEntry,
-  loadSavedIdToken,
-  saveIdToken,
+  loadSavedSessionToken,
+  saveSessionToken,
+  clearSavedSessionToken,
   clearSavedIdToken,
   loadSavedShareToken,
   saveShareToken,
@@ -142,7 +145,7 @@ const shareRemainingEl = document.getElementById("share-remaining");
 const shareExpiresEl = document.getElementById("share-expires");
 const shareStatusEl = document.getElementById("share-status");
 
-let idToken = null;
+let sessionToken = null;
 // Set when the page was opened via a temporary access link (#share=…).
 let shareToken = null;
 let shareExpiresAt = null;
@@ -239,7 +242,7 @@ function totalValueClass(item) {
   return "total-value amount-value" + (isPublic ? " is-public" : "");
 }
 
-const auth = () => ({ idToken, shareToken });
+const auth = () => ({ sessionToken, shareToken });
 
 // --- Dashboard tabs ---
 // The selected tab lives in the URL path ("/social/instagram").
@@ -432,8 +435,8 @@ async function loadDashboard() {
   gateEl.hidden = true;
   expiredEl.hidden = true;
   dashboardEl.hidden = false;
-  logoutBtn.hidden = !idToken;
-  shareCardEl.hidden = !idToken;
+  logoutBtn.hidden = !sessionToken;
+  shareCardEl.hidden = !sessionToken;
   // The dashboard is up, so the session kind is settled: the
   // privacy toggle may appear (unless this is a share session,
   // where renderPrivacy keeps it hidden).
@@ -2767,12 +2770,26 @@ function showAccountEmail(credential) {
   }
 }
 
-function onSignedIn(credential) {
-  idToken = credential;
-  // Save the token like the asset app does, so the next visit can
-  // restore the session instead of starting at the gate.
-  saveIdToken(credential);
+async function onSignedIn(credential) {
   showAccountEmail(credential);
+  // Exchange the (1-hour) Google ID token for a 30-day owner session
+  // and save that, so later visits restore the session instead of
+  // starting at the gate — the same arrangement as the asset app.
+  let result = null;
+  try {
+    result = await exchangeSession(CONFIG.GAS_ENDPOINT, credential);
+  } catch {
+    result = null;
+  }
+  if (!result || !result.ok || !result.session_token) {
+    gateErrorEl.textContent = "ログインに失敗しました。もう一度お試しください。";
+    accountEl.textContent = "";
+    showGate();
+    initGoogleSignIn();
+    return;
+  }
+  sessionToken = result.session_token;
+  saveSessionToken(sessionToken);
   // Sign-in just succeeded, so the gate (and its button) must not
   // stay on screen while the dashboard loads.
   showLoading();
@@ -2795,9 +2812,16 @@ function initGoogleSignIn() {
 }
 
 logoutBtn.addEventListener("click", () => {
-  idToken = null;
+  const endingSession = sessionToken;
+  sessionToken = null;
   shareToken = null;
   renderPrivacy();
+  if (endingSession) {
+    // Revoke the owner session server-side; local logout proceeds
+    // regardless of the outcome.
+    revokeSession(CONFIG.GAS_ENDPOINT, endingSession).catch(() => {});
+  }
+  clearSavedSessionToken();
   clearSavedIdToken();
   clearSavedShareToken();
   if (window.google && window.google.accounts) {
@@ -2822,7 +2846,7 @@ function showIssuedShare(url, expiresAt) {
 async function issueShare() {
   shareStatusEl.textContent = "発行しています…";
   try {
-    const result = await shareAction(CONFIG.GAS_ENDPOINT, idToken, "issue_share");
+    const result = await shareAction(CONFIG.GAS_ENDPOINT, auth(), "issue_share");
     if (!result.ok) {
       shareStatusEl.textContent = result.error || "発行できませんでした";
       return;
@@ -2842,7 +2866,7 @@ shareIssueBtn.addEventListener("click", issueShare);
 shareReissueBtn.addEventListener("click", issueShare);
 shareRevokeBtn.addEventListener("click", async () => {
   try {
-    await shareAction(CONFIG.GAS_ENDPOINT, idToken, "revoke_share");
+    await shareAction(CONFIG.GAS_ENDPOINT, auth(), "revoke_share");
   } catch {
     // Even if the call fails, hide the issued URL; the status line says so.
   }
@@ -2926,25 +2950,26 @@ async function boot() {
   // The markup already opens on the loading screen; restate it so
   // the state machine starts from a known place.
   showLoading();
+  // Drop any legacy saved Google ID token left by the old scheme.
+  clearSavedIdToken();
   const entry = bootEntry({
     hashToken: parseShareToken(window.location.hash),
-    savedIdToken: loadSavedIdToken(),
+    savedSessionToken: loadSavedSessionToken(),
     savedShareToken: loadSavedShareToken(),
   });
   if (entry.kind === "share") {
     await enterWithShareToken(entry.token, entry.fromHash);
     return;
   }
-  if (entry.kind === "idToken") {
-    idToken = entry.token;
-    showAccountEmail(entry.token);
+  if (entry.kind === "session") {
+    sessionToken = entry.token;
     if (await loadDashboard()) {
       return;
     }
-    // The saved token expired or was rejected: drop it and fall
+    // The saved session expired or was rejected: drop it and fall
     // back to a saved share session, then to the gate.
-    clearSavedIdToken();
-    idToken = null;
+    clearSavedSessionToken();
+    sessionToken = null;
     accountEl.textContent = "";
     const savedShare = loadSavedShareToken();
     if (savedShare) {
