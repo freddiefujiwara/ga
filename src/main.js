@@ -109,6 +109,12 @@ import {
   clearSavedShareToken,
 } from "./session.js";
 import { isStagingBuild, showStagingBanner } from "./staging-banner.js";
+import {
+  SECTION_LOADING_TEXT,
+  SECTION_FAILED_TEXT,
+  setSectionLoading,
+  setSectionFailed,
+} from "./section-status.js";
 
 if (isStagingBuild()) {
   showStagingBanner();
@@ -443,6 +449,7 @@ async function loadDashboard() {
     sourcesPromise,
     titlesPromise,
     metaPromise,
+    speedPromise,
   );
   return true;
 }
@@ -465,31 +472,76 @@ function renderRanking(elId, response, limit) {
 
 // The blog tab's sections, filled in as their responses land.
 // Each chain renders only its own sections, so a slow (or failed)
-// response holds up nothing else; a failed one leaves its section
-// in the initial state, the same look as data that has not
-// arrived yet.
+// response holds up nothing else. Until a section's response
+// lands it carries the loading line; a failed one ends on the
+// failure line — neither can be mistaken for a section that
+// simply has no data.
 function loadBlogSections(
   dailyPromise,
   pagesPromise,
   sourcesPromise,
   titlesPromise,
   metaPromise,
+  speedPromise,
 ) {
+  const dailyChartEl = document.getElementById("daily-chart");
+  const sourcesEl = document.getElementById("top-sources");
+  setSectionLoading(dailyChartEl);
+  setSectionLoading(sourcesEl);
+  setSectionLoading(document.getElementById("top-pages"));
+  setSectionLoading(document.getElementById("blog-genres"));
+  setSectionLoading(document.getElementById("blog-article-body"));
+  // The two KPI boxes the page rows feed (the article count and
+  // the per-article average) wait on the same load: they show
+  // the loading wording, without the masking class — the
+  // wording is not a figure — until fillBlogPages settles them.
+  for (const id of ["total-articles", "total-per-article"]) {
+    const el = document.getElementById(id);
+    el.textContent = SECTION_LOADING_TEXT;
+    el.classList.add("section-pending");
+    el.classList.remove("amount-value");
+  }
   dailyPromise
     .then((daily) => {
+      if (!daily || daily.ok === false) {
+        setSectionFailed(dailyChartEl);
+        return;
+      }
       // The blog's daily figures are 28-day GA rollups that no
       // public page prints, so the chart's max label masks like
       // the other charts'.
-      document.getElementById("daily-chart").innerHTML = buildLineChartSvg(
-        dailySeries(daily),
-      );
+      dailyChartEl.innerHTML = buildLineChartSvg(dailySeries(daily));
       wireChartTooltip();
     })
-    .catch(() => {});
+    .catch(() => setSectionFailed(dailyChartEl));
   sourcesPromise
-    .then((sources) => renderRanking("top-sources", sources, 8))
-    .catch(() => {});
+    .then((sources) => {
+      if (!sources || sources.ok === false) {
+        setSectionFailed(sourcesEl);
+        return;
+      }
+      renderRanking("top-sources", sources, 8);
+    })
+    .catch(() => setSectionFailed(sourcesEl));
   fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise);
+}
+
+// The page rows could not be read: every section they feed
+// ends on the failure line (the two KPI boxes keep the pending
+// size and take the failure colour), and the overview's blog
+// top list settles the same way.
+function settleBlogPagesFailed() {
+  overviewState.blogSettled = true;
+  overviewState.blogFailed = true;
+  setSectionFailed(document.getElementById("top-pages"));
+  setSectionFailed(document.getElementById("blog-genres"));
+  setSectionFailed(document.getElementById("blog-article-body"));
+  for (const id of ["total-articles", "total-per-article"]) {
+    const el = document.getElementById(id);
+    el.textContent = SECTION_FAILED_TEXT;
+    el.classList.add("section-failed");
+  }
+  renderTopPosts();
 }
 
 // The page ranking and everything joined to it: the blog tab's
@@ -508,7 +560,11 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
       metaPromise,
     ]);
   } catch {
-    // The page rows could not be read; the sections stay empty.
+    settleBlogPagesFailed();
+    return;
+  }
+  if (!pages || pages.ok === false) {
+    settleBlogPagesFailed();
     return;
   }
   // Page rows show the article title and link to the page itself,
@@ -540,6 +596,7 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
   // The same ranking, top 3 only, feeds the overview's blog
   // section in the per-channel top lists.
   overviewState.blogTop = pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 3);
+  overviewState.blogSettled = true;
   renderTopPosts();
   // The display-time ranking rides its own report; it fills in
   // when it lands and reveals its section only when at least one
@@ -580,14 +637,20 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
   renderBlogGenres(pages, meta, titles);
   renderBlogArticles(pages, meta, titles);
   // The blog KPI row gains the article count and the per-article
-  // average over the same article list the 記事ごと table shows.
+  // average over the same article list the 記事ごと table shows;
+  // the boxes leave their pending state (the masking class comes
+  // back with the real figures).
   const articleStats = articleViewStats(blogArticles);
-  document.getElementById("total-articles").textContent = articleStats.count
+  const articlesEl = document.getElementById("total-articles");
+  articlesEl.textContent = articleStats.count
     ? formatCount(articleStats.count)
     : "-";
-  document.getElementById("total-per-article").textContent = formatCount(
-    articleStats.perArticle,
-  );
+  articlesEl.classList.remove("section-pending");
+  articlesEl.classList.add("amount-value");
+  const perArticleEl = document.getElementById("total-per-article");
+  perArticleEl.textContent = formatCount(articleStats.perArticle);
+  perArticleEl.classList.remove("section-pending");
+  perArticleEl.classList.add("amount-value");
 }
 
 // --- Genre visuals (Instagram / blog genre sections) ---
@@ -955,18 +1018,61 @@ function renderBlogArticles(pagesResponse, meta, rssTitles) {
 // --- Overview tab ---
 // The overview pulls its numbers from three independent loads (GA
 // totals, the SNS snapshot, the SNS history). Each loader stores
-// its result here and re-renders; whatever has not arrived yet
-// shows as "—" and carries no change line.
+// its result here and re-renders; a figure whose load has not
+// arrived yet carries that load's state line (kpiLoadState /
+// topPostsPendingText) instead of a bare "—", and carries no
+// change line.
 
 const overviewState = {
   gaTotals: null,
   detail: null,
+  // Whether each late-arriving load has finished (and whether
+  // it failed). Sections filled by a load that is still in
+  // flight show the loading line; once it has failed they show
+  // the failure line; only a settled load may fall back to a
+  // section's ordinary empty state. See section-status.js.
+  detailSettled: false,
+  detailFailed: false,
   historyRows: null,
+  historySettled: false,
+  historyFailed: false,
   // The blog's top articles for the overview's per-channel top
   // lists, ranked from the GA page rows when the report lands
-  // (null until then; the blog section shows "—").
+  // (null until then; the blog section shows its load state).
   blogTop: null,
+  blogSettled: false,
+  blogFailed: false,
 };
+
+// Puts a not-yet-filled container into its load state — the
+// loading line while the load behind it is in flight, the
+// failure line once it has failed — and reports whether it did:
+// false means the load has landed and the caller renders for
+// real. One helper per load, so every section filled by the
+// same response settles the same way.
+function fillDetailPending(el) {
+  if (!overviewState.detailSettled) {
+    setSectionLoading(el);
+    return true;
+  }
+  if (overviewState.detailFailed) {
+    setSectionFailed(el);
+    return true;
+  }
+  return false;
+}
+
+function fillHistoryPending(el) {
+  if (!overviewState.historySettled) {
+    setSectionLoading(el);
+    return true;
+  }
+  if (overviewState.historyFailed) {
+    setSectionFailed(el);
+    return true;
+  }
+  return false;
+}
 
 function fillKpiBoxes(items) {
   const wrap = document.getElementById("kpi-cards");
@@ -978,7 +1084,13 @@ function fillKpiBoxes(items) {
     label.className = "total-label";
     label.textContent = item.label;
     const value = document.createElement("div");
-    value.className = totalValueClass(item);
+    // A card still waiting on its load shows the load-state
+    // wording instead of a figure: it takes no .amount-value,
+    // so privacy masking (which blurs figures) leaves the
+    // wording itself readable.
+    value.className = item.pending
+      ? "total-value section-pending"
+      : totalValueClass(item);
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
@@ -1001,6 +1113,24 @@ function fillKpiBoxes(items) {
     }
     wrap.appendChild(box);
   }
+}
+
+// The empty-row wording for one of the overview's top lists:
+// the load state of the load behind the channel (the SNS
+// snapshot, or the GA page rows for the blog) until it settles,
+// then the plain "—" of a channel with genuinely nothing to
+// list.
+function topPostsPendingText(channel) {
+  if (channel === "ブログ") {
+    if (!overviewState.blogSettled) {
+      return SECTION_LOADING_TEXT;
+    }
+    return overviewState.blogFailed ? SECTION_FAILED_TEXT : "—";
+  }
+  if (!overviewState.detailSettled) {
+    return SECTION_LOADING_TEXT;
+  }
+  return overviewState.detailFailed ? SECTION_FAILED_TEXT : "—";
 }
 
 // The overview's top lists, one per channel: each channel's
@@ -1028,7 +1158,11 @@ function renderTopPosts() {
     list.className = "ranking";
     if (!section.items.length) {
       const li = document.createElement("li");
-      li.textContent = "—";
+      // No rows yet: while the load behind this channel is
+      // still in flight the row carries its load state, so an
+      // empty list cannot be mistaken for a channel with no
+      // posts; only a settled load keeps the bare "—".
+      li.textContent = topPostsPendingText(section.channel);
       list.appendChild(li);
     }
     for (const item of section.items) {
@@ -1194,6 +1328,25 @@ function renderChannelTreemap() {
 }
 
 
+// A KPI card whose figure rides on the SNS snapshot, while
+// that load is still in flight (or has failed): the bare "—"
+// the card would otherwise sit on reads as "no data", so the
+// card shows the load state instead, without a change line.
+// The blog cards ride on the GA totals, which gate the reveal
+// itself, so their "—" never passes through here.
+function kpiLoadState(item) {
+  if (overviewState.detail || item.value !== "—") {
+    return item;
+  }
+  if (!overviewState.detailSettled) {
+    return { ...item, value: SECTION_LOADING_TEXT, delta: null, pending: true };
+  }
+  if (overviewState.detailFailed) {
+    return { ...item, value: SECTION_FAILED_TEXT, delta: null, pending: true };
+  }
+  return item;
+}
+
 function renderOverview() {
   renderChannelTreemap();
   fillKpiBoxes(
@@ -1201,7 +1354,7 @@ function renderOverview() {
       overviewState.detail,
       overviewState.gaTotals,
       overviewState.historyRows,
-    ),
+    ).map(kpiLoadState),
   );
   renderTopPosts();
 }
@@ -1626,6 +1779,12 @@ function renderYoutube(detail) {
   tbody.innerHTML = "";
   const videos = youtubeVideos(detail);
   if (!videos.length) {
+    // No snapshot behind this render yet (the loader's initial
+    // call, or its failure): the table carries the load state,
+    // not the empty-table line.
+    if (detail == null && fillDetailPending(tbody)) {
+      return;
+    }
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 6;
@@ -1677,6 +1836,11 @@ function renderYoutube(detail) {
 // the section shows its empty state.
 function renderYoutubeHistory() {
   const wrap = document.getElementById("youtube-history");
+  // Until the history load settles, the wrap carries its load
+  // state rather than the "no history yet" line.
+  if (fillHistoryPending(wrap)) {
+    return;
+  }
   wrap.innerHTML = "";
   const series = youtubeHistorySeries(overviewState.historyRows);
   if (!series.length) {
@@ -1965,9 +2129,19 @@ function renderThreads() {
   );
   threadsPostRows = threadsPosts(overviewState.detail);
   wireSortableTable("threads-posts-table", threadsSort, renderThreadsPosts);
-  renderThreadsGenres();
-  renderThreadsPostsGenreTabs();
-  renderThreadsPosts();
+  // Until the snapshot settles, the genre section and the
+  // per-post table carry the load state instead of their empty
+  // states (the totals boxes above show "—" under the tab's
+  // status line, like the Instagram tab's sections do).
+  if (fillDetailPending(document.getElementById("threads-genres"))) {
+    fillDetailPending(document.getElementById("threads-posts-body"));
+    document.getElementById("threads-posts-genre-tabs").innerHTML = "";
+    document.getElementById("threads-posts-range").textContent = "";
+  } else {
+    renderThreadsGenres();
+    renderThreadsPostsGenreTabs();
+    renderThreadsPosts();
+  }
   const notes = document.getElementById("threads-notes");
   notes.innerHTML = "";
   for (const note of threadsErrorNotes(overviewState.detail)) {
@@ -1977,6 +2151,9 @@ function renderThreads() {
     notes.appendChild(p);
   }
   const wrap = document.getElementById("threads-history");
+  if (fillHistoryPending(wrap)) {
+    return;
+  }
   wrap.innerHTML = "";
   const series = threadsHistorySeries(overviewState.historyRows);
   if (!series.length) {
@@ -2118,9 +2295,18 @@ function renderX() {
   fillTotalBoxes("sns-x-totals", xTotals(overviewState.detail, overviewState.historyRows));
   xPostRows = xPosts(overviewState.detail);
   wireSortableTable("x-posts-table", xSort, renderXPosts);
-  renderXGenres();
-  renderXPostsGenreTabs();
-  renderXPosts();
+  // Until the snapshot settles, the genre section and the
+  // per-post table carry the load state instead of their empty
+  // states, like the Threads tab's.
+  if (fillDetailPending(document.getElementById("x-genres"))) {
+    fillDetailPending(document.getElementById("x-posts-body"));
+    document.getElementById("x-posts-genre-tabs").innerHTML = "";
+    document.getElementById("x-posts-range").textContent = "";
+  } else {
+    renderXGenres();
+    renderXPostsGenreTabs();
+    renderXPosts();
+  }
   const notes = document.getElementById("x-notes");
   notes.innerHTML = "";
   for (const note of xErrorNotes(overviewState.detail)) {
@@ -2130,6 +2316,9 @@ function renderX() {
     notes.appendChild(p);
   }
   const wrap = document.getElementById("x-history");
+  if (fillHistoryPending(wrap)) {
+    return;
+  }
   wrap.innerHTML = "";
   const series = xHistorySeries(overviewState.historyRows);
   if (!series.length) {
@@ -2277,6 +2466,8 @@ function renderFollowChart(detail) {
 
 function renderSns(detail) {
   overviewState.detail = detail;
+  overviewState.detailSettled = true;
+  overviewState.detailFailed = false;
   renderOverview();
   // The collection timestamp behind every tab, shown once above
   // the tab bar (the blog numbers come from the same collection).
@@ -2431,6 +2622,7 @@ async function loadSns(detailPromise) {
       youtubeStatusEl.textContent = message;
       threadsStatusEl.textContent = message;
       xStatusEl.textContent = message;
+      settleSnsFailed();
       return;
     }
     renderSns(detail);
@@ -2439,7 +2631,20 @@ async function loadSns(detailPromise) {
     youtubeStatusEl.textContent = "SNSデータを取得できませんでした";
     threadsStatusEl.textContent = "SNSデータを取得できませんでした";
     xStatusEl.textContent = "SNSデータを取得できませんでした";
+    settleSnsFailed();
   }
+}
+
+// The SNS snapshot could not be read: the sections it feeds end
+// on their failure state instead of sitting on the loading line
+// (the per-tab status lines above carry the error message).
+function settleSnsFailed() {
+  overviewState.detailSettled = true;
+  overviewState.detailFailed = true;
+  renderOverview();
+  renderYoutube(null);
+  renderThreads();
+  renderX();
 }
 
 // --- SNS trend charts (overview tab) ---
@@ -2473,19 +2678,32 @@ function renderSnsHistory(response) {
   }
 }
 
-// The history has its own load: empty or failed just shows the
-// empty-state line and never touches the rest of the SNS section.
-// Its rows also feed the overview KPI deltas.
+// The history has its own load: it never touches the rest of
+// the SNS section, and its rows also feed the overview KPI
+// deltas. While it is in flight the trend sections carry the
+// loading line; a failed load ends them on the failure line,
+// distinct from a history that is genuinely still empty.
 async function loadSnsHistory(historyPromise) {
+  const historyEl = document.getElementById("sns-history");
+  setSectionLoading(historyEl);
+  let response = null;
+  let failed = false;
   try {
-    const response = await (historyPromise ??
+    response = await (historyPromise ??
       fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth()));
-    const ok = response && response.ok ? response : null;
-    overviewState.historyRows = snsHistoryRows(ok);
-    renderSnsHistory(ok);
+    if (!response || !response.ok) {
+      failed = true;
+    }
   } catch {
-    overviewState.historyRows = [];
-    renderSnsHistory(null);
+    failed = true;
+  }
+  overviewState.historyRows = snsHistoryRows(failed ? null : response);
+  overviewState.historySettled = true;
+  overviewState.historyFailed = failed;
+  if (failed) {
+    setSectionFailed(historyEl);
+  } else {
+    renderSnsHistory(response);
   }
   renderOverview();
   renderYoutubeHistory();
