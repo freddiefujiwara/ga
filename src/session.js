@@ -1,8 +1,10 @@
 // Persistence for the sign-in session, mirroring the asset app so a
 // reload no longer drops the visitor back at the sign-in gate:
-//   - the Google ID token is saved in localStorage at sign-in and
-//     read back at boot (it expires after about an hour; a failed
-//     restore simply falls back to the gate);
+//   - at sign-in the Google ID token is exchanged for a 30-day owner
+//     session token, and that session token is what gets saved in
+//     localStorage and read back at boot (the raw ID token expires
+//     after about an hour and is never stored; a legacy saved copy
+//     is cleared at boot);
 //   - the share token keeps a copy in sessionStorage, so reopening
 //     the app without the #share= fragment restores the session.
 //
@@ -14,6 +16,7 @@
 import { isStagingBuild } from "./staging-banner.js";
 
 export const ID_TOKEN_STORAGE_KEY = "ga-google-id-token";
+export const SESSION_TOKEN_STORAGE_KEY = "ga-session-token";
 export const SHARE_TOKEN_STORAGE_KEY = "ga-share-token";
 
 /** The storage key for this build; staging gets a ":staging" suffix. */
@@ -42,19 +45,26 @@ function writeToken(storage, key, token) {
   }
 }
 
-export function loadSavedIdToken(
+export function loadSavedSessionToken(
   storage = globalThis.localStorage,
   staging = isStagingBuild(),
 ) {
-  return readToken(storage, sessionKey(ID_TOKEN_STORAGE_KEY, staging));
+  return readToken(storage, sessionKey(SESSION_TOKEN_STORAGE_KEY, staging));
 }
 
-export function saveIdToken(
+export function saveSessionToken(
   token,
   storage = globalThis.localStorage,
   staging = isStagingBuild(),
 ) {
-  writeToken(storage, sessionKey(ID_TOKEN_STORAGE_KEY, staging), token);
+  writeToken(storage, sessionKey(SESSION_TOKEN_STORAGE_KEY, staging), token);
+}
+
+export function clearSavedSessionToken(
+  storage = globalThis.localStorage,
+  staging = isStagingBuild(),
+) {
+  writeToken(storage, sessionKey(SESSION_TOKEN_STORAGE_KEY, staging), "");
 }
 
 export function clearSavedIdToken(
@@ -88,23 +98,23 @@ export function clearSavedShareToken(
 
 /**
  * Decide how boot should try to enter, strongest signal first: a
- * share link opened just now, then the saved Google sign-in, then
+ * share link opened just now, then the saved owner session, then
  * the sessionStorage copy of an earlier share link. Returns one of
  *   { kind: "share", token, fromHash: true }
- *   { kind: "idToken", token }
+ *   { kind: "session", token }
  *   { kind: "share", token, fromHash: false }
  *   { kind: "none" }
  */
 export function bootEntry({
   hashToken = "",
-  savedIdToken = "",
+  savedSessionToken = "",
   savedShareToken = "",
 } = {}) {
   if (hashToken) {
     return { kind: "share", token: hashToken, fromHash: true };
   }
-  if (savedIdToken) {
-    return { kind: "idToken", token: savedIdToken };
+  if (savedSessionToken) {
+    return { kind: "session", token: savedSessionToken };
   }
   if (savedShareToken) {
     return { kind: "share", token: savedShareToken, fromHash: false };

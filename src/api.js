@@ -1,12 +1,17 @@
 // Requests to the ga-gas endpoint (GET with query parameters; the
-// bridge is a plain doGet). Auth travels as an id_token parameter
-// (Google sign-in) or a share_token parameter (temporary access link).
+// bridge is a plain doGet). Auth travels as a session_token parameter
+// (the 30-day owner session exchanged at Google sign-in) or a
+// share_token parameter (temporary access link). The raw Google ID
+// token is only sent once, to the exchange_session action.
 // Each function returns the parsed JSON ({ ok: true, ... } on success).
 
 function buildUrl(endpoint, auth, params) {
   const url = new URL(endpoint);
   if (auth && auth.idToken) {
     url.searchParams.set("id_token", auth.idToken);
+  }
+  if (auth && auth.sessionToken) {
+    url.searchParams.set("session_token", auth.sessionToken);
   }
   if (auth && auth.shareToken) {
     url.searchParams.set("share_token", auth.shareToken);
@@ -35,9 +40,20 @@ export async function validateShareToken(endpoint, shareToken, fetchImpl = fetch
 }
 
 // Owner-only share administration: action is "issue_share" or
-// "revoke_share"; requires the owner's Google ID token.
-export async function shareAction(endpoint, idToken, action, fetchImpl = fetch) {
-  return getJson(endpoint, { idToken }, { action }, fetchImpl);
+// "revoke_share"; requires owner proof (the owner session token).
+export async function shareAction(endpoint, auth, action, fetchImpl = fetch) {
+  return getJson(endpoint, auth, { action }, fetchImpl);
+}
+
+// Exchange a fresh Google ID token for a 30-day owner session:
+// resolves with { ok: true, session_token, expires_at, ... }.
+export async function exchangeSession(endpoint, idToken, fetchImpl = fetch) {
+  return getJson(endpoint, { idToken }, { action: "exchange_session" }, fetchImpl);
+}
+
+// Revoke the owner session (logout). Best effort by design.
+export async function revokeSession(endpoint, sessionToken, fetchImpl = fetch) {
+  return getJson(endpoint, { sessionToken }, { action: "revoke_session" }, fetchImpl);
 }
 
 // --- SNS detail (ga-gas action=sns_detail) ---

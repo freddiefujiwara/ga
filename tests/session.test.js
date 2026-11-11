@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   ID_TOKEN_STORAGE_KEY,
+  SESSION_TOKEN_STORAGE_KEY,
   SHARE_TOKEN_STORAGE_KEY,
   bootEntry,
   clearSavedIdToken,
+  clearSavedSessionToken,
   clearSavedShareToken,
-  loadSavedIdToken,
+  loadSavedSessionToken,
   loadSavedShareToken,
-  saveIdToken,
+  saveSessionToken,
   saveShareToken,
   sessionKey,
 } from "../src/session.js";
@@ -24,13 +26,13 @@ function fakeStorage() {
 
 describe("sessionKey", () => {
   it("uses the bare key in production builds", () => {
-    expect(sessionKey(ID_TOKEN_STORAGE_KEY, false)).toBe("ga-google-id-token");
+    expect(sessionKey(SESSION_TOKEN_STORAGE_KEY, false)).toBe("ga-session-token");
     expect(sessionKey(SHARE_TOKEN_STORAGE_KEY, false)).toBe("ga-share-token");
   });
 
   it("suffixes the key with :staging in staging builds", () => {
-    expect(sessionKey(ID_TOKEN_STORAGE_KEY, true)).toBe(
-      "ga-google-id-token:staging",
+    expect(sessionKey(SESSION_TOKEN_STORAGE_KEY, true)).toBe(
+      "ga-session-token:staging",
     );
     expect(sessionKey(SHARE_TOKEN_STORAGE_KEY, true)).toBe(
       "ga-share-token:staging",
@@ -38,35 +40,42 @@ describe("sessionKey", () => {
   });
 });
 
-describe("saved ID token", () => {
+describe("saved session token", () => {
   it("round-trips through storage", () => {
     const storage = fakeStorage();
-    saveIdToken("tok-1", storage, false);
-    expect(storage.map.get("ga-google-id-token")).toBe("tok-1");
-    expect(loadSavedIdToken(storage, false)).toBe("tok-1");
+    saveSessionToken("tok-1", storage, false);
+    expect(storage.map.get("ga-session-token")).toBe("tok-1");
+    expect(loadSavedSessionToken(storage, false)).toBe("tok-1");
   });
 
   it("returns an empty string when nothing is saved", () => {
-    expect(loadSavedIdToken(fakeStorage(), false)).toBe("");
+    expect(loadSavedSessionToken(fakeStorage(), false)).toBe("");
   });
 
   it("clears the saved token", () => {
     const storage = fakeStorage();
-    saveIdToken("tok-1", storage, false);
-    clearSavedIdToken(storage, false);
-    expect(loadSavedIdToken(storage, false)).toBe("");
-    expect(storage.map.has("ga-google-id-token")).toBe(false);
+    saveSessionToken("tok-1", storage, false);
+    clearSavedSessionToken(storage, false);
+    expect(loadSavedSessionToken(storage, false)).toBe("");
+    expect(storage.map.has("ga-session-token")).toBe(false);
   });
 
   it("keeps staging and production tokens apart", () => {
     const storage = fakeStorage();
-    saveIdToken("prod-tok", storage, false);
-    saveIdToken("staging-tok", storage, true);
-    expect(loadSavedIdToken(storage, false)).toBe("prod-tok");
-    expect(loadSavedIdToken(storage, true)).toBe("staging-tok");
-    clearSavedIdToken(storage, true);
-    expect(loadSavedIdToken(storage, true)).toBe("");
-    expect(loadSavedIdToken(storage, false)).toBe("prod-tok");
+    saveSessionToken("prod-tok", storage, false);
+    saveSessionToken("staging-tok", storage, true);
+    expect(loadSavedSessionToken(storage, false)).toBe("prod-tok");
+    expect(loadSavedSessionToken(storage, true)).toBe("staging-tok");
+    clearSavedSessionToken(storage, true);
+    expect(loadSavedSessionToken(storage, true)).toBe("");
+    expect(loadSavedSessionToken(storage, false)).toBe("prod-tok");
+  });
+
+  it("clearSavedIdToken removes the legacy saved ID token", () => {
+    const storage = fakeStorage();
+    storage.setItem("ga-google-id-token", "legacy-tok");
+    clearSavedIdToken(storage, false);
+    expect(storage.map.has("ga-google-id-token")).toBe(false);
   });
 });
 
@@ -116,18 +125,19 @@ describe("unavailable storage", () => {
   };
 
   it("loads as empty and never throws on save or clear", () => {
-    expect(loadSavedIdToken(throwing, false)).toBe("");
+    expect(loadSavedSessionToken(throwing, false)).toBe("");
     expect(loadSavedShareToken(throwing, false)).toBe("");
-    expect(() => saveIdToken("t", throwing, false)).not.toThrow();
+    expect(() => saveSessionToken("t", throwing, false)).not.toThrow();
     expect(() => saveShareToken("t", throwing, false)).not.toThrow();
+    expect(() => clearSavedSessionToken(throwing, false)).not.toThrow();
     expect(() => clearSavedIdToken(throwing, false)).not.toThrow();
     expect(() => clearSavedShareToken(throwing, false)).not.toThrow();
   });
 
   it("tolerates a missing storage object", () => {
-    expect(loadSavedIdToken(null, false)).toBe("");
+    expect(loadSavedSessionToken(null, false)).toBe("");
     expect(loadSavedShareToken(undefined, false)).toBe("");
-    expect(() => saveIdToken("t", null, false)).not.toThrow();
+    expect(() => saveSessionToken("t", null, false)).not.toThrow();
     expect(() => saveShareToken("t", undefined, false)).not.toThrow();
   });
 });
@@ -137,16 +147,16 @@ describe("bootEntry", () => {
     expect(
       bootEntry({
         hashToken: "hash-tok",
-        savedIdToken: "id-tok",
+        savedSessionToken: "session-tok",
         savedShareToken: "share-tok",
       }),
     ).toEqual({ kind: "share", token: "hash-tok", fromHash: true });
   });
 
-  it("restores the saved Google sign-in next", () => {
+  it("restores the saved owner session next", () => {
     expect(
-      bootEntry({ savedIdToken: "id-tok", savedShareToken: "share-tok" }),
-    ).toEqual({ kind: "idToken", token: "id-tok" });
+      bootEntry({ savedSessionToken: "session-tok", savedShareToken: "share-tok" }),
+    ).toEqual({ kind: "session", token: "session-tok" });
   });
 
   it("falls back to the saved share copy", () => {
@@ -161,7 +171,7 @@ describe("bootEntry", () => {
     expect(bootEntry()).toEqual({ kind: "none" });
     expect(bootEntry({})).toEqual({ kind: "none" });
     expect(
-      bootEntry({ hashToken: "", savedIdToken: "", savedShareToken: "" }),
+      bootEntry({ hashToken: "", savedSessionToken: "", savedShareToken: "" }),
     ).toEqual({ kind: "none" });
   });
 });

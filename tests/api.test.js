@@ -3,6 +3,8 @@ import {
   fetchReport,
   validateShareToken,
   shareAction,
+  exchangeSession,
+  revokeSession,
   rowsOf,
   totalsOf,
   dailySeries,
@@ -48,12 +50,39 @@ describe("request building", () => {
     expect(url.searchParams.get("dimensions")).toBe("");
   });
 
-  it("shareAction carries the action and the id token", async () => {
+  it("shareAction carries the action and the session token", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ ok: true }));
-    await shareAction(ENDPOINT, "idt", "issue_share", fetchImpl);
+    await shareAction(ENDPOINT, { sessionToken: "sess" }, "issue_share", fetchImpl);
     const url = new URL(fetchImpl.mock.calls[0][0]);
     expect(url.searchParams.get("action")).toBe("issue_share");
+    expect(url.searchParams.get("session_token")).toBe("sess");
+  });
+
+  it("exchangeSession sends the id token to the exchange action", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ ok: true, session_token: "sess" }),
+    );
+    const result = await exchangeSession(ENDPOINT, "idt", fetchImpl);
+    expect(result.session_token).toBe("sess");
+    const url = new URL(fetchImpl.mock.calls[0][0]);
+    expect(url.searchParams.get("action")).toBe("exchange_session");
     expect(url.searchParams.get("id_token")).toBe("idt");
+  });
+
+  it("revokeSession sends the session token to the revoke action", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true, revoked: true }));
+    await revokeSession(ENDPOINT, "sess", fetchImpl);
+    const url = new URL(fetchImpl.mock.calls[0][0]);
+    expect(url.searchParams.get("action")).toBe("revoke_session");
+    expect(url.searchParams.get("session_token")).toBe("sess");
+  });
+
+  it("fetchReport sends a session token as session_token", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ ok: true }));
+    await fetchReport(ENDPOINT, { sessionToken: "sess" }, {}, fetchImpl);
+    const url = new URL(fetchImpl.mock.calls[0][0]);
+    expect(url.searchParams.get("session_token")).toBe("sess");
+    expect(url.searchParams.get("id_token")).toBeNull();
   });
 });
 
