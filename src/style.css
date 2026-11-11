@@ -129,6 +129,25 @@ body {
   color: var(--error);
 }
 
+/* Per-section load states (section-status.js): the loading line
+   carries .meta's muted look; the failure line reads as an
+   error wherever it lands. A total box whose figure is still
+   on its way (or failed) shows the same wording in place of the
+   number, at note size rather than figure size. */
+.section-failed {
+  color: var(--error);
+}
+
+.total-value.section-pending {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.total-value.section-pending.section-failed {
+  color: var(--error);
+}
+
 .auth-gate {
   padding: 20px;
 }
