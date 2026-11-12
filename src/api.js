@@ -656,26 +656,25 @@ export function thumbnailOrientation(naturalWidth, naturalHeight) {
 
 export function youtubeTotals(detail, historyRows) {
   const yt = detail?.youtube ?? {};
+  const change = historyDailyDelta(historyRows, "youtube_subscribers");
   const growth = historyWindowDelta(historyRows, "youtube_subscribers");
   return [
-    // The subscriber count is one of the top page's published
-    // follower figures, so masking exempts it.
-    { label: "登録者", value: formatCount(yt.subscribers), public: true },
     // YouTube reports no subscribe / unsubscribe split, so the
-    // change over the trailing window stands in for it.
-    followerChangeBox("登録者増減", growth),
+    // subscriber card itself carries the changes (see
+    // followerTotalBox).
+    followerTotalBox("登録者", yt.subscribers, change, growth),
     { label: "総再生回数", value: formatCount(yt.total_views) },
     { label: "動画本数", value: formatCount(yt.video_count) },
   ];
 }
 
-// Totals boxes for the Threads tab: the current follower count and
-// its day-over-day change （前日比）, taken from the history
-// rows exactly like the overview KPI deltas. Until the previous
-// calendar day carries a Threads number there is nothing to
-// compare, so the change box shows "—". Then the account-wide
-// last-30-days numbers ga-gas collects with the detail: total
-// views and the interactions total (the four-way split is
+// Totals boxes for the Threads tab: one follower card carrying
+// the current count, its day-over-day change （前日比） and
+// the change over the trailing window, all taken from the
+// history rows exactly like the overview KPI deltas (see
+// followerTotalBox). Then the account-wide last-30-days
+// numbers ga-gas collects with the detail: total views and
+// the interactions total (the four-way split is
 // threadsInteractions).
 // Every number can be null; missing ones show "—".
 export function threadsTotals(detail, historyRows) {
@@ -684,16 +683,9 @@ export function threadsTotals(detail, historyRows) {
   const growth = historyWindowDelta(historyRows, "threads_followers");
   const interactions = th.interactions_30d ?? {};
   return [
-    // The follower count is one of the top page's published
-    // follower figures, so masking exempts it.
-    { label: "フォロワー", value: formatCount(th.followers), public: true },
-    {
-      label: "前日比",
-      value: change ? (formatDelta(change.delta) ?? "—") : "—",
-    },
-    // Threads reports no follow / unfollow split, so the change
-    // over the trailing window stands in for it.
-    followerChangeBox("フォロワー増減", growth),
+    // Threads reports no follow / unfollow split, so the
+    // follower card itself carries the changes.
+    followerTotalBox("フォロワー", th.followers, change, growth),
     { label: "表示回数（過去30日）", value: formatCount(th.views_30d) },
     {
       label: "反応の合計（過去30日）",
@@ -755,17 +747,18 @@ export function xHistorySeries(rows) {
   ]);
 }
 
-// Totals boxes for the X tab: the current follower count and its
-// day-over-day change （前日比）, from the history rows
-// exactly like threadsTotals. X collection started on
-// 2026-11-10, so until a previous calendar day carries an X
-// number there is nothing to compare and the change box shows
-// "—". X has no account-wide 30-day totals in the collection
-// (the API tweet-gas reads reports per-post numbers only), so
-// the rest of the row is summed from the fetched posts
-// themselves and labelled 取得分: the post count, their combined
-// views and the per-post average — the average that otherwise
-// only appears inside the genre section.
+// Totals boxes for the X tab: one follower card carrying the
+// current count, its day-over-day change （前日比） and the
+// change over the trailing window, from the history rows
+// exactly like threadsTotals (see followerTotalBox). X
+// collection started on 2026-11-10, so until a previous
+// calendar day carries an X number there is nothing to
+// compare. X has no account-wide 30-day totals in the
+// collection (the API tweet-gas reads reports per-post numbers
+// only), so the rest of the row is summed from the fetched
+// posts themselves and labelled 取得分: the post count, their
+// combined views and the per-post average — the average that
+// otherwise only appears inside the genre section.
 export function xTotals(detail, historyRows) {
   const x = detail?.x ?? {};
   const change = historyDailyDelta(historyRows, "x_followers");
@@ -776,16 +769,9 @@ export function xTotals(detail, historyRows) {
     ? viewed.reduce((sum, post) => sum + post.views, 0)
     : null;
   return [
-    // The follower count is one of the top page's published
-    // follower figures, so masking exempts it.
-    { label: "フォロワー", value: formatCount(x.followers), public: true },
-    {
-      label: "前日比",
-      value: change ? (formatDelta(change.delta) ?? "—") : "—",
-    },
     // X reports no follow / unfollow split either, so the
-    // change over the trailing window stands in for it.
-    followerChangeBox("フォロワー増減", growth),
+    // follower card itself carries the changes.
+    followerTotalBox("フォロワー", x.followers, change, growth),
     { label: "投稿数（取得分）", value: formatCount(posts.length || null) },
     { label: "表示合計（取得分）", value: formatCount(totalViews) },
     {
@@ -1037,27 +1023,37 @@ export function historyWindowDelta(rows, key, windowDays = FOLLOWER_WINDOW_DAYS)
   return { ...current, dayOverDay };
 }
 
-// The label of a follower-change card （登録者増減 /
-// フォロワー増減）, naming the window the change covers: the
-// full window once the history reaches it, the actual span in
-// days while it is still growing. A change that cannot be
-// computed yet keeps the full-window label over its "—".
-function followerChangeLabel(name, change) {
+// The period a follower card's window line names: the full
+// window once the history reaches it, the actual span in days
+// while it is still growing.
+function followerWindowPeriod(change) {
   if (!change || change.full) {
-    return `${name}（過去${FOLLOWER_WINDOW_DAYS}日）`;
+    return `過去${FOLLOWER_WINDOW_DAYS}日`;
   }
-  return `${name}（過去${change.days}日間）`;
+  return `過去${change.days}日間`;
 }
 
-// One follower-change totals box: the window delta as the
-// value, its own day-over-day change as the delta line. No
-// `public` flag — the figures are this page's own analysis and
-// stay masked, unlike the current counts they sit next to.
-function followerChangeBox(name, change) {
+// The follower / subscriber card of a channel tab (YouTube・
+// Threads・X): the current count as the value — one of the top
+// page's published follower figures, so masking exempts it —
+// with the day-over-day change as the delta line and the
+// trailing-window change as a second line naming its own
+// period. These channels report no follow / unfollow split, so
+// the two changes stand in for it on the one card; the window
+// change's own day-over-day is not carried, as its own card it
+// sat too close to the count's 前日比. Either line is absent
+// while its figure cannot be computed yet; the two change
+// figures are this page's own analysis and stay masked (no
+// `public` on the lines — the renderers give them
+// .amount-value like every delta line).
+function followerTotalBox(label, count, change, growth) {
   return {
-    label: followerChangeLabel(name, change),
-    value: change ? (formatDelta(change.delta) ?? "—") : "—",
-    delta: change ? formatDelta(change.dayOverDay) : null,
+    label,
+    value: formatCount(count),
+    public: true,
+    delta: change ? formatDelta(change.delta) : null,
+    window: growth ? formatDelta(growth.delta) : null,
+    windowLabel: growth ? followerWindowPeriod(growth) : null,
   };
 }
 
