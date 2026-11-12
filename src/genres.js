@@ -261,34 +261,6 @@ export function mediaDateRange(media) {
   return from ? { from: from.iso, to: to.iso } : null;
 }
 
-// Bar-chart shape for comparing one per-genre average across
-// genres (Instagram: avgViews; blog: perArticle): [{ name, value,
-// valueLabel, pct }] sorted by the value, biggest first, with pct
-// scaled so the biggest bar is 100. Rows whose average is missing
-// keep an empty bar (pct 0, label "—") and sink to the end. The
-// name comes from the row's `genre` (Instagram) or `tag` (blog).
-export function genreAverageBars(rows, valueKey) {
-  const list = Array.isArray(rows) ? rows : [];
-  const entries = list.map((row) => ({
-    name: row ? (row.genre ?? row.tag ?? "") : "",
-    value: row && isNum(row[valueKey]) ? row[valueKey] : null,
-  }));
-  const max = entries.reduce(
-    (biggest, entry) => (entry.value !== null && entry.value > biggest ? entry.value : biggest),
-    0,
-  );
-  return entries
-    .map((entry) => ({
-      ...entry,
-      valueLabel: formatCount(entry.value),
-      pct:
-        entry.value !== null && max > 0
-          ? Math.round((entry.value / max) * 1000) / 10
-          : 0,
-    }))
-    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
-}
-
 // Sort genre-stat rows (either flavour: Instagram rows keyed by
 // `genre`, blog rows keyed by `tag`) by one column. The "top"
 // column sorts by the top entry's view count. Missing values
@@ -411,16 +383,6 @@ export function genreStatsForMedia(
     .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count);
 }
 
-// The rollup over the snapshot's full recent-media list; the tab
-// narrows the list with filterMediaByPeriod first when a period
-// window is selected.
-export function instagramGenreStats(detail, rules = INSTAGRAM_GENRE_RULES) {
-  const media = Array.isArray(detail?.instagram?.recent_media)
-    ? detail.instagram.recent_media
-    : [];
-  return genreStatsForMedia(media, rules);
-}
-
 // The genre filter of the per-post table: one entry per genre
 // that actually has posts, in the rollup's order (total views,
 // biggest first) so the filter buttons line up with the genre
@@ -518,14 +480,6 @@ export function genreStatsForThreads(posts) {
     post ? { ...post, caption: post.text ?? "" } : post,
   );
   return genreStatsForMedia(list);
-}
-
-// The rollup over the snapshot's Threads section.
-export function threadsGenreStats(detail) {
-  const posts = Array.isArray(detail?.threads?.recent_posts)
-    ? detail.threads.recent_posts
-    : [];
-  return genreStatsForThreads(posts);
 }
 
 // The genre filter of the Threads per-post table: one entry
@@ -721,14 +675,6 @@ export function genreStatsForX(posts) {
   return genreStatsForMedia(list, INSTAGRAM_GENRE_RULES, (post) =>
     classifyXText(post.caption),
   );
-}
-
-// The rollup over the snapshot's X section.
-export function xGenreStats(detail) {
-  const posts = Array.isArray(detail?.x?.recent_posts)
-    ? detail.x.recent_posts
-    : [];
-  return genreStatsForX(posts);
 }
 
 // The genre filter of the X per-post table: one entry per

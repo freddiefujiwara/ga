@@ -6,7 +6,6 @@ import {
   genreHeatBackground,
   genreHeatMix,
   genreTreemap,
-  hasLabelRoom,
   layoutWithLabelRoom,
   squarifiedLayout,
   tileLabelFits,
@@ -470,8 +469,7 @@ describe("channelTreemap", () => {
   });
 });
 
-
-describe("deltaTone / hasLabelRoom", () => {
+describe("deltaTone", () => {
   it("maps the change direction to a tone", () => {
     expect(deltaTone(5)).toBe("up");
     expect(deltaTone(-5)).toBe("down");
@@ -480,12 +478,6 @@ describe("deltaTone / hasLabelRoom", () => {
     expect(deltaTone(undefined)).toBe("neutral");
   });
 
-  it("only roomy tiles carry a label", () => {
-    expect(hasLabelRoom({ w: 80, h: 100 })).toBe(true);
-    expect(hasLabelRoom({ w: 11, h: 8 })).toBe(false);
-    expect(hasLabelRoom({ w: 5, h: 90 })).toBe(false);
-    expect(hasLabelRoom(null)).toBe(false);
-  });
 });
 
 describe("tileLabelLevel", () => {

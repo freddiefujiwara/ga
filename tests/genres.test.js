@@ -10,18 +10,14 @@ import {
   filterThreadsByGenre,
   filterXByGenre,
   formatRate,
-  genreAverageBars,
   genreStatsForMedia,
   genreStatsForThreads,
   genreStatsForX,
-  instagramGenreStats,
   mediaDateRange,
   mediaGenreOptions,
   sortGenreRows,
   threadsGenreOptions,
-  threadsGenreStats,
   xGenreOptions,
-  xGenreStats,
 } from "../src/genres.js";
 
 // Captions in the shape of the account's real posts (shortened),
@@ -195,7 +191,7 @@ describe("formatRate", () => {
   });
 });
 
-describe("instagramGenreStats", () => {
+describe("genreStatsForMedia", () => {
   const post = (caption, views, likes, saves, extra = {}) => ({
     type: "REELS",
     caption,
@@ -205,20 +201,17 @@ describe("instagramGenreStats", () => {
     saves,
     ...extra,
   });
-  const detail = (recent_media) => ({ instagram: { recent_media } });
 
   it("aggregates counts, view totals/averages and rates per genre", () => {
-    const rows = instagramGenreStats(
-      detail([
-        post("インド料理のランチ #グルメ", 1000, 100, 50, {
-          permalink: "https://www.instagram.com/reel/a/",
-        }),
-        post("カレーの店に行った", 500, 25, 25),
-        post("ゼロ再生のランチ", 0, 0, 0),
-        post("カフェでモーニング", 2000, 40, 10),
-        post("今日の空", null, 3, 1),
-      ]),
-    );
+    const rows = genreStatsForMedia([
+      post("インド料理のランチ #グルメ", 1000, 100, 50, {
+        permalink: "https://www.instagram.com/reel/a/",
+      }),
+      post("カレーの店に行った", 500, 25, 25),
+      post("ゼロ再生のランチ", 0, 0, 0),
+      post("カフェでモーニング", 2000, 40, 10),
+      post("今日の空", null, 3, 1),
+    ]);
     // The cafe post (カフェでモーニング) lands in グルメ too:
     // カフェ・スイーツ was merged into グルメ.
     expect(rows.map((r) => r.genre)).toEqual(["グルメ", "日常・その他"]);
@@ -245,28 +238,16 @@ describe("instagramGenreStats", () => {
   });
 
   it("omits genres with no posts", () => {
-    const rows = instagramGenreStats(detail([post("ラーメン屋", 10, 1, 1)]));
+    const rows = genreStatsForMedia([post("ラーメン屋", 10, 1, 1)]);
     expect(rows).toHaveLength(1);
     expect(rows[0].genre).toBe("グルメ");
   });
 
   it("tolerates missing data", () => {
-    expect(instagramGenreStats(null)).toEqual([]);
-    expect(instagramGenreStats({})).toEqual([]);
-    expect(instagramGenreStats(detail([]))).toEqual([]);
-    expect(instagramGenreStats(detail([null]))).toEqual([]);
-  });
-
-  it("genreStatsForMedia rolls up a caller-supplied list the same way", () => {
-    const media = [
-      post("インド料理のランチ #グルメ", 1000, 100, 50),
-      post("カフェでモーニング", 2000, 40, 10),
-    ];
-    expect(genreStatsForMedia(media)).toEqual(
-      instagramGenreStats(detail(media)),
-    );
     expect(genreStatsForMedia(null)).toEqual([]);
     expect(genreStatsForMedia(undefined)).toEqual([]);
+    expect(genreStatsForMedia([])).toEqual([]);
+    expect(genreStatsForMedia([null])).toEqual([]);
   });
 });
 
@@ -376,12 +357,7 @@ describe("threads genre rollup / filter", () => {
     expect(gourmet.top.permalink).toBe("https://www.threads.net/t/example");
   });
 
-  it("threadsGenreStats reads the snapshot's threads section", () => {
-    const detail = { threads: { recent_posts: posts } };
-    expect(threadsGenreStats(detail)).toEqual(genreStatsForThreads(posts));
-    expect(threadsGenreStats(null)).toEqual([]);
-    expect(threadsGenreStats({})).toEqual([]);
-    expect(threadsGenreStats({ threads: {} })).toEqual([]);
+  it("tolerates missing lists", () => {
     expect(genreStatsForThreads(null)).toEqual([]);
     expect(genreStatsForThreads([])).toEqual([]);
   });
@@ -587,12 +563,7 @@ describe("x genre rollup / filter", () => {
     expect(travel.top.permalink).toBe("https://x.com/i/web/status/2014");
   });
 
-  it("xGenreStats reads the snapshot's x section", () => {
-    const detail = { x: { recent_posts: posts } };
-    expect(xGenreStats(detail)).toEqual(genreStatsForX(posts));
-    expect(xGenreStats(null)).toEqual([]);
-    expect(xGenreStats({})).toEqual([]);
-    expect(xGenreStats({ x: {} })).toEqual([]);
+  it("tolerates missing lists", () => {
     expect(genreStatsForX(null)).toEqual([]);
     expect(genreStatsForX([])).toEqual([]);
   });
@@ -790,44 +761,5 @@ describe("sortGenreRows", () => {
     const before = rows.map((r) => r.genre);
     sortGenreRows(rows, "count", "asc");
     expect(rows.map((r) => r.genre)).toEqual(before);
-  });
-});
-
-describe("genreAverageBars", () => {
-  it("scales bars to the biggest average and sorts by it", () => {
-    const bars = genreAverageBars(
-      [
-        { genre: "グルメ", avgViews: 500 },
-        { genre: "音楽", avgViews: 2000 },
-        { genre: "日常・その他", avgViews: null },
-      ],
-      "avgViews",
-    );
-    expect(bars.map((b) => b.name)).toEqual([
-      "音楽",
-      "グルメ",
-      "日常・その他",
-    ]);
-    expect(bars[0]).toMatchObject({ value: 2000, valueLabel: "2,000", pct: 100 });
-    expect(bars[1].pct).toBe(25);
-    expect(bars[2]).toMatchObject({ value: null, valueLabel: "—", pct: 0 });
-  });
-
-  it("reads the blog flavour's tag and perArticle", () => {
-    const bars = genreAverageBars(
-      [
-        { tag: "運営", perArticle: 120 },
-        { tag: "川口", perArticle: 60 },
-      ],
-      "perArticle",
-    );
-    expect(bars.map((b) => b.name)).toEqual(["運営", "川口"]);
-    expect(bars[0].pct).toBe(100);
-    expect(bars[1].pct).toBe(50);
-  });
-
-  it("tolerates junk input", () => {
-    expect(genreAverageBars(null, "avgViews")).toEqual([]);
-    expect(genreAverageBars([], "avgViews")).toEqual([]);
   });
 });
