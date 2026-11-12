@@ -222,6 +222,148 @@ describe("dashboard load states (runtime)", () => {
     vi.unstubAllGlobals();
   });
 
+  it("adds the overview's 前日比 lines to the Instagram tab once the history lands", async () => {
+    vi.resetModules();
+    document.documentElement.innerHTML = html
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<!doctype html>/i, "");
+    const payload = Buffer.from(
+      JSON.stringify({ email: "owner@example.com" }),
+    ).toString("base64url");
+    localStorage.setItem("ga-google-id-token", `x.${payload}.y`);
+
+    const detailGate = deferred();
+    const pagesGate = deferred();
+    const historyGate = deferred();
+    const fetchStub = vi.fn(async (url) => {
+      const text = String(url);
+      if (text.includes("o=rss")) {
+        return {
+          ok: true,
+          text: async () =>
+            `<rss><channel><item><title>${ARTICLE_TITLE}</title>` +
+            `<link>https://freddiefujiwara.com/blog/${ARTICLE_ID}</link></item></channel></rss>`,
+        };
+      }
+      if (text.includes("o=titles")) {
+        return jsonResponse({
+          titles: { [ARTICLE_ID]: ARTICLE_TITLE },
+          tags: { [ARTICLE_ID]: ["川口"] },
+        });
+      }
+      const params = new URL(text).searchParams;
+      if (params.get("action") === "sns_detail") {
+        return detailGate.promise;
+      }
+      if (params.get("action") === "sns_history") {
+        return historyGate.promise;
+      }
+      const dimensions = params.get("dimensions");
+      const metrics = params.get("metrics") || "";
+      if (metrics.includes("customEvent:render_ms")) {
+        return report([]);
+      }
+      if (dimensions === "date") {
+        return report([row(["20261110"], ["42"])]);
+      }
+      if (dimensions === "sessionDefaultChannelGroup") {
+        return report([row(["Organic Search"], ["77"])]);
+      }
+      if (dimensions === "") {
+        return jsonResponse({
+          ok: true,
+          data: {
+            rows: [
+              {
+                metricValues: [
+                  { value: "1000" },
+                  { value: "100" },
+                  { value: "120" },
+                ],
+              },
+            ],
+          },
+        });
+      }
+      // The page-rows report (limit=250, no dimensions).
+      return pagesGate.promise;
+    });
+    vi.stubGlobal("fetch", fetchStub);
+
+    await import("../src/main.js");
+    await until(() => document.getElementById("dashboard").hidden === false);
+
+    // Land the snapshot first: the Instagram tab's KPI row shows
+    // the values, but no 前日比 lines yet — they ride on the
+    // history, which is still in flight.
+    detailGate.resolve(
+      jsonResponse({
+        ok: true,
+        collected_at: "2026-11-12T01:00:00Z",
+        instagram: {
+          freddiefujiwara: 2030,
+          media_count: 2420,
+          follows_30d: 487,
+          unfollows_30d: 61,
+        },
+        youtube: {},
+        threads: {},
+        x: {},
+      }),
+    );
+    pagesGate.resolve(
+      report([row([`/blog/${ARTICLE_ID}`], ["123"])]),
+    );
+    const totals = document.getElementById("sns-overview");
+    await until(() => totals.textContent.includes("487"));
+    expect(totals.textContent).toContain("フォロー（過去30日）");
+    expect(totals.textContent).toContain("フォロー解除（過去30日）");
+    expect(totals.textContent).not.toContain("前日比");
+
+    // Land the history: two consecutive JST days of the 30-day
+    // follows / unfollows, 482 → 487 and 60 → 61.
+    historyGate.resolve(
+      jsonResponse({
+        ok: true,
+        rows: [
+          {
+            collected_at: "2026-11-11T01:00:00Z",
+            follows_30d: 482,
+            unfollows_30d: 60,
+          },
+          {
+            collected_at: "2026-11-12T01:00:00Z",
+            follows_30d: 487,
+            unfollows_30d: 61,
+          },
+        ],
+      }),
+    );
+    await until(() => totals.textContent.includes("前日比 +5"));
+    expect(totals.textContent).toContain("前日比 +1");
+
+    // The two change lines render exactly like the overview's:
+    // masked analysis figures (never .is-public), the follows
+    // increase coloured as a gain and the unfollows increase —
+    // the inverted card — as a loss.
+    const lines = totals.querySelectorAll(".kpi-delta");
+    expect(lines).toHaveLength(2);
+    expect(lines[0].textContent).toBe("前日比 +5");
+    expect(lines[0].classList.contains("amount-value")).toBe(true);
+    expect(lines[0].classList.contains("is-public")).toBe(false);
+    expect(lines[0].classList.contains("up")).toBe(true);
+    expect(lines[1].textContent).toBe("前日比 +1");
+    expect(lines[1].classList.contains("amount-value")).toBe(true);
+    expect(lines[1].classList.contains("is-public")).toBe(false);
+    expect(lines[1].classList.contains("down")).toBe(true);
+
+    // And the overview's own cards show the identical figures.
+    const kpiText = document.getElementById("kpi-cards").textContent;
+    expect(kpiText).toContain("前日比 +5");
+    expect(kpiText).toContain("前日比 +1");
+    vi.unstubAllGlobals();
+  });
+
   it("ends failed sections on the failure line, not the loading line", async () => {
     vi.resetModules();
     document.documentElement.innerHTML = html

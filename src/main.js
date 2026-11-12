@@ -1228,6 +1228,33 @@ function fillHistoryPending(el) {
   return false;
 }
 
+// The 前日比 line under a card's value, shared by the overview
+// KPI cards and any total box that carries a change (the
+// Instagram tab's フォロー / フォロー解除 cards mirror the
+// overview's): an increase is green and a decrease red —
+// except on the cards flagged invert (フォロー解除）, where
+// an increase is the bad direction and takes the red instead.
+// The line is one of this page's own analysis figures, so it
+// takes .amount-value and stays masked like the other numbers
+// (never .is-public). Cards without a delta get no line.
+function appendDeltaLine(box, item) {
+  if (!item.delta) {
+    return;
+  }
+  const delta = document.createElement("div");
+  const sign = item.delta.startsWith("+")
+    ? 1
+    : item.delta.startsWith("-")
+      ? -1
+      : 0;
+  const good = item.invert ? sign < 0 : sign > 0;
+  const bad = item.invert ? sign > 0 : sign < 0;
+  delta.className =
+    "kpi-delta amount-value" + (good ? " up" : bad ? " down" : "");
+  delta.textContent = `前日比 ${item.delta}`;
+  box.appendChild(delta);
+}
+
 function fillKpiBoxes(items) {
   const wrap = document.getElementById("kpi-cards");
   wrap.innerHTML = "";
@@ -1248,23 +1275,7 @@ function fillKpiBoxes(items) {
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
-    if (item.delta) {
-      const delta = document.createElement("div");
-      // An increase is green and a decrease red — except on the
-      // cards flagged invert (フォロー解除）, where an increase
-      // is the bad direction and takes the red instead.
-      const sign = item.delta.startsWith("+")
-        ? 1
-        : item.delta.startsWith("-")
-          ? -1
-          : 0;
-      const good = item.invert ? sign < 0 : sign > 0;
-      const bad = item.invert ? sign > 0 : sign < 0;
-      delta.className =
-        "kpi-delta amount-value" + (good ? " up" : bad ? " down" : "");
-      delta.textContent = `前日比 ${item.delta}`;
-      box.appendChild(delta);
-    }
+    appendDeltaLine(box, item);
     wrap.appendChild(box);
   }
 }
@@ -1540,6 +1551,7 @@ function fillTotalBoxes(elId, items) {
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
+    appendDeltaLine(box, item);
     wrap.appendChild(box);
   }
 }
@@ -2618,6 +2630,19 @@ function renderFollowChart(detail) {
   }
 }
 
+// The Instagram tab's KPI row. The フォロー / フォロー解除
+// cards carry a 前日比 taken from the history rows, so the row
+// renders from the shared state and loadSnsHistory re-renders
+// it when the history lands, like the other channel tabs'
+// totals: whichever of the snapshot and the history arrives
+// second completes the row.
+function renderInstagramTotals() {
+  fillTotalBoxes(
+    "sns-overview",
+    snsOverview(overviewState.detail, overviewState.historyRows),
+  );
+}
+
 function renderSns(detail) {
   overviewState.detail = detail;
   overviewState.detailSettled = true;
@@ -2638,7 +2663,7 @@ function renderSns(detail) {
   document.getElementById("x-status").textContent = detail.collected_at
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
-  fillTotalBoxes("sns-overview", snsOverview(detail));
+  renderInstagramTotals();
   fillTotalBoxes("sns-interactions", snsInteractions(detail));
   const bars = document.getElementById("sns-age-gender");
   bars.innerHTML = "";
@@ -2860,6 +2885,7 @@ async function loadSnsHistory(historyPromise) {
     renderSnsHistory(response);
   }
   renderOverview();
+  renderInstagramTotals();
   renderYoutubeHistory();
   renderThreads();
   renderX();

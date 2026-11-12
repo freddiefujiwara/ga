@@ -290,8 +290,12 @@ export function snsTotalFollowers(detail) {
 // KPI cards for the Instagram tab: the Instagram account's own
 // numbers only. The cross-channel figures (the combined follower
 // total, the YouTube and Threads counts) live on the overview tab
-// instead, so each channel tab shows just its own channel.
-export function snsOverview(detail) {
+// instead, so each channel tab shows just its own channel. The
+// フォロー / フォロー解除 cards carry the same day-over-day
+// change as the overview tab's cards of the same names, computed
+// by the shared kpiDelta over the history rows, so the two tabs
+// cannot drift apart.
+export function snsOverview(detail, historyRows) {
   const ig = detail?.instagram ?? {};
   const interactions = ig.interactions_30d ?? {};
   return [
@@ -306,8 +310,19 @@ export function snsOverview(detail) {
     { label: "反応した人数（過去30日）", value: formatCount(ig.accounts_engaged_30d) },
     { label: "反応の合計（過去30日）", value: formatCount(interactions.total) },
     { label: "フォロワー以外（過去30日）", value: formatPercent(ig.non_follower_pct) },
-    { label: "フォロー（過去30日）", value: formatCount(ig.follows_30d) },
-    { label: "フォロー解除（過去30日）", value: formatCount(ig.unfollows_30d) },
+    {
+      label: "フォロー（過去30日）",
+      value: formatCount(ig.follows_30d),
+      delta: kpiDelta(historyRows, "follows_30d"),
+    },
+    {
+      label: "フォロー解除（過去30日）",
+      value: formatCount(ig.unfollows_30d),
+      delta: kpiDelta(historyRows, "unfollows_30d"),
+      // More unfollows is worse: the change line colours the
+      // other way round, exactly as on the overview card.
+      invert: true,
+    },
   ];
 }
 
@@ -938,6 +953,19 @@ export function formatDelta(delta) {
   return "±0";
 }
 
+// One metric's day-over-day change （前日比） as a card's
+// change-line text: the metric's history collapses to one point
+// per JST calendar day and the latest day is compared with the
+// previous calendar day (see historyDailyDelta). Null when the
+// history cannot offer the comparison. Shared by the overview
+// cards and the channel-tab cards that mirror them (the
+// Instagram tab's フォロー / フォロー解除）, so the same card
+// shows the same change wherever it appears.
+export function kpiDelta(historyRows, key) {
+  const change = historyDailyDelta(historyRows, key);
+  return change ? formatDelta(change.delta) : null;
+}
+
 // KPI cards for the overview tab: the headline numbers of every
 // network plus the blog, each carrying the day-over-day change
 // （前日比） wherever the SNS history offers both the latest
@@ -951,10 +979,7 @@ export function formatDelta(delta) {
 export function overviewKpis(detail, gaTotals, historyRows) {
   const ig = detail?.instagram ?? {};
   const yt = detail?.youtube ?? {};
-  const deltaFor = (key) => {
-    const change = historyDailyDelta(historyRows, key);
-    return change ? formatDelta(change.delta) : null;
-  };
+  const deltaFor = (key) => kpiDelta(historyRows, key);
   // The `public` flag marks the figures the owner already
   // publishes elsewhere — the top page's hero (the combined
   // follower total, the per-channel follower breakdown and the
