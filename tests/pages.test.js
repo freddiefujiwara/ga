@@ -6,6 +6,8 @@ import {
   pageRanking,
   pageSpeedRanking,
   mergeBlogTitles,
+  blogArticleDateKey,
+  blogArticlesByDate,
 } from "../src/api.js";
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -249,5 +251,77 @@ describe("pageSpeedRanking", () => {
     ).toEqual([]);
     expect(pageSpeedRanking(null, titles, origin, 10)).toEqual([]);
     expect(pageSpeedRanking({ ok: false }, titles, origin, 10)).toEqual([]);
+  });
+});
+
+describe("blogArticleDateKey", () => {
+  it("reads the publication day off the title's leading date", () => {
+    expect(blogArticleDateKey("2026-11-02 Museのご紹介 & 使い方")).toBe(
+      "20261102",
+    );
+    expect(blogArticleDateKey("2021-02-16 持ち物リスト")).toBe("20210216");
+    // A title that is only a date still yields its day.
+    expect(blogArticleDateKey("2026-11-02")).toBe("20261102");
+  });
+
+  it("returns null when the title carries no leading date", () => {
+    expect(blogArticleDateKey("検証用の記事タイトル")).toBeNull();
+    expect(blogArticleDateKey("")).toBeNull();
+    expect(blogArticleDateKey(null)).toBeNull();
+    expect(blogArticleDateKey(undefined)).toBeNull();
+  });
+
+  it("rejects malformed dates instead of placing them on the chart", () => {
+    expect(blogArticleDateKey("2026-13-01 月がおかしい")).toBeNull();
+    expect(blogArticleDateKey("2026-11-32 日がおかしい")).toBeNull();
+    expect(blogArticleDateKey("2026-1-02 桁が足りない")).toBeNull();
+    // A date that does not lead the title is not a publication date.
+    expect(blogArticleDateKey("速報 2026-11-02 記事")).toBeNull();
+  });
+});
+
+describe("blogArticlesByDate", () => {
+  const origin = "https://freddiefujiwara.com";
+
+  it("groups articles by publication day, ascending, with article links", () => {
+    const titles = new Map([
+      ["idB", "2026-11-02 二本目の記事"],
+      ["idA", "2026-11-02 一本目の記事"],
+      ["idC", "2026-10-31 前の記事"],
+      ["idD", "日付のない記事"],
+    ]);
+    expect(blogArticlesByDate(titles, origin)).toEqual([
+      {
+        date: "20261031",
+        articles: [
+          {
+            id: "idC",
+            title: "2026-10-31 前の記事",
+            href: `${origin}/blog/idC`,
+          },
+        ],
+      },
+      {
+        date: "20261102",
+        articles: [
+          {
+            id: "idA",
+            title: "2026-11-02 一本目の記事",
+            href: `${origin}/blog/idA`,
+          },
+          {
+            id: "idB",
+            title: "2026-11-02 二本目の記事",
+            href: `${origin}/blog/idB`,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("tolerates an empty or missing title map", () => {
+    expect(blogArticlesByDate(new Map(), origin)).toEqual([]);
+    expect(blogArticlesByDate(null, origin)).toEqual([]);
+    expect(blogArticlesByDate(undefined, origin)).toEqual([]);
   });
 });
