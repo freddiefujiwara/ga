@@ -211,6 +211,14 @@ describe("pageSpeedRanking", () => {
     dimensionValues: [{ value: path }],
     metricValues: [{ value: String(total) }, { value: String(samples) }],
   });
+  const rowSlow = (path, total, samples, slow) => ({
+    dimensionValues: [{ value: path }],
+    metricValues: [
+      { value: String(total) },
+      { value: String(samples) },
+      { value: String(slow) },
+    ],
+  });
   const response = (rows) => ({ ok: true, data: { rows } });
 
   it("merges split paths, averages, and sorts slowest first", () => {
@@ -232,12 +240,48 @@ describe("pageSpeedRanking", () => {
         href: `${origin}/blog/${idB}`,
         avgMs: 3000,
         samples: 3,
+        slow: 0,
       },
       {
         label: "2026-11-02 Museのご紹介 & 使い方",
         href: `${origin}/blog/${idA}`,
         avgMs: 2000,
         samples: 20,
+        slow: 0,
+      },
+    ]);
+  });
+
+  it("sums the slow counts of split paths; a missing value reads as zero", () => {
+    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
+    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
+    const ranking = pageSpeedRanking(
+      response([
+        // One article split across two paths: the 41.8s stall
+        // that inflated its 7.5s average is the fragment row's
+        // slow count (cf. the 2026-11-12 map article).
+        rowSlow(`/blog/${idA}`, 10700, 6, 0),
+        rowSlow(`/${idA}`, 41843, 1, 1),
+        row(`/blog/${idB}`, 9000, 3),
+      ]),
+      titles,
+      origin,
+      10,
+    );
+    expect(ranking).toEqual([
+      {
+        label: "2026-11-02 Museのご紹介 & 使い方",
+        href: `${origin}/blog/${idA}`,
+        avgMs: 7506,
+        samples: 7,
+        slow: 1,
+      },
+      {
+        label: "2026-10-31 川口の行きたい店まとめ",
+        href: `${origin}/blog/${idB}`,
+        avgMs: 3000,
+        samples: 3,
+        slow: 0,
       },
     ]);
   });

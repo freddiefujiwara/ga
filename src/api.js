@@ -1250,12 +1250,16 @@ export function pageRanking(response, titles, origin, limit = 10) {
 }
 
 // Build the per-article display-time ranking from the speed
-// report (pagePath x [render_ms total, sample count], served by
-// social-gas from its blog_speed tab): split article paths merge
-// under the canonical key with totals and samples summed, the
-// average is total / samples, slowest first. Articles with no
-// recorded display are absent from the report and stay absent
-// here. Returns [{ label, href, avgMs, samples }] ready to
+// report (pagePath x [render_ms total, sample count, slow
+// count], served by social-gas from its blog_speed tab): split
+// article paths merge under the canonical key with totals,
+// samples and slow counts summed, the average is total /
+// samples, slowest first. The slow count is how many of the
+// article's displays took ten seconds or more (the blog's
+// article_render_slow events); a report that predates it has
+// no third value and reads as zero. Articles with no recorded
+// display are absent from the report and stay absent here.
+// Returns [{ label, href, avgMs, samples, slow }] ready to
 // render.
 export function pageSpeedRanking(response, titles, origin, limit = 10) {
   const merged = new Map();
@@ -1266,10 +1270,12 @@ export function pageSpeedRanking(response, titles, origin, limit = 10) {
     if (!samples) {
       continue;
     }
+    const slow = Number(row.metricValues[2]?.value) || 0;
     const key = canonicalPageKey(path);
-    const entry = merged.get(key) || { total: 0, samples: 0 };
+    const entry = merged.get(key) || { total: 0, samples: 0, slow: 0 };
     entry.total += total;
     entry.samples += samples;
+    entry.slow += slow;
     merged.set(key, entry);
   }
   return [...merged.entries()]
@@ -1277,6 +1283,7 @@ export function pageSpeedRanking(response, titles, origin, limit = 10) {
       ...pageDisplay(key, titles, origin),
       avgMs: Math.round(entry.total / entry.samples),
       samples: entry.samples,
+      slow: entry.slow,
     }))
     .sort((a, b) => b.avgMs - a.avgMs)
     .slice(0, limit);
