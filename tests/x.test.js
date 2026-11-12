@@ -54,12 +54,15 @@ describe("X shaping", () => {
     expect(snsTotalFollowers(withoutX)).toBe(2000 + 252 + 10);
   });
 
-  it("xTotals formats the followers and the day-over-day change", () => {
-    const boxes = Object.fromEntries(
-      xTotals(DETAIL, ROWS).map((box) => [box.label, box.value]),
-    );
-    expect(boxes["フォロワー"]).toBe("321");
-    expect(boxes["前日比"]).toBe("+21");
+  it("xTotals formats the follower card with both changes", () => {
+    expect(xTotals(DETAIL, ROWS)[0]).toEqual({
+      label: "フォロワー",
+      value: "321",
+      public: true,
+      delta: "+21",
+      window: "+21",
+      windowLabel: "過去1日間",
+    });
   });
 
   it("xTotals sums the fetched posts into count / total / average boxes", () => {
@@ -85,9 +88,14 @@ describe("X shaping", () => {
   it("xTotals dashes everything while X is not collected yet", () => {
     const boxes = xTotals({}, []);
     expect(boxes).toEqual([
-      { label: "フォロワー", value: "—", public: true },
-      { label: "前日比", value: "—" },
-      { label: "フォロワー増減（過去30日）", value: "—", delta: null },
+      {
+        label: "フォロワー",
+        value: "—",
+        public: true,
+        delta: null,
+        window: null,
+        windowLabel: null,
+      },
       { label: "投稿数（取得分）", value: "—" },
       { label: "表示合計（取得分）", value: "—" },
       { label: "平均表示（取得分）", value: "—" },
@@ -97,22 +105,17 @@ describe("X shaping", () => {
 
   it("xTotals carries the follower change over its actual window", () => {
     // ROWS carry two daily points a day apart (JST 2026-11-09
-    // and 2026-11-10), so the card covers that one day and its
-    // own 前日比 is not computable yet.
-    const box = xTotals(DETAIL, ROWS).find(
-      (b) => b.label === "フォロワー増減（過去1日間）",
-    );
-    expect(box).toEqual({
-      label: "フォロワー増減（過去1日間）",
-      value: "+21",
-      delta: null,
-    });
+    // and 2026-11-10), so the window line on the follower card
+    // covers that one day and names it.
+    const box = xTotals(DETAIL, ROWS)[0];
+    expect(box.window).toBe("+21");
+    expect(box.windowLabel).toBe("過去1日間");
   });
 
   it("xTotals flags only the follower count public", () => {
     // The follower count is published on the top page; the
-    // day-over-day change and the fetched-post sums are this
-    // page's own analysis and stay masked.
+    // change lines and the fetched-post sums are this page's
+    // own analysis and stay masked.
     const flagged = xTotals(DETAIL, ROWS)
       .filter((box) => box.public === true)
       .map((box) => box.label);

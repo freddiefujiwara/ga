@@ -1569,6 +1569,23 @@ function fillTotalBoxes(elId, items) {
       delta.textContent = `前日比 ${item.delta}`;
       box.appendChild(delta);
     }
+    if (item.window) {
+      // The trailing-window change line of a merged follower
+      // card （過去◯日間 +2): the same styling and masking as
+      // the 前日比 line above it, under the normal colour rule
+      // (an increase is green, a decrease red — follower counts
+      // carry no invert cards).
+      const win = document.createElement("div");
+      const sign = item.window.startsWith("+")
+        ? 1
+        : item.window.startsWith("-")
+          ? -1
+          : 0;
+      win.className =
+        "kpi-delta amount-value" + (sign > 0 ? " up" : sign < 0 ? " down" : "");
+      win.textContent = `${item.windowLabel} ${item.window}`;
+      box.appendChild(win);
+    }
     wrap.appendChild(box);
   }
 }
