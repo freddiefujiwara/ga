@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   historyDailyDelta,
+  historyWindowDelta,
   formatDelta,
   overviewKpis,
   topMedia,
@@ -140,6 +141,113 @@ describe("historyDailyDelta", () => {
     expect(historyDailyDelta([], "total_followers")).toBeNull();
     expect(historyDailyDelta(null, "total_followers")).toBeNull();
     expect(historyDailyDelta("nope", "total_followers")).toBeNull();
+  });
+});
+
+// One collection per JST calendar day at 10:00 JST, starting on
+// the given day, carrying the given values under the given key.
+function dailyRows(values, start, key = "x_followers") {
+  const base = new Date(`${start}T01:00:00.000Z`);
+  return values.map((value, i) => ({
+    collected_at: new Date(base.getTime() + i * 86400000).toISOString(),
+    [key]: value,
+  }));
+}
+
+describe("historyWindowDelta", () => {
+  it("compares against the oldest day while the history is short", () => {
+    // JST 2026-11-10 .. 2026-11-13, three days of span.
+    const rows = dailyRows([100, 103, 107, 112], "2026-11-10");
+    expect(historyWindowDelta(rows, "x_followers")).toEqual({
+      delta: 12,
+      days: 3,
+      full: false,
+      // Yesterday's window covered 100 -> 107 (+7); the window
+      // delta itself grew by 5.
+      dayOverDay: 5,
+    });
+  });
+
+  it("pins to the full 30-day window once the history reaches it", () => {
+    // 31 daily points, 2026-10-14 .. 2026-11-13, +1 each day:
+    // the base is the point exactly 30 days before the latest.
+    const values = Array.from({ length: 31 }, (_, i) => 100 + i);
+    const rows = dailyRows(values, "2026-10-14");
+    expect(historyWindowDelta(rows, "x_followers")).toEqual({
+      delta: 30,
+      days: 30,
+      full: true,
+      dayOverDay: 1,
+    });
+  });
+
+  it("switches to the full window exactly when the span reaches 30 days", () => {
+    // 30 points spanning 29 days: still compared with the
+    // oldest day, named by its actual span.
+    const short = dailyRows(
+      Array.from({ length: 30 }, (_, i) => 100 + i),
+      "2026-10-15",
+    );
+    expect(historyWindowDelta(short, "x_followers")).toEqual({
+      delta: 29,
+      days: 29,
+      full: false,
+      dayOverDay: 1,
+    });
+    // One more day of history and the window is full.
+    const reached = dailyRows(
+      Array.from({ length: 31 }, (_, i) => 100 + i),
+      "2026-10-14",
+    );
+    expect(historyWindowDelta(reached, "x_followers")?.full).toBe(true);
+  });
+
+  it("uses the newest point on or before the day 30 days back", () => {
+    // No collection on 2026-10-14 itself: the base is the
+    // 2026-10-13 point, and the window still counts as full.
+    const rows = [
+      { collected_at: "2026-10-13T01:00:00.000Z", x_followers: 95 },
+      ...dailyRows(
+        Array.from({ length: 30 }, (_, i) => 101 + i),
+        "2026-10-15",
+      ),
+    ];
+    const change = historyWindowDelta(rows, "x_followers");
+    expect(change?.delta).toBe(130 - 95);
+    expect(change?.full).toBe(true);
+    expect(change?.days).toBe(30);
+  });
+
+  it("leaves the window's day-over-day null when the previous day is missing", () => {
+    // Points on 2026-11-10, 2026-11-11 and 2026-11-13: the
+    // day before the latest has no point, so — like
+    // historyDailyDelta — no comparison is offered across the
+    // gap, while the window delta itself still computes.
+    const rows = [
+      { collected_at: "2026-11-10T01:00:00.000Z", x_followers: 100 },
+      { collected_at: "2026-11-11T01:00:00.000Z", x_followers: 102 },
+      { collected_at: "2026-11-13T01:00:00.000Z", x_followers: 110 },
+    ];
+    expect(historyWindowDelta(rows, "x_followers")).toEqual({
+      delta: 10,
+      days: 3,
+      full: false,
+      dayOverDay: null,
+    });
+  });
+
+  it("is null until two days carry a number", () => {
+    expect(
+      historyWindowDelta(dailyRows([100], "2026-11-13"), "x_followers"),
+    ).toBeNull();
+    // Two collections on the same JST day are still one day.
+    const sameDay = [
+      { collected_at: "2026-11-13T01:00:00.000Z", x_followers: 100 },
+      { collected_at: "2026-11-13T05:00:00.000Z", x_followers: 101 },
+    ];
+    expect(historyWindowDelta(sameDay, "x_followers")).toBeNull();
+    expect(historyWindowDelta([], "x_followers")).toBeNull();
+    expect(historyWindowDelta(null, "x_followers")).toBeNull();
   });
 });
 

@@ -639,12 +639,16 @@ export function thumbnailOrientation(naturalWidth, naturalHeight) {
   return naturalHeight > naturalWidth ? "vertical" : "horizontal";
 }
 
-export function youtubeTotals(detail) {
+export function youtubeTotals(detail, historyRows) {
   const yt = detail?.youtube ?? {};
+  const growth = historyWindowDelta(historyRows, "youtube_subscribers");
   return [
     // The subscriber count is one of the top page's published
     // follower figures, so masking exempts it.
     { label: "登録者", value: formatCount(yt.subscribers), public: true },
+    // YouTube reports no subscribe / unsubscribe split, so the
+    // change over the trailing window stands in for it.
+    followerChangeBox("登録者増減", growth),
     { label: "総再生回数", value: formatCount(yt.total_views) },
     { label: "動画本数", value: formatCount(yt.video_count) },
   ];
@@ -662,6 +666,7 @@ export function youtubeTotals(detail) {
 export function threadsTotals(detail, historyRows) {
   const th = detail?.threads ?? {};
   const change = historyDailyDelta(historyRows, "threads_followers");
+  const growth = historyWindowDelta(historyRows, "threads_followers");
   const interactions = th.interactions_30d ?? {};
   return [
     // The follower count is one of the top page's published
@@ -671,6 +676,9 @@ export function threadsTotals(detail, historyRows) {
       label: "前日比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
     },
+    // Threads reports no follow / unfollow split, so the change
+    // over the trailing window stands in for it.
+    followerChangeBox("フォロワー増減", growth),
     { label: "表示回数（過去30日）", value: formatCount(th.views_30d) },
     {
       label: "反応の合計（過去30日）",
@@ -746,6 +754,7 @@ export function xHistorySeries(rows) {
 export function xTotals(detail, historyRows) {
   const x = detail?.x ?? {};
   const change = historyDailyDelta(historyRows, "x_followers");
+  const growth = historyWindowDelta(historyRows, "x_followers");
   const posts = xPosts(detail);
   const viewed = posts.filter((post) => isNum(post?.views));
   const totalViews = viewed.length
@@ -759,6 +768,9 @@ export function xTotals(detail, historyRows) {
       label: "前日比",
       value: change ? (formatDelta(change.delta) ?? "—") : "—",
     },
+    // X reports no follow / unfollow split either, so the
+    // change over the trailing window stands in for it.
+    followerChangeBox("フォロワー増減", growth),
     { label: "投稿数（取得分）", value: formatCount(posts.length || null) },
     { label: "表示合計（取得分）", value: formatCount(totalViews) },
     {
@@ -864,31 +876,42 @@ export function followChartDays(detail) {
 
 // --- Overview tab helpers ---
 
-// The "YYYYMMDD" day key of the day before the given one, by
-// plain calendar arithmetic (the keys are JST day labels, so no
-// timezone conversion is involved).
-function previousDayKey(dateKey) {
+// The "YYYYMMDD" day key of the day `days` before the given
+// one, by plain calendar arithmetic (the keys are JST day
+// labels, so no timezone conversion is involved).
+function dayKeyBefore(dateKey, days) {
   const year = Number(dateKey.slice(0, 4));
   const month = Number(dateKey.slice(4, 6));
   const day = Number(dateKey.slice(6, 8));
-  const prev = new Date(Date.UTC(year, month - 1, day) - 86400000);
+  const prev = new Date(Date.UTC(year, month - 1, day) - days * 86400000);
   const pad = (n) => String(n).padStart(2, "0");
   return `${prev.getUTCFullYear()}${pad(prev.getUTCMonth() + 1)}${pad(prev.getUTCDate())}`;
 }
 
-// The day-over-day change of one history metric （前日比）: the
-// metric's collections first collapse to one point per JST
-// calendar day via dailyLatestSeries — the day's last collection
-// wins, the same reduction the trend charts plot — and the delta
-// is the latest day's value minus the previous calendar day's.
-// Null when either side has no numeric point: a metric whose
-// collection only started today (X, collected from 2026-11-10)
-// has no previous day yet, and a day the collection skipped
-// leaves nothing honest to compare against — in both cases the
-// displays show "—" until the days line up.
-export function historyDailyDelta(rows, key) {
+// The "YYYYMMDD" day key of the day before the given one.
+function previousDayKey(dateKey) {
+  return dayKeyBefore(dateKey, 1);
+}
+
+// Whole days from one "YYYYMMDD" day key to a later one.
+function daySpan(fromKey, toKey) {
+  const toUtc = (key) =>
+    Date.UTC(
+      Number(key.slice(0, 4)),
+      Number(key.slice(4, 6)) - 1,
+      Number(key.slice(6, 8)),
+    );
+  return Math.round((toUtc(toKey) - toUtc(fromKey)) / 86400000);
+}
+
+// One history metric collapsed to one point per JST calendar
+// day: the day's last collection wins, the same reduction the
+// trend charts plot. Points are { date, views } in ascending
+// day order; collections where the metric is missing contribute
+// no point.
+function dailyPointsForKey(rows, key) {
   if (!Array.isArray(rows)) {
-    return null;
+    return [];
   }
   const sorted = rows
     .filter(
@@ -905,7 +928,19 @@ export function historyDailyDelta(rows, key) {
       entries.push({ date, views: row[key] });
     }
   }
-  const daily = dailyLatestSeries(entries);
+  return dailyLatestSeries(entries);
+}
+
+// The day-over-day change of one history metric （前日比）: the
+// latest day's value minus the previous calendar day's, over the
+// daily points of dailyPointsForKey. Null when either side has
+// no numeric point: a metric whose collection only started
+// today (X, collected from 2026-11-10) has no previous day yet,
+// and a day the collection skipped leaves nothing honest to
+// compare against — in both cases the displays show "—" until
+// the days line up.
+export function historyDailyDelta(rows, key) {
+  const daily = dailyPointsForKey(rows, key);
   if (!daily.length) {
     return null;
   }
@@ -920,6 +955,94 @@ export function historyDailyDelta(rows, key) {
     latest: latest.views,
     previous: previous.views,
     delta: latest.views - previous.views,
+  };
+}
+
+// The trailing window a follower-change card compares over:
+// the window follows the history's length, capped at this many
+// days.
+export const FOLLOWER_WINDOW_DAYS = 30;
+
+// The change of one history metric over the trailing window
+// （フォロワー増減）: the latest day's value minus the value
+// windowDays before it. While the history is shorter than the
+// window, no point reaches that far back and the base falls
+// back to the oldest point instead — the window grows with the
+// history and pins to the full window once enough days have
+// accumulated. `days` is the window the delta actually covers
+// and `full` says whether it reached the whole window, so the
+// card can name its own period. `dayOverDay` is the 前日比 of
+// the window delta itself: today's window delta minus the same
+// figure computed as of the previous calendar day, null when
+// that day has no point or its own window cannot be computed.
+// Null overall until at least two days carry a number.
+export function historyWindowDelta(rows, key, windowDays = FOLLOWER_WINDOW_DAYS) {
+  const daily = dailyPointsForKey(rows, key);
+  if (daily.length < 2) {
+    return null;
+  }
+  const windowFor = (endIndex) => {
+    const end = daily[endIndex];
+    const target = dayKeyBefore(end.date, windowDays);
+    let base = null;
+    for (let i = endIndex; i >= 0; i--) {
+      if (daily[i].date <= target) {
+        base = daily[i];
+        break;
+      }
+    }
+    const full = base !== null;
+    if (!full) {
+      base = daily[0];
+    }
+    if (base.date >= end.date) {
+      return null;
+    }
+    return {
+      delta: end.views - base.views,
+      days: full ? windowDays : daySpan(base.date, end.date),
+      full,
+    };
+  };
+  const current = windowFor(daily.length - 1);
+  if (!current) {
+    return null;
+  }
+  const latest = daily[daily.length - 1];
+  const prevIndex = daily.findIndex(
+    (point) => point.date === previousDayKey(latest.date),
+  );
+  let dayOverDay = null;
+  if (prevIndex >= 0) {
+    const previous = windowFor(prevIndex);
+    if (previous) {
+      dayOverDay = current.delta - previous.delta;
+    }
+  }
+  return { ...current, dayOverDay };
+}
+
+// The label of a follower-change card （登録者増減 /
+// フォロワー増減）, naming the window the change covers: the
+// full window once the history reaches it, the actual span in
+// days while it is still growing. A change that cannot be
+// computed yet keeps the full-window label over its "—".
+function followerChangeLabel(name, change) {
+  if (!change || change.full) {
+    return `${name}（過去${FOLLOWER_WINDOW_DAYS}日）`;
+  }
+  return `${name}（過去${change.days}日間）`;
+}
+
+// One follower-change totals box: the window delta as the
+// value, its own day-over-day change as the delta line. No
+// `public` flag — the figures are this page's own analysis and
+// stay masked, unlike the current counts they sit next to.
+function followerChangeBox(name, change) {
+  return {
+    label: followerChangeLabel(name, change),
+    value: change ? (formatDelta(change.delta) ?? "—") : "—",
+    delta: change ? formatDelta(change.dayOverDay) : null,
   };
 }
 

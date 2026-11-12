@@ -389,6 +389,10 @@ describe("threads tab", () => {
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "255", public: true },
       { label: "前日比", value: "+3" },
+      // Two daily points a day apart: the follower-change card
+      // covers the one day between them, and its own 前日比
+      // cannot be computed yet (the first day has no window).
+      { label: "フォロワー増減（過去1日間）", value: "+3", delta: null },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -406,6 +410,7 @@ describe("threads tab", () => {
     expect(threadsTotals(detail, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "+3" },
+      { label: "フォロワー増減（過去1日間）", value: "+3", delta: null },
       { label: "表示回数（過去30日）", value: "53,342" },
       { label: "反応の合計（過去30日）", value: "808" },
     ]);
@@ -433,12 +438,14 @@ describe("threads tab", () => {
     expect(threadsTotals(detail, [THREADS_ROWS[1]])).toEqual([
       { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "—" },
+      { label: "フォロワー増減（過去30日）", value: "—", delta: null },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals(detail, [])).toEqual([
       { label: "フォロワー", value: "252", public: true },
       { label: "前日比", value: "—" },
+      { label: "フォロワー増減（過去30日）", value: "—", delta: null },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -449,12 +456,14 @@ describe("threads tab", () => {
     expect(threadsTotals(null, THREADS_ROWS)).toEqual([
       { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "+3" },
+      { label: "フォロワー増減（過去1日間）", value: "+3", delta: null },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
     expect(threadsTotals({}, null)).toEqual([
       { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "—" },
+      { label: "フォロワー増減（過去30日）", value: "—", delta: null },
       { label: "表示回数（過去30日）", value: "—" },
       { label: "反応の合計（過去30日）", value: "—" },
     ]);
@@ -1049,10 +1058,31 @@ describe("youtube and error notes", () => {
   it("youtubeTotals formats the channel numbers", () => {
     expect(youtubeTotals(DETAIL)).toEqual([
       { label: "登録者", value: "9", public: true },
+      { label: "登録者増減（過去30日）", value: "—", delta: null },
       { label: "総再生回数", value: "12,345" },
       { label: "動画本数", value: "21" },
     ]);
     expect(youtubeTotals(null).every((c) => c.value === "—")).toBe(true);
+  });
+
+  it("youtubeTotals names the subscriber change after its actual window", () => {
+    // JST 2026-11-09 .. 2026-11-13: four days of history, so
+    // the card compares against the oldest day and says so.
+    const rows = [
+      { collected_at: "2026-11-08T21:00:00.000Z", youtube_subscribers: 10 },
+      { collected_at: "2026-11-12T21:00:00.000Z", youtube_subscribers: 11 },
+    ];
+    const boxes = youtubeTotals(DETAIL, rows);
+    expect(boxes[1]).toEqual({
+      label: "登録者増減（過去4日間）",
+      value: "+1",
+      delta: null,
+    });
+    // Only the current subscriber count is public; the change
+    // card is this page's own analysis and stays masked.
+    expect(boxes.filter((c) => c.public === true).map((c) => c.label)).toEqual([
+      "登録者",
+    ]);
   });
 
   it("youtubeVideos passes the array through and tolerates junk", () => {

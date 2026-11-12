@@ -1540,6 +1540,24 @@ function fillTotalBoxes(elId, items) {
     value.textContent = item.value;
     box.appendChild(label);
     box.appendChild(value);
+    if (item.delta) {
+      const delta = document.createElement("div");
+      // The same change line as the overview KPI cards: an
+      // increase is green and a decrease red — except on the
+      // cards flagged invert, where an increase is the bad
+      // direction and takes the red instead.
+      const sign = item.delta.startsWith("+")
+        ? 1
+        : item.delta.startsWith("-")
+          ? -1
+          : 0;
+      const good = item.invert ? sign < 0 : sign > 0;
+      const bad = item.invert ? sign > 0 : sign < 0;
+      delta.className =
+        "kpi-delta amount-value" + (good ? " up" : bad ? " down" : "");
+      delta.textContent = `前日比 ${item.delta}`;
+      box.appendChild(delta);
+    }
     wrap.appendChild(box);
   }
 }
@@ -1928,7 +1946,10 @@ function renderGenreTable(detail) {
 }
 
 function renderYoutube(detail) {
-  fillTotalBoxes("sns-youtube-totals", youtubeTotals(detail));
+  fillTotalBoxes(
+    "sns-youtube-totals",
+    youtubeTotals(detail, overviewState.historyRows),
+  );
   const tbody = document.getElementById("sns-youtube-body");
   tbody.innerHTML = "";
   const videos = youtubeVideos(detail);
@@ -2860,6 +2881,10 @@ async function loadSnsHistory(historyPromise) {
     renderSnsHistory(response);
   }
   renderOverview();
+  // The YouTube totals now read the history too (the subscriber
+  // change card), so they re-render with the other channel tabs
+  // when the history settles.
+  renderYoutube(overviewState.detail);
   renderYoutubeHistory();
   renderThreads();
   renderX();
