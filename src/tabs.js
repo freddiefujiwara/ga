@@ -115,15 +115,3 @@ export function pathForTab(base, tabId) {
   const id = isTabId(tabId) ? tabId : DEFAULT_TAB;
   return id === DEFAULT_TAB ? root : `${root}${id}`;
 }
-
-// A new hash with the tab part set (or replaced), keeping every
-// other part — notably the share token — intact.
-export function hashWithTab(hash, tabId) {
-  const id = isTabId(tabId) ? tabId : DEFAULT_TAB;
-  const fragment = hash && hash.startsWith("#") ? hash.slice(1) : hash || "";
-  const parts = fragment
-    .split("&")
-    .filter((part) => part && !part.startsWith("tab="));
-  parts.push(`tab=${id}`);
-  return `#${parts.join("&")}`;
-}

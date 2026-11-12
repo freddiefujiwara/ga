@@ -280,14 +280,6 @@ export function layoutWithLabelRoom(items) {
   return rects;
 }
 
-// A tile only carries its full-size text label when it is big
-// enough for the words to fit; smaller tiles fall back to the
-// micro labels, never to blank. Coordinates are percentages
-// of the map.
-export function hasLabelRoom(rect) {
-  return Boolean(rect) && rect.w >= 10 && rect.h >= 16;
-}
-
 // Heat colour for a genre tile, scaled by where its average sits
 // between the smallest and largest average on show: the smallest
 // average keeps the plain tile colour, the largest gets the

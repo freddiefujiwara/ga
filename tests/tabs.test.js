@@ -4,7 +4,6 @@ import {
   DEFAULT_TAB,
   isTabId,
   tabFromHash,
-  hashWithTab,
   hasTabPart,
   hashWithoutTab,
   tabFromPath,
@@ -53,40 +52,6 @@ describe("tabFromHash", () => {
     expect(tabFromHash("#tab=nope")).toBe("overview");
     expect(tabFromHash("#tab=")).toBe("overview");
     expect(tabFromHash("#instagram")).toBe("overview");
-  });
-});
-
-describe("hashWithTab", () => {
-  it("sets the tab on an empty hash", () => {
-    expect(hashWithTab("", "blog")).toBe("#tab=blog");
-    expect(hashWithTab("#", "blog")).toBe("#tab=blog");
-  });
-
-  it("keeps the share token intact", () => {
-    expect(hashWithTab("#share=tok", "instagram")).toBe(
-      "#share=tok&tab=instagram",
-    );
-  });
-
-  it("replaces an existing tab part instead of duplicating it", () => {
-    expect(hashWithTab("#share=tok&tab=blog", "youtube")).toBe(
-      "#share=tok&tab=youtube",
-    );
-    expect(hashWithTab("#tab=blog", "overview")).toBe("#tab=overview");
-  });
-
-  it("falls back to the default tab for an unknown id", () => {
-    expect(hashWithTab("#share=tok", "nope")).toBe("#share=tok&tab=overview");
-  });
-
-  it("round-trips through tabFromHash and parseShareToken", () => {
-    for (const tab of TABS) {
-      const hash = hashWithTab("#share=tok123", tab.id);
-      expect(tabFromHash(hash)).toBe(tab.id);
-      // The share session survives tab switches untouched.
-      expect(parseShareToken(hash)).toBe("tok123");
-    }
-    expect(parseShareToken(hashWithTab("", "blog"))).toBe("");
   });
 });
 
