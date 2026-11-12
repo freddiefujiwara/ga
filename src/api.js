@@ -1365,6 +1365,57 @@ export function mergeBlogTitles(metaTitles, rssTitles) {
   return titles;
 }
 
+// The publication day of one article, as the "YYYYMMDD" day key
+// the chart builders take, read off the leading "YYYY-MM-DD" of
+// its title. The merged title map the blog tab renders from
+// carries no date field of its own — the titles payload is
+// { ids, titles, tags } and parseRssTitles keeps only the text —
+// but every article title opens with its publication date (the
+// RSS items carry a pubDate too, and it agrees with the prefix),
+// so the prefix is the date source for the daily chart's article
+// overlay. A title without a well-formed leading date yields
+// null and the article simply takes no part in the overlay.
+export function blogArticleDateKey(title) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:\s|$)/.exec(String(title || ""));
+  if (!match) {
+    return null;
+  }
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  return `${match[1]}${match[2]}${match[3]}`;
+}
+
+// The blog's articles grouped by publication day, for the daily
+// chart's overlay: [{ date, articles: [{ id, title, href }] }]
+// with days ascending and each day's articles in title order.
+// Only articles whose title carries a date (blogArticleDateKey)
+// take part. The href is the canonical article URL, the same
+// target pageDisplay builds for an article path.
+export function blogArticlesByDate(titles, origin) {
+  const byDate = new Map();
+  for (const [id, title] of titles || []) {
+    const date = blogArticleDateKey(title);
+    if (!date) {
+      continue;
+    }
+    if (!byDate.has(date)) {
+      byDate.set(date, []);
+    }
+    byDate.get(date).push({ id, title, href: `${origin}/blog/${id}` });
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([date, articles]) => ({
+      date,
+      articles: articles.sort((a, b) =>
+        a.title < b.title ? -1 : a.title > b.title ? 1 : 0,
+      ),
+    }));
+}
+
 // Per-article view counts with the split paths merged, article
 // rows only: [{ id, views }]. Non-article pages (apps, the blog
 // top, …) are not articles and never appear here.

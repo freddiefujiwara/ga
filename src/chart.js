@@ -6,6 +6,17 @@
 // data-date / data-views) that main.js turns into a tooltip on
 // hover and tap. A handful of date labels under the axis give the
 // 28 days a readable scale.
+//
+// Callers can mark days through options.markedDays (a Map of
+// "YYYYMMDD" -> item count): a marked day gets a small triangle
+// marker above its point (class "blog-post-marker", with the
+// count beside it when the day carries more than one item) and a
+// transparent, full-column hit rect (class "blog-day-hit", with
+// data-date) so a tap anywhere on the day's column can jump to
+// that day's entry below the chart — the blog daily chart's
+// published-article overlay, mirroring the follow chart's
+// posted-day treatment. The column boundaries are the midpoints
+// between neighbouring points. Unmarked callers see no change.
 
 // "20261102" -> "11/2"
 export function formatDateLabel(yyyymmdd) {
@@ -61,6 +72,24 @@ export function buildLineChartSvg(points, options = {}) {
     return [Number(x.toFixed(1)), Number(y.toFixed(1))];
   });
   const polyline = coords.map(([x, y]) => `${x},${y}`).join(" ");
+  const markedDays =
+    options.markedDays instanceof Map ? options.markedDays : new Map();
+  const round = (n) => Number(n.toFixed(1));
+  // Full-column hit rects for the marked days, drawn before the
+  // points so the tooltip's hit circles stay on top at the point
+  // itself; the rest of the column still lands on the rect.
+  const columnHits = coords
+    .map(([x], i) => {
+      const date = points[i].date;
+      if (!markedDays.has(date)) {
+        return "";
+      }
+      const left = i === 0 ? pad : round((coords[i - 1][0] + x) / 2);
+      const right =
+        i === coords.length - 1 ? width - pad : round((x + coords[i + 1][0]) / 2);
+      return `<rect class="blog-day-hit" data-date="${date}" x="${left}" y="0" width="${round(right - left)}" height="${height}"/>`;
+    })
+    .join("");
   const dots = coords
     .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.5"></circle>`)
     .join("");
@@ -69,6 +98,24 @@ export function buildLineChartSvg(points, options = {}) {
       ([x, y], i) =>
         `<circle class="chart-point" cx="${x}" cy="${y}" r="12" data-date="${points[i].date}" data-views="${points[i].views}"></circle>`,
     )
+    .join("");
+  // The marked days' triangles (and their counts, when a day
+  // carries more than one item), drawn last so they sit on top.
+  const markers = coords
+    .map(([x, y], i) => {
+      const date = points[i].date;
+      if (!markedDays.has(date)) {
+        return "";
+      }
+      const count = markedDays.get(date);
+      const my = Math.max(round(y) - 15, 2);
+      const triangle = `<path class="blog-post-marker" data-date="${date}" d="M ${round(x - 5)},${my} L ${round(x + 5)},${my} L ${round(x)},${my + 6} Z"/>`;
+      const label =
+        count > 1
+          ? `<text class="blog-post-count" x="${round(x + 7)}" y="${my + 6}">${count}</text>`
+          : "";
+      return triangle + label;
+    })
     .join("");
   const axisLabels = tickIndices(points.length)
     .map((i) => {
@@ -82,7 +129,7 @@ export function buildLineChartSvg(points, options = {}) {
   // .chart-max-label class: while masking, the stylesheet
   // hides it outright (SVG text does not blur reliably).
   const maxLabel = `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${dots}${hits}${axisLabels}${maxLabel}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${columnHits}${dots}${hits}${markers}${axisLabels}${maxLabel}</svg>`;
 }
 
 // Diverging bar chart for one account's daily follows and

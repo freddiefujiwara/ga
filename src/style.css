@@ -590,6 +590,39 @@ textarea:disabled {
   background: rgb(77 163 255 / 0.12);
 }
 
+/* The blog daily chart's published-article overlay: the same
+   marker, column and entry treatment as the follow chart's
+   posted days above. */
+.blog-post-marker {
+  fill: #f0a832;
+  cursor: pointer;
+}
+
+.blog-post-count {
+  fill: #f0a832;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.blog-day-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.blog-day-hit.selected {
+  fill: rgb(77 163 255 / 0.15);
+}
+
+.blog-day-entry {
+  scroll-margin-top: 12px;
+  border-radius: 8px;
+  transition: background-color 0.3s ease;
+}
+
+.blog-day-entry.highlight {
+  background: rgb(77 163 255 / 0.12);
+}
+
 /* The posted-day list's counts: follows read as a gain (green),
    unfollows as a loss (red), matching the chart's bars. */
 .follow-count-up {

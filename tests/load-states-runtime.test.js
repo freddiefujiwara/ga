@@ -18,7 +18,10 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 
 const ARTICLE_ID = "2026010812345678901234567";
-const ARTICLE_TITLE = "検証用の記事タイトル";
+// The title leads with its publication date, like every real
+// article: the daily chart's overlay reads the day off it, and
+// the stubbed daily row below is dated the same day.
+const ARTICLE_TITLE = "2026-11-10 検証用の記事タイトル";
 
 function deferred() {
   let resolve;
@@ -185,6 +188,37 @@ describe("dashboard load states (runtime)", () => {
     expect(document.getElementById("tab-blog").textContent).not.toContain(
       "読み込み中…",
     );
+
+    // The daily chart's article overlay: the stubbed article's
+    // title date matches the daily row's day, so the day carries
+    // the marker and the entry below lists the article with a
+    // link, next to the day's (masked) view count.
+    const dailyChart = document.getElementById("daily-chart");
+    const hit = dailyChart.querySelector(
+      '.blog-day-hit[data-date="20261110"]',
+    );
+    expect(hit).not.toBeNull();
+    expect(
+      dailyChart.querySelector('.blog-post-marker[data-date="20261110"]'),
+    ).not.toBeNull();
+    const entry = dailyChart.querySelector(
+      '.blog-day-entry[data-date="20261110"]',
+    );
+    expect(entry).not.toBeNull();
+    expect(entry.textContent).toContain("表示回数");
+    expect(entry.textContent).toContain("42回");
+    const entryLink = entry.querySelector("a");
+    expect(entryLink.textContent).toBe(ARTICLE_TITLE);
+    expect(entryLink.getAttribute("href")).toBe(
+      `https://freddiefujiwara.com/blog/${ARTICLE_ID}`,
+    );
+    // Tapping the marked day's column highlights the day on both
+    // the chart and the entry (jsdom has no scrollIntoView, so
+    // the jump's scroll is stubbed out).
+    window.HTMLElement.prototype.scrollIntoView = () => {};
+    hit.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    expect(hit.classList.contains("selected")).toBe(true);
+    expect(entry.classList.contains("highlight")).toBe(true);
     vi.unstubAllGlobals();
   });
 
