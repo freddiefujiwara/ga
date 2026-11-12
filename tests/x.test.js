@@ -87,11 +87,26 @@ describe("X shaping", () => {
     expect(boxes).toEqual([
       { label: "フォロワー", value: "—", public: true },
       { label: "前日比", value: "—" },
+      { label: "フォロワー増減（過去30日）", value: "—", delta: null },
       { label: "投稿数（取得分）", value: "—" },
       { label: "表示合計（取得分）", value: "—" },
       { label: "平均表示（取得分）", value: "—" },
     ]);
     expect(xTotals(null, null)[0].value).toBe("—");
+  });
+
+  it("xTotals carries the follower change over its actual window", () => {
+    // ROWS carry two daily points a day apart (JST 2026-11-09
+    // and 2026-11-10), so the card covers that one day and its
+    // own 前日比 is not computable yet.
+    const box = xTotals(DETAIL, ROWS).find(
+      (b) => b.label === "フォロワー増減（過去1日間）",
+    );
+    expect(box).toEqual({
+      label: "フォロワー増減（過去1日間）",
+      value: "+21",
+      delta: null,
+    });
   });
 
   it("xTotals flags only the follower count public", () => {
