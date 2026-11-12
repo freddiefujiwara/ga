@@ -384,14 +384,17 @@ async function loadDashboard() {
   const pagesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     limit: 250,
   });
-  // Per-article display times (the article_render metric pair).
-  // Served from the history sheet's blog_speed tab; until the
-  // first displays are recorded the report answers with no rows
-  // and the section stays hidden, so a rejection here must never
-  // break the blog tab — the catch is attached up front.
+  // Per-article display times (the article_render metric pair,
+  // plus the bridge's slow-count metric: how many of the
+  // article's displays took ten seconds or more, so an average
+  // inflated by one stall reads as such). Served from the
+  // history sheet's blog_speed tab; until the first displays
+  // are recorded the report answers with no rows and the
+  // section stays hidden, so a rejection here must never break
+  // the blog tab — the catch is attached up front.
   const speedPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     dimensions: "pagePath",
-    metrics: "customEvent:render_ms,eventCount",
+    metrics: "customEvent:render_ms,eventCount,customEvent:render_slow_count",
     limit: 250,
   });
   speedPromise.catch(() => {});
@@ -624,9 +627,15 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
           li.appendChild(link);
           const span = document.createElement("span");
           // Per-article display times are blog figures like the
-          // view counts above: masked outside share links.
+          // view counts above: masked outside share links. An
+          // article with slow displays names them, so an average
+          // inflated by one stall reads as one; with none, the
+          // line keeps its plain form.
           span.className = "rank-value amount-value";
-          span.textContent = `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件）`;
+          span.textContent =
+            item.slow > 0
+              ? `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件・うち遅い${item.slow.toLocaleString()}件）`
+              : `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件）`;
           li.appendChild(span);
           speedList.appendChild(li);
         }
