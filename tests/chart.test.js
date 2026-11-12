@@ -64,6 +64,61 @@ describe("buildLineChartSvg", () => {
     expect(svg).toContain("最大 42");
   });
 
+  it("marks only the days in markedDays, with a column hit rect", () => {
+    const points = [
+      { date: "20261104", views: 50 },
+      { date: "20261105", views: 100 },
+      { date: "20261106", views: 25 },
+    ];
+    const svg = buildLineChartSvg(points, {
+      markedDays: new Map([["20261105", 1]]),
+    });
+    const count = (needle) => svg.split(needle).length - 1;
+    expect(count('class="blog-post-marker"')).toBe(1);
+    expect(svg).toContain('class="blog-post-marker" data-date="20261105"');
+    expect(count('class="blog-day-hit"')).toBe(1);
+    expect(svg).toContain('class="blog-day-hit" data-date="20261105"');
+    // A single-article day carries no count label.
+    expect(svg).not.toContain('class="blog-post-count"');
+  });
+
+  it("shows the article count beside the marker on multi-article days", () => {
+    const svg = buildLineChartSvg(
+      [
+        { date: "20261104", views: 50 },
+        { date: "20261105", views: 100 },
+      ],
+      { markedDays: new Map([["20261104", 2]]) },
+    );
+    expect(svg).toContain('class="blog-post-count"');
+    expect(svg).toContain(">2</text>");
+  });
+
+  it("draws the marked day's column between its neighbours' midpoints", () => {
+    // width 200, padding 10, three points: x = 10, 100, 190.
+    // The middle day's column runs from 55 to 145.
+    const svg = buildLineChartSvg(
+      [
+        { date: "20261104", views: 50 },
+        { date: "20261105", views: 100 },
+        { date: "20261106", views: 25 },
+      ],
+      { width: 200, height: 100, padding: 10, markedDays: new Map([["20261105", 1]]) },
+    );
+    expect(svg).toContain(
+      '<rect class="blog-day-hit" data-date="20261105" x="55" y="0" width="90" height="100"/>',
+    );
+  });
+
+  it("draws no markers or column hits without markedDays", () => {
+    const svg = buildLineChartSvg([
+      { date: "20261104", views: 50 },
+      { date: "20261105", views: 100 },
+    ]);
+    expect(svg).not.toContain("blog-post-marker");
+    expect(svg).not.toContain("blog-day-hit");
+  });
+
   it("never marks the max label public", () => {
     // The chart builder has no public-label switch: every
     // chart's figures are unpublished rollups, so the label
