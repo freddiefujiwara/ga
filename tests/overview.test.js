@@ -4,6 +4,7 @@ import {
   historyWindowDelta,
   formatDelta,
   overviewKpis,
+  snsOverview,
   topMedia,
   topPostsByChannel,
 } from "../src/api.js";
@@ -369,6 +370,70 @@ describe("overviewKpis", () => {
     );
     expect(noGa["ブログ 表示回数（直近28日）"].value).toBe("—");
     expect(noGa["SNS延べフォロワー数"].delta).toBe("+5");
+  });
+});
+
+describe("Instagram tab follow cards (snsOverview)", () => {
+  // The Instagram tab's フォロー / フォロー解除 cards show the
+  // same display as the overview's cards of the same names —
+  // the value off the snapshot and the 前日比 off the history —
+  // because both come from the shared kpiDelta. These tests pin
+  // the two tabs to identical figures so they cannot drift.
+  const byLabel = (cards) =>
+    Object.fromEntries(cards.map((c) => [c.label, c]));
+  const LABELS = ["フォロー（過去30日）", "フォロー解除（過去30日）"];
+
+  it("shows the same values and 前日比 as the overview cards", () => {
+    const overview = byLabel(overviewKpis(DETAIL, GA_TOTALS, HISTORY2));
+    const tab = byLabel(snsOverview(DETAIL, HISTORY2));
+    for (const label of LABELS) {
+      expect(tab[label].value).toBe(overview[label].value);
+      expect(tab[label].delta).toBe(overview[label].delta);
+      expect(tab[label].invert).toBe(overview[label].invert);
+    }
+    expect(tab["フォロー（過去30日）"]).toEqual({
+      label: "フォロー（過去30日）",
+      value: "120",
+      delta: "+2",
+    });
+  });
+
+  it("matches the overview on the unfollows change, flagged inverted", () => {
+    const rows = [
+      { collected_at: "2026-11-07T19:00:00.000Z", unfollows_30d: 40 },
+      { collected_at: "2026-11-09T01:00:00.000Z", unfollows_30d: 45 },
+    ];
+    const detail = {
+      ...DETAIL,
+      instagram: { ...DETAIL.instagram, unfollows_30d: 45 },
+    };
+    const tabCard = snsOverview(detail, rows).find(
+      (c) => c.label === "フォロー解除（過去30日）",
+    );
+    const overviewCard = overviewKpis(detail, GA_TOTALS, rows).find(
+      (c) => c.label === "フォロー解除（過去30日）",
+    );
+    expect(tabCard).toEqual({
+      label: "フォロー解除（過去30日）",
+      value: "45",
+      delta: "+5",
+      invert: true,
+    });
+    expect(tabCard.delta).toBe(overviewCard.delta);
+  });
+
+  it("carries no delta until the history offers two days", () => {
+    for (const rows of [undefined, null, [], [HISTORY2[0]]]) {
+      const tab = byLabel(snsOverview(DETAIL, rows));
+      for (const label of LABELS) {
+        expect(tab[label].delta).toBeNull();
+      }
+    }
+    // No other Instagram card ever carries a change line.
+    const others = snsOverview(DETAIL, HISTORY2).filter(
+      (c) => !LABELS.includes(c.label),
+    );
+    expect(others.every((c) => c.delta === undefined)).toBe(true);
   });
 });
 
