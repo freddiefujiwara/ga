@@ -7,6 +7,13 @@
 // hover and tap. A handful of date labels under the axis give the
 // 28 days a readable scale.
 //
+// Callers can ask for a y axis through options.yAxis: the chart
+// then gains light gridlines and round-numbered tick labels on
+// a data-following domain (see niceAxisScale), and the separate
+// max label is dropped — the ticks carry the scale. Only the
+// Instagram engagement trend uses it so far; the other charts
+// keep the zero-based, label-only treatment.
+//
 // Callers can mark days through options.markedDays (a Map of
 // "YYYYMMDD" -> item count): a marked day gets a small triangle
 // marker above its point (class "blog-post-marker", with the
@@ -32,6 +39,78 @@ export function formatDateFull(yyyymmdd) {
 
 export function tooltipText(point) {
   return `${formatDateFull(point.date)} · ${Number(point.views).toLocaleString()}回`;
+}
+
+// --- Y axis scale (options.yAxis on buildLineChartSvg) ---
+// The axis domain follows the data instead of starting at zero:
+// the trend series are large rolling totals (hundreds of
+// thousands), whose day-to-day movement a zero baseline would
+// flatten into a straight line. The domain snaps outward to
+// round steps so the ticks land on "nice" values, aiming at
+// about five ticks.
+
+function niceStep(rawStep) {
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const norm = rawStep / magnitude;
+  const factor = norm < 1.3 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+  return factor * magnitude;
+}
+
+// Round away binary floating point noise from step arithmetic
+// (0.30000000000000004 and friends) without touching real data.
+function cleanTick(value) {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+// { lo, hi, ticks } for the value range, or null when the range
+// is unusable. lo / hi are the outermost ticks; the caller maps
+// the points against a slightly widened domain so the line
+// keeps headroom inside the outermost gridlines.
+export function niceAxisScale(min, max, targetTicks = 5) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
+    return null;
+  }
+  let lo = min;
+  let hi = max;
+  if (lo === hi) {
+    const spread = Math.max(Math.abs(lo) * 0.05, 1);
+    lo -= spread;
+    hi += spread;
+  }
+  const step = niceStep((hi - lo) / (targetTicks - 1));
+  lo = Math.floor(lo / step) * step;
+  hi = Math.ceil(hi / step) * step;
+  if (min >= 0 && lo < 0) {
+    lo = 0;
+  }
+  if (hi <= lo) {
+    hi = lo + step;
+  }
+  const count = Math.round((hi - lo) / step);
+  const ticks = Array.from({ length: count + 1 }, (_, i) =>
+    cleanTick(lo + step * i),
+  );
+  return { lo: cleanTick(lo), hi: cleanTick(hi), ticks };
+}
+
+// The y tick labels: large counts in 万 units ("49万", "12.5万"),
+// smaller ones grouped as usual ("4,400"), fractions trimmed to
+// one decimal.
+export function formatAxisValue(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return "";
+  }
+  if (Math.abs(num) >= 10000) {
+    const man = num / 10000;
+    const text = Number.isInteger(man)
+      ? String(man)
+      : String(Math.round(man * 10) / 10);
+    return `${text}万`;
+  }
+  return Number.isInteger(num)
+    ? num.toLocaleString("ja-JP")
+    : String(Math.round(num * 10) / 10);
 }
 
 // Indices of up to `count` evenly spaced ticks, always including
@@ -63,12 +142,30 @@ export function buildLineChartSvg(points, options = {}) {
     return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"></svg>`;
   }
   const max = Math.max(...points.map((p) => p.views), 1);
-  const innerW = width - pad * 2;
+  const scale =
+    options.yAxis === true
+      ? niceAxisScale(
+          Math.min(...points.map((p) => p.views)),
+          Math.max(...points.map((p) => p.views)),
+        )
+      : null;
+  const padLeft = scale ? pad + 38 : pad;
+  // With an axis, the points map against the tick domain widened
+  // a touch, so the line keeps headroom inside the outermost
+  // gridlines instead of sitting on them.
+  const domainSpan = scale ? scale.hi - scale.lo : 0;
+  const domainLo = scale ? scale.lo - domainSpan * 0.04 : 0;
+  const domainHi = scale ? scale.hi + domainSpan * 0.04 : 0;
+  const innerW = width - padLeft - pad;
   const innerH = height - pad - padBottom;
   const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
   const coords = points.map((p, i) => {
-    const x = pad + stepX * i;
-    const y = pad + innerH - (p.views / max) * innerH;
+    const x = padLeft + stepX * i;
+    const y = scale
+      ? pad +
+        innerH -
+        ((p.views - domainLo) / (domainHi - domainLo)) * innerH
+      : pad + innerH - (p.views / max) * innerH;
     return [Number(x.toFixed(1)), Number(y.toFixed(1))];
   });
   const polyline = coords.map(([x, y]) => `${x},${y}`).join(" ");
@@ -84,7 +181,7 @@ export function buildLineChartSvg(points, options = {}) {
       if (!markedDays.has(date)) {
         return "";
       }
-      const left = i === 0 ? pad : round((coords[i - 1][0] + x) / 2);
+      const left = i === 0 ? padLeft : round((coords[i - 1][0] + x) / 2);
       const right =
         i === coords.length - 1 ? width - pad : round((x + coords[i + 1][0]) / 2);
       return `<rect class="blog-day-hit" data-date="${date}" x="${left}" y="0" width="${round(right - left)}" height="${height}"/>`;
@@ -125,11 +222,31 @@ export function buildLineChartSvg(points, options = {}) {
       return `<text class="chart-axis-label" x="${x}" y="${height - 6}" text-anchor="${anchor}">${formatDateLabel(points[i].date)}</text>`;
     })
     .join("");
+  // The y axis gridlines and tick labels, drawn first so the
+  // line sits on top. The labels are raw counts like the max
+  // label, so they carry .chart-y-label and the stylesheet
+  // hides them while masking; the gridlines carry no numbers
+  // and stay.
+  const grid = scale
+    ? scale.ticks
+        .map((tick) => {
+          const y = round(
+            pad +
+              innerH -
+              ((tick - domainLo) / (domainHi - domainLo)) * innerH,
+          );
+          return `<line class="chart-gridline" x1="${padLeft}" y1="${y}" x2="${width - pad}" y2="${y}"/><text class="chart-y-label" x="${padLeft - 6}" y="${round(y + 3.5)}" text-anchor="end">${formatAxisValue(tick)}</text>`;
+        })
+        .join("")
+    : "";
   // The max label is a raw count, so it carries the plain
   // .chart-max-label class: while masking, the stylesheet
-  // hides it outright (SVG text does not blur reliably).
-  const maxLabel = `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}"><polyline points="${polyline}" fill="none" stroke-width="2"/>${columnHits}${dots}${hits}${markers}${axisLabels}${maxLabel}</svg>`;
+  // hides it outright (SVG text does not blur reliably). With a
+  // y axis the ticks carry the scale, so the label is dropped.
+  const maxLabel = scale
+    ? ""
+    : `<text class="chart-max-label" x="${pad}" y="${pad - 8}" font-size="11">最大 ${max}</text>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${ariaLabel}">${grid}<polyline points="${polyline}" fill="none" stroke-width="2"/>${columnHits}${dots}${hits}${markers}${axisLabels}${maxLabel}</svg>`;
 }
 
 // Diverging bar chart for one account's daily follows and

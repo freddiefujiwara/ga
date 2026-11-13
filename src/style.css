@@ -340,7 +340,8 @@ textarea:disabled {
   user-select: none;
 }
 
-:root[data-private="on"] .chart-max-label:not(.is-public) {
+:root[data-private="on"] .chart-max-label:not(.is-public),
+:root[data-private="on"] .chart-y-label:not(.is-public) {
   display: none;
 }
 
@@ -553,6 +554,20 @@ textarea:disabled {
 }
 
 .chart-axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+/* The y axis of the Instagram trend chart: light gridlines
+   (no numbers of their own, so they stay visible while
+   masking) and muted tick labels (raw counts — hidden while
+   masking by the privacy rule above). */
+.chart-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-y-label {
   fill: var(--muted);
   font-size: 11px;
 }
