@@ -827,6 +827,125 @@ export function xTotals(detail, historyRows) {
   ];
 }
 
+// A USD amount as the X tab's credit card shows it: "$41.65".
+// Anything that is not a finite number yields the empty-state
+// dash, like every other card.
+export function formatUsd(value) {
+  if (!isNum(value)) {
+    return "—";
+  }
+  return `$${value.toFixed(2)}`;
+}
+
+// The X API credit balance (USD) for the X tab's credit card:
+// the newest daily point of the history rows' x_api_balance_usd
+// (the sheet series is the source the whole screen reads), with
+// the detail's x section as the fallback while no history row
+// carries the balance yet. Null until tweet-gas reports one.
+export function xApiBalance(detail, historyRows) {
+  const daily = dailyPointsForKey(historyRows, "x_api_balance_usd");
+  if (daily.length) {
+    return daily[daily.length - 1].views;
+  }
+  const fromDetail = detail?.x?.api_balance_usd;
+  return isNum(fromDetail) ? fromDetail : null;
+}
+
+// How long the current balance lasts at the recent burn rate,
+// in months — estimated from the balance's own stored series,
+// never from usage counts: converting tweet counts into money
+// would need a unit price this screen does not know. The burn
+// is the sum of the day-to-day decreases over the last month
+// of daily points divided by the days they span; balance
+// increases (a top-up) are not consumption and never raise the
+// burn. Null until at least two days carry a balance and the
+// balance actually decreased over the window — before that
+// there is no honest pace to project.
+export function xApiRunwayMonths(historyRows) {
+  const daily = dailyPointsForKey(historyRows, "x_api_balance_usd");
+  if (daily.length < 2) {
+    return null;
+  }
+  const points = daily.slice(-31);
+  const first = points[0];
+  const latest = points[points.length - 1];
+  const span = daySpan(first.date, latest.date);
+  if (!span || span < 1) {
+    return null;
+  }
+  let burned = 0;
+  for (let i = 1; i < points.length; i++) {
+    const drop = points[i - 1].views - points[i].views;
+    if (drop > 0) {
+      burned += drop;
+    }
+  }
+  if (burned <= 0) {
+    return null;
+  }
+  const months = latest.views / ((burned / span) * (365.25 / 12));
+  if (!Number.isFinite(months) || months <= 0) {
+    return null;
+  }
+  return Math.round(months * 10) / 10;
+}
+
+// The runway line of the credit card: absent while no estimate
+// can be made, "3年以上" once the pace is slow enough that a
+// month count stops being informative.
+export function formatXApiRunway(months) {
+  if (!isNum(months)) {
+    return null;
+  }
+  if (months > 36) {
+    return "今のペースであと3年以上分";
+  }
+  const text = Number.isInteger(months) ? String(months) : months.toFixed(1);
+  return `今のペースであと約${text}か月分`;
+}
+
+// Everything the X tab's API credit card renders: the balance
+// (a number this page never published, so the card masks it —
+// the renderer gives the value .amount-value without .is-public)
+// and the runway line, itself derived from the balance and
+// masked the same way.
+// The average daily consumption pace (posts per day) over the
+// most recent 30 reported days of x.api_daily_posts, or null
+// when no day carries a count. This is a plain count of posts
+// consumed — deliberately NOT converted into money: the
+// consumption mixes owned reads and regular reads, which are
+// billed at different unit rates, so a single-rate conversion
+// could misstate the runway several-fold. The runway above is
+// estimated from the balance's own decrease instead.
+export function xApiDailyPace(detail) {
+  const days =
+    detail && detail.x && Array.isArray(detail.x.api_daily_posts)
+      ? detail.x.api_daily_posts
+      : [];
+  const counted = days
+    .filter((entry) => entry && isNum(entry.tweets_consumed))
+    .slice(-30);
+  if (counted.length === 0) {
+    return null;
+  }
+  const total = counted.reduce((sum, entry) => sum + entry.tweets_consumed, 0);
+  return Math.round(total / counted.length);
+}
+
+export function xApiCreditSummary(detail, historyRows) {
+  const balance = xApiBalance(detail, historyRows);
+  const pace = xApiDailyPace(detail);
+  return {
+    balance,
+    balanceText: formatUsd(balance),
+    runwayText: formatXApiRunway(xApiRunwayMonths(historyRows)),
+    paceText:
+      pace === null
+        ? null
+        : `直近30日の消費ペース：1日平均${formatCount(pace)}件`,
+  };
+}
+
 // The X account's recent posts, newest first as collected:
 // [{ id, posted_at, text, url, views, likes, reposts, replies }],
 // with nulls wherever a number could not be collected. Anything
@@ -842,7 +961,7 @@ export function xPosts(detail) {
 // shown once.
 export function xErrorNotes(detail) {
   const x = detail?.x ?? {};
-  return ["x_error", "posts_error"]
+  return ["x_error", "posts_error", "usage_error"]
     .map((key) => x[key])
     .filter((value) => typeof value === "string" && value.length > 0)
     .filter((value, index, all) => all.indexOf(value) === index);

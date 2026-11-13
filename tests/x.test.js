@@ -3,6 +3,11 @@ import {
   snsTotalFollowers,
   xHistorySeries,
   xTotals,
+  xApiBalance,
+  xApiRunwayMonths,
+  xApiCreditSummary,
+  xApiDailyPace,
+  formatUsd,
   xPosts,
   xErrorNotes,
 } from "../src/api.js";
@@ -138,6 +143,100 @@ describe("X shaping", () => {
     expect(xPosts({})).toEqual([]);
     expect(xPosts(null)).toEqual([]);
     expect(xPosts({ x: { recent_posts: null } })).toEqual([]);
+  });
+
+  it("formatUsd renders a balance and dashes anything else", () => {
+    expect(formatUsd(41.65)).toBe("$41.65");
+    expect(formatUsd(0)).toBe("$0.00");
+    expect(formatUsd(null)).toBe("—");
+    expect(formatUsd(undefined)).toBe("—");
+  });
+
+  it("xApiBalance reads the newest history point, then the detail", () => {
+    const rows = [
+      { collected_at: "2026-11-12T00:00:00.000Z", x_api_balance_usd: 43.1 },
+      { collected_at: "2026-11-13T00:00:00.000Z", x_api_balance_usd: 41.65 },
+      { collected_at: "2026-11-13T01:00:00.000Z", x_api_balance_usd: null },
+    ];
+    expect(xApiBalance({}, rows)).toBe(41.65);
+    expect(xApiBalance({ x: { api_balance_usd: 39.5 } }, [])).toBe(39.5);
+    expect(xApiBalance({}, [])).toBeNull();
+    expect(xApiBalance(null, null)).toBeNull();
+  });
+
+  it("xApiRunwayMonths projects the balance's own burn rate", () => {
+    // $10 burned over 10 days -> $1/day; $41.65 lasts ~1.4 months.
+    const rows = [
+      { collected_at: "2026-11-03T00:00:00.000Z", x_api_balance_usd: 51.65 },
+      { collected_at: "2026-11-08T00:00:00.000Z", x_api_balance_usd: 46.65 },
+      { collected_at: "2026-11-13T00:00:00.000Z", x_api_balance_usd: 41.65 },
+    ];
+    expect(xApiRunwayMonths(rows)).toBe(1.4);
+  });
+
+  it("xApiRunwayMonths ignores top-ups and needs a real decrease", () => {
+    const toppedUp = [
+      { collected_at: "2026-11-03T00:00:00.000Z", x_api_balance_usd: 20 },
+      { collected_at: "2026-11-08T00:00:00.000Z", x_api_balance_usd: 45 },
+      { collected_at: "2026-11-13T00:00:00.000Z", x_api_balance_usd: 44 },
+    ];
+    // Only the $1 decrease counts, over the full 10-day span:
+    // $0.10/day against $44 -> about 14.5 months.
+    expect(xApiRunwayMonths(toppedUp)).toBe(14.5);
+    const flat = [
+      { collected_at: "2026-11-12T00:00:00.000Z", x_api_balance_usd: 41.65 },
+      { collected_at: "2026-11-13T00:00:00.000Z", x_api_balance_usd: 41.65 },
+    ];
+    expect(xApiRunwayMonths(flat)).toBeNull();
+    expect(xApiRunwayMonths(flat.slice(0, 1))).toBeNull();
+    expect(xApiRunwayMonths([])).toBeNull();
+  });
+
+  it("xApiDailyPace averages the counted days, ignoring null counts", () => {
+    const detail = {
+      x: {
+        api_daily_posts: [
+          { date: "2026-11-11", tweets_consumed: 100 },
+          { date: "2026-11-12", tweets_consumed: null },
+          { date: "2026-11-13", tweets_consumed: 200 },
+        ],
+      },
+    };
+    expect(xApiDailyPace(detail)).toBe(150);
+    expect(xApiDailyPace({ x: { api_daily_posts: null } })).toBeNull();
+    expect(xApiDailyPace({})).toBeNull();
+    expect(
+      xApiDailyPace({
+        x: { api_daily_posts: [{ date: "2026-11-13", tweets_consumed: null }] },
+      }),
+    ).toBeNull();
+  });
+
+  it("xApiCreditSummary combines balance, runway and pace texts", () => {
+    const rows = [
+      { collected_at: "2026-11-03T00:00:00.000Z", x_api_balance_usd: 51.65 },
+      { collected_at: "2026-11-13T00:00:00.000Z", x_api_balance_usd: 41.65 },
+    ];
+    const detail = {
+      x: {
+        api_daily_posts: [
+          { date: "2026-11-12", tweets_consumed: 100 },
+          { date: "2026-11-13", tweets_consumed: 200 },
+        ],
+      },
+    };
+    expect(xApiCreditSummary(detail, rows)).toEqual({
+      balance: 41.65,
+      balanceText: "$41.65",
+      runwayText: "今のペースであと約1.4か月分",
+      paceText: "直近30日の消費ペース：1日平均150件",
+    });
+    expect(xApiCreditSummary({}, [])).toEqual({
+      balance: null,
+      balanceText: "—",
+      runwayText: null,
+      paceText: null,
+    });
   });
 
   it("xErrorNotes shows each distinct note once", () => {

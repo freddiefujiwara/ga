@@ -39,6 +39,7 @@ import {
   threadsErrorNotes,
   xHistorySeries,
   xTotals,
+  xApiCreditSummary,
   xPosts,
   xErrorNotes,
   overviewKpis,
@@ -2497,8 +2498,77 @@ function renderXPosts() {
   updateSortHeaders("x-posts-table", xSort);
 }
 
+// The X API credit card, under the totals row: the current
+// credit balance (USD) collected through tweet-gas, the runway
+// estimate derived from the stored balance series, and the
+// link to the X Developer Portal where the balance is managed.
+// The balance and the runway are this page's private figures —
+// never published — so both carry .amount-value without
+// .is-public and mask like the other private amounts; the
+// portal link itself is not a figure and stays visible. Until
+// tweet-gas reports a balance the card shows the dash and a
+// note that collection runs through tweet-gas, so the portal
+// link is already in place.
+function renderXApiCredit() {
+  const wrap = document.getElementById("x-api-credit");
+  if (!wrap) {
+    return;
+  }
+  wrap.innerHTML = "";
+  const summary = xApiCreditSummary(
+    overviewState.detail,
+    overviewState.historyRows,
+  );
+  const box = document.createElement("div");
+  box.className = "total-box";
+  const label = document.createElement("div");
+  label.className = "total-label";
+  label.textContent = "X APIクレジット残高";
+  const value = document.createElement("div");
+  value.className = "total-value amount-value";
+  value.textContent = summary.balanceText;
+  box.appendChild(label);
+  box.appendChild(value);
+  if (summary.runwayText) {
+    const runway = document.createElement("div");
+    runway.className = "kpi-delta amount-value";
+    runway.textContent = summary.runwayText;
+    box.appendChild(runway);
+    // How the estimate was made, in plain words: it projects
+    // the balance's own recorded decrease, not a unit-price
+    // conversion of the post count.
+    const method = document.createElement("div");
+    method.className = "meta";
+    method.textContent = "目安は履歴に残った残高の減り方からの試算です";
+    box.appendChild(method);
+  }
+  if (summary.paceText) {
+    const pace = document.createElement("div");
+    pace.className = "meta amount-value";
+    pace.textContent = summary.paceText;
+    box.appendChild(pace);
+  }
+  if (summary.balance === null) {
+    const note = document.createElement("div");
+    note.className = "meta";
+    note.textContent = "残高は tweet-gas 経由で収集中です";
+    box.appendChild(note);
+  }
+  const linkLine = document.createElement("div");
+  linkLine.className = "meta";
+  const link = document.createElement("a");
+  link.href = "https://developer.x.com";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "X Developer Portal";
+  linkLine.appendChild(link);
+  box.appendChild(linkLine);
+  wrap.appendChild(box);
+}
+
 function renderX() {
   fillTotalBoxes("sns-x-totals", xTotals(overviewState.detail, overviewState.historyRows));
+  renderXApiCredit();
   xPostRows = xPosts(overviewState.detail);
   wireSortableTable("x-posts-table", xSort, renderXPosts);
   // Until the snapshot settles, the genre section and the
