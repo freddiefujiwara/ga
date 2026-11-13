@@ -84,10 +84,10 @@ describe("X shaping", () => {
     const boxes = Object.fromEntries(
       xTotals(detail, []).map((box) => [box.label, box.value]),
     );
-    expect(boxes["投稿数（取得分）"]).toBe("3");
+    expect(boxes["投稿数（直近50件）"]).toBe("3");
     // Only the posts with a view count feed the total / average.
-    expect(boxes["表示合計（取得分）"]).toBe("801");
-    expect(boxes["平均表示（取得分）"]).toBe("401");
+    expect(boxes["表示回数の合計（直近50件）"]).toBe("801");
+    expect(boxes["1投稿あたりの平均表示"]).toBe("401");
   });
 
   it("xTotals dashes everything while X is not collected yet", () => {
@@ -101,9 +101,9 @@ describe("X shaping", () => {
         window: null,
         windowLabel: null,
       },
-      { label: "投稿数（取得分）", value: "—" },
-      { label: "表示合計（取得分）", value: "—" },
-      { label: "平均表示（取得分）", value: "—" },
+      { label: "投稿数（直近50件）", value: "—" },
+      { label: "表示回数の合計（直近50件）", value: "—" },
+      { label: "1投稿あたりの平均表示", value: "—" },
     ]);
     expect(xTotals(null, null)[0].value).toBe("—");
   });
