@@ -1815,7 +1815,8 @@ function renderMediaTable() {
 }
 
 // Column-header sorting shared by the per-item tables (the
-// Instagram tab's 投稿ごと and the blog tab's 記事ごと): the
+// Instagram tab's 投稿ごと, the blog tab's 記事ごと and the
+// per-post / per-video tables of Threads, X and YouTube): the
 // first click on a header sorts descending by that column,
 // clicking the same header again flips the direction, and the
 // active header carries a ↓ / ↑ mark. `sortState` is the
@@ -1990,19 +1991,38 @@ function renderGenreTable(detail) {
   }
 }
 
+let youtubeVideoRows = [];
+// The video table starts sorted by views, most-watched first,
+// like the Instagram tab's media table.
+let youtubeSort = { key: "views", dir: "desc", wired: false };
+
 function renderYoutube(detail) {
   fillTotalBoxes(
     "sns-youtube-totals",
     youtubeTotals(detail, overviewState.historyRows),
   );
+  youtubeVideoRows = youtubeVideos(detail);
+  wireSortableTable("sns-youtube-table", youtubeSort, renderYoutubeVideos);
+  renderYoutubeVideos();
+}
+
+// Per-video table of the YouTube tab, the counterpart of the
+// other tabs' per-post tables: one row per recent video, with
+// the shared header-click sorting. Until the snapshot lands the
+// table carries the load state instead of its empty state.
+function renderYoutubeVideos() {
   const tbody = document.getElementById("sns-youtube-body");
   tbody.innerHTML = "";
-  const videos = youtubeVideos(detail);
+  const videos = sortMedia(
+    youtubeVideoRows,
+    youtubeSort.key,
+    youtubeSort.dir,
+  );
   if (!videos.length) {
     // No snapshot behind this render yet (the loader's initial
     // call, or its failure): the table carries the load state,
     // not the empty-table line.
-    if (detail == null && fillDetailPending(tbody)) {
+    if (fillDetailPending(tbody)) {
       return;
     }
     const tr = document.createElement("tr");
@@ -2011,6 +2031,7 @@ function renderYoutube(detail) {
     td.textContent = "データがありません";
     tr.appendChild(td);
     tbody.appendChild(tr);
+    updateSortHeaders("sns-youtube-table", youtubeSort);
     return;
   }
   for (const video of videos) {
@@ -2046,6 +2067,7 @@ function renderYoutube(detail) {
     }
     tbody.appendChild(tr);
   }
+  updateSortHeaders("sns-youtube-table", youtubeSort);
 }
 
 // The YouTube tab's subscriber trend, drawn from the same

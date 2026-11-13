@@ -1243,6 +1243,57 @@ describe("youtube and error notes", () => {
     expect(youtubeVideos({ youtube: { recent_videos: "x" } })).toEqual([]);
   });
 
+  it("sortMedia orders the video rows by the YouTube columns", () => {
+    const videos = [
+      {
+        id: "v1",
+        published_at: "2026-11-01T04:00:00Z",
+        views: 100,
+        likes: 5,
+        comments: 2,
+      },
+      {
+        id: "v2",
+        published_at: "2026-11-08T04:00:00Z",
+        views: 900,
+        likes: null,
+        comments: 9,
+      },
+      {
+        id: "v3",
+        published_at: "2026-11-05T04:00:00Z",
+        views: null,
+        likes: 40,
+        comments: 1,
+      },
+    ];
+    // The video table's initial order: views descending, a
+    // missing value sinking to the bottom.
+    expect(sortMedia(videos, "views", "desc").map((v) => v.id)).toEqual([
+      "v2",
+      "v1",
+      "v3",
+    ]);
+    expect(sortMedia(videos, "likes", "asc").map((v) => v.id)).toEqual([
+      "v1",
+      "v3",
+      "v2",
+    ]);
+    expect(sortMedia(videos, "comments", "desc").map((v) => v.id)).toEqual([
+      "v2",
+      "v1",
+      "v3",
+    ]);
+    expect(
+      sortMedia(videos, "published_at", "desc").map((v) => v.id),
+    ).toEqual(["v2", "v3", "v1"]);
+    expect(sortMedia(videos, "published_at", "asc").map((v) => v.id)).toEqual([
+      "v1",
+      "v3",
+      "v2",
+    ]);
+  });
+
   it("instagramThumbnailUrl passes a collected URL through and nulls junk", () => {
     expect(
       instagramThumbnailUrl({ thumbnail_url: "https://example.com/t.jpg" }),
