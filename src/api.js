@@ -1598,6 +1598,24 @@ export function pageSpeedRanking(response, titles, origin, limit = 10) {
     .slice(0, limit);
 }
 
+// The caption under the display-time ranking. The speed report
+// serves exactly one finished JST day (yesterday) from the
+// blog_speed tab and carries that day as `date` ("2026-11-13")
+// next to the rows, so the caption names the day the ranking
+// actually shows instead of implying a longer window; the
+// hour-cached payload can straddle midnight, when the day it
+// holds is no longer yesterday, which is why the served day
+// wins over a fixed "yesterday" wording. A response without a
+// usable date (a bridge that predates the field) falls back to
+// "昨日分", which is what the bridge serves by construction.
+export function blogSpeedCaption(response) {
+  const date =
+    response && response.ok && response.data ? response.data.date : null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  const day = m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : "昨日";
+  return `記事が表示されるまでの時間の、${day}分の平均です。表示された記録のある記事だけが並びます。`;
+}
+
 // --- Blog article tags (blog-gas titles payload) ---
 //
 // The blog API's lightweight titles payload ({ ids, titles, tags })
