@@ -10,9 +10,10 @@
 // Callers can ask for a y axis through options.yAxis: the chart
 // then gains light gridlines and round-numbered tick labels on
 // a data-following domain (see niceAxisScale), and the separate
-// max label is dropped — the ticks carry the scale. Only the
-// Instagram engagement trend uses it so far; the other charts
-// keep the zero-based, label-only treatment.
+// max label is dropped — the ticks carry the scale. The
+// Instagram engagement trend and the overview's combined
+// follower total use it; the other charts keep the zero-based,
+// label-only treatment.
 //
 // Callers can mark days through options.markedDays (a Map of
 // "YYYYMMDD" -> item count): a marked day gets a small triangle
