@@ -213,13 +213,26 @@ export function threadsHistorySeries(rows) {
 // per metric, in chip order. Every series is a rolling total
 // rather than a per-day count, so the chart plots the daily
 // latest value as-is (no moving average: smoothing a rolling
-// total would only blur the window's own movement). Only the
-// newest INSTAGRAM_TREND_DAYS days are plotted; the history
-// itself reaches back further, but a month of days is what the
-// 30-day totals are read against. The interaction breakdown
-// columns only arrive once social-gas serves them; until then
-// those series simply drop out and the chips offer the rest.
-export const INSTAGRAM_TREND_DAYS = 30;
+// total would only blur the window's own movement). The
+// interaction breakdown columns only arrive once social-gas
+// serves them; until then those series simply drop out and
+// the chips offer the rest.
+//
+// The plotted window follows the period chips: the renderer
+// asks for the newest `maxDays` daily points (or every point
+// for 全期間）. Only days the history actually holds can
+// appear — a longer window than the history simply shows the
+// days there are, never a stretched blank. social-gas serves
+// the newest ~275 days of collections, so every period below
+// is covered by the response.
+export const INSTAGRAM_TREND_PERIODS = [
+  { days: 30, label: "30日" },
+  { days: 90, label: "90日" },
+  { days: 180, label: "180日" },
+  { days: null, label: "全期間" },
+];
+
+export const INSTAGRAM_TREND_DEFAULT_DAYS = 90;
 
 export const INSTAGRAM_TREND_SERIES = [
   { key: "views_30d", label: "再生回数" },
@@ -231,8 +244,8 @@ export const INSTAGRAM_TREND_SERIES = [
   { key: "interactions_shares", label: "シェア" },
 ];
 
-export function instagramTrendSeries(rows) {
-  return shapeHistorySeries(rows, INSTAGRAM_TREND_SERIES, INSTAGRAM_TREND_DAYS);
+export function instagramTrendSeries(rows, maxDays = null) {
+  return shapeHistorySeries(rows, INSTAGRAM_TREND_SERIES, maxDays);
 }
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);

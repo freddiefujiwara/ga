@@ -198,5 +198,10 @@ describe("privacy wiring", () => {
     expect(css).toContain(
       ':root[data-private="on"] .chart-max-label:not(.is-public)',
     );
+    // The trend chart's y tick labels are raw counts too, so
+    // they hide under the same masking rule.
+    expect(css).toContain(
+      ':root[data-private="on"] .chart-y-label:not(.is-public)',
+    );
   });
 });

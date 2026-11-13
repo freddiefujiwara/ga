@@ -4,6 +4,8 @@ import {
   fetchSnsHistory,
   snsHistoryRows,
   snsHistorySeries,
+  INSTAGRAM_TREND_DEFAULT_DAYS,
+  INSTAGRAM_TREND_PERIODS,
   instagramTrendSeries,
   dailyLatestSeries,
   threadsHistorySeries,
@@ -358,7 +360,24 @@ describe("instagramTrendSeries", () => {
     expect(series.map((s) => s.key)).toEqual(["views_30d"]);
   });
 
-  it("keeps only the newest 30 days and dates the period by the slice", () => {
+  it("keeps only the newest maxDays days and dates the period by the slice", () => {
+    const rows = [];
+    for (let d = 0; d < 35; d += 1) {
+      rows.push({
+        collected_at: new Date(Date.UTC(2026, 9, 10 + d)).toISOString(),
+        views_30d: 1000 + d,
+      });
+    }
+    const series = instagramTrendSeries(rows, 30);
+    expect(series).toHaveLength(1);
+    expect(series[0].points).toHaveLength(30);
+    expect(series[0].points[0].views).toBe(1005);
+    expect(series[0].latest).toBe(1034);
+    expect(series[0].firstAt).toBe(rows[5].collected_at);
+    expect(series[0].lastAt).toBe(rows[34].collected_at);
+  });
+
+  it("without maxDays keeps every day the history holds （全期間）", () => {
     const rows = [];
     for (let d = 0; d < 35; d += 1) {
       rows.push({
@@ -368,11 +387,19 @@ describe("instagramTrendSeries", () => {
     }
     const series = instagramTrendSeries(rows);
     expect(series).toHaveLength(1);
-    expect(series[0].points).toHaveLength(30);
-    expect(series[0].points[0].views).toBe(1005);
-    expect(series[0].latest).toBe(1034);
-    expect(series[0].firstAt).toBe(rows[5].collected_at);
-    expect(series[0].lastAt).toBe(rows[34].collected_at);
+    expect(series[0].points).toHaveLength(35);
+    expect(series[0].points[0].views).toBe(1000);
+    expect(series[0].firstAt).toBe(rows[0].collected_at);
+  });
+
+  it("offers 30 / 90 / 180 days and all, defaulting to 90", () => {
+    expect(INSTAGRAM_TREND_PERIODS).toEqual([
+      { days: 30, label: "30日" },
+      { days: 90, label: "90日" },
+      { days: 180, label: "180日" },
+      { days: null, label: "全期間" },
+    ]);
+    expect(INSTAGRAM_TREND_DEFAULT_DAYS).toBe(90);
   });
 
   it("empty or junk history yields no series (the empty state)", () => {

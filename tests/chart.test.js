@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildLineChartSvg,
   buildFollowChartSvg,
+  formatAxisValue,
   formatDateLabel,
   formatDateFull,
+  niceAxisScale,
   tooltipText,
   tickIndices,
 } from "../src/chart.js";
@@ -129,6 +131,111 @@ describe("buildLineChartSvg", () => {
     expect(svg).toContain('class="chart-max-label"');
     expect(svg).not.toContain("is-public");
     expect(svg).toContain("最大 42");
+  });
+
+  it("draws a y axis with gridlines and round tick labels on request", () => {
+    const svg = buildLineChartSvg(
+      [
+        { date: "20261109", views: 480000 },
+        { date: "20261110", views: 520000 },
+        { date: "20261111", views: 550000 },
+      ],
+      { yAxis: true },
+    );
+    const count = (needle) => svg.split(needle).length - 1;
+    // Five ticks (48万..56万), each with a gridline and a label.
+    expect(count('class="chart-gridline"')).toBe(5);
+    expect(count('class="chart-y-label"')).toBe(5);
+    expect(svg).toContain(">48万</text>");
+    expect(svg).toContain(">56万</text>");
+    // The ticks carry the scale, so the max label is dropped,
+    // and the labels never carry the public exemption.
+    expect(svg).not.toContain("chart-max-label");
+    expect(svg).not.toContain("最大");
+    expect(svg).not.toContain("is-public");
+  });
+
+  it("scales the y axis to the data, not to zero", () => {
+    // Domain 48万..56万 widened by 4%: the lowest point sits
+    // above the plot's bottom edge (default height 196, bottom
+    // inner edge y = 196 - 46 = 150) instead of on it.
+    const svg = buildLineChartSvg(
+      [
+        { date: "20261109", views: 480000 },
+        { date: "20261110", views: 550000 },
+      ],
+      { yAxis: true },
+    );
+    const firstPoint = svg.match(/<circle cx="([\d.]+)" cy="([\d.]+)"/);
+    expect(Number(firstPoint[2])).toBeLessThan(150);
+    expect(Number(firstPoint[2])).toBeGreaterThan(24);
+  });
+
+  it("keeps the zero-based chart without the yAxis option", () => {
+    const svg = buildLineChartSvg([
+      { date: "20261109", views: 480000 },
+      { date: "20261110", views: 550000 },
+    ]);
+    expect(svg).not.toContain("chart-gridline");
+    expect(svg).not.toContain("chart-y-label");
+    expect(svg).toContain("最大 550000");
+  });
+
+  it("draws the y axis for a single point", () => {
+    const svg = buildLineChartSvg([{ date: "20261109", views: 500 }], {
+      yAxis: true,
+    });
+    expect(svg).toContain('class="chart-gridline"');
+    expect(svg).toContain('class="chart-y-label"');
+    expect(svg).toContain("<polyline");
+  });
+});
+
+describe("niceAxisScale", () => {
+  it("snaps the domain outward to round steps", () => {
+    expect(niceAxisScale(480000, 550000)).toEqual({
+      lo: 480000,
+      hi: 560000,
+      ticks: [480000, 500000, 520000, 540000, 560000],
+    });
+    expect(niceAxisScale(100, 175)).toEqual({
+      lo: 100,
+      hi: 180,
+      ticks: [100, 120, 140, 160, 180],
+    });
+  });
+
+  it("never starts below zero for non-negative data", () => {
+    const scale = niceAxisScale(3, 40);
+    expect(scale.lo).toBe(0);
+    expect(scale.ticks[0]).toBe(0);
+  });
+
+  it("expands a flat range so a single value still scales", () => {
+    const scale = niceAxisScale(500, 500);
+    expect(scale.lo).toBeLessThan(500);
+    expect(scale.hi).toBeGreaterThan(500);
+    expect(scale.ticks.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("rejects unusable ranges", () => {
+    expect(niceAxisScale(Number.NaN, 10)).toBeNull();
+    expect(niceAxisScale(10, 5)).toBeNull();
+  });
+});
+
+describe("formatAxisValue", () => {
+  it("writes large counts in 万 units", () => {
+    expect(formatAxisValue(480000)).toBe("48万");
+    expect(formatAxisValue(10000)).toBe("1万");
+    expect(formatAxisValue(125000)).toBe("12.5万");
+  });
+
+  it("groups smaller counts and trims fractions", () => {
+    expect(formatAxisValue(4400)).toBe("4,400");
+    expect(formatAxisValue(142)).toBe("142");
+    expect(formatAxisValue(0)).toBe("0");
+    expect(formatAxisValue(0.5)).toBe("0.5");
   });
 });
 

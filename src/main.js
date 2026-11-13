@@ -29,6 +29,8 @@ import {
   dataAsOfText,
   snsHistoryRows,
   snsHistorySeries,
+  INSTAGRAM_TREND_DEFAULT_DAYS,
+  INSTAGRAM_TREND_PERIODS,
   instagramTrendSeries,
   threadsHistorySeries,
   threadsTotals,
@@ -2671,16 +2673,22 @@ function renderFollowChart(detail) {
 // --- Instagram engagement trend （推移） ---
 // The last-30-days account metrics (views, reach, the
 // interaction total and its breakdown) as daily line charts,
-// one metric at a time behind the chips. The series come from
-// the history rows, so — like the YouTube trend — renderSns
-// and loadSnsHistory both call this, and whichever load lands
-// second completes the section. The metrics are Meta's rolling
-// 30-day totals, so the points are the days' latest values
-// plotted as-is. None of these figures is published anywhere,
-// so the latest value masks like any raw count (the chart's
-// max label hides under masking through the shared CSS).
+// one metric at a time behind the chips, over a period the
+// second chip row picks (30日 / 90日 / 180日 / 全期間, 90日
+// by default). The series come from the history rows, so —
+// like the YouTube trend — renderSns and loadSnsHistory both
+// call this, and whichever load lands second completes the
+// section. The metrics are Meta's rolling 30-day totals, so
+// the points are the days' latest values plotted as-is. The
+// chart carries a y axis whose domain follows the data (a
+// zero baseline would flatten these large totals' movement);
+// its tick labels are raw counts, so — like the latest value
+// here — they hide under masking through the shared CSS.
+// Only days the history actually holds are plotted: a period
+// longer than the history shows the days there are.
 
 let instagramTrendKey = "views_30d";
+let instagramTrendDays = INSTAGRAM_TREND_DEFAULT_DAYS;
 
 function renderInstagramTrend() {
   const wrap = document.getElementById("instagram-trend");
@@ -2690,7 +2698,10 @@ function renderInstagramTrend() {
     return;
   }
   wrap.innerHTML = "";
-  const series = instagramTrendSeries(overviewState.historyRows);
+  const series = instagramTrendSeries(
+    overviewState.historyRows,
+    instagramTrendDays,
+  );
   if (!series.length) {
     const p = document.createElement("p");
     p.className = "meta";
@@ -2721,6 +2732,26 @@ function renderInstagramTrend() {
     chips.appendChild(btn);
   }
   wrap.appendChild(chips);
+  const periodChips = document.createElement("div");
+  periodChips.className = "tabs genre-filter";
+  periodChips.setAttribute("role", "tablist");
+  periodChips.setAttribute("aria-label", "推移の期間");
+  for (const period of INSTAGRAM_TREND_PERIODS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-button genre-filter-button";
+    const isActive = period.days === instagramTrendDays;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", String(isActive));
+    btn.textContent = period.label;
+    btn.addEventListener("click", () => {
+      instagramTrendDays = period.days;
+      renderInstagramTrend();
+    });
+    periodChips.appendChild(btn);
+  }
+  wrap.appendChild(periodChips);
   const head = document.createElement("p");
   head.className = "meta";
   head.append(
@@ -2730,7 +2761,10 @@ function renderInstagramTrend() {
   );
   const chart = document.createElement("div");
   chart.className = "chart-wrap";
-  chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+  chart.innerHTML = buildLineChartSvg(item.points, {
+    label: item.label,
+    yAxis: true,
+  });
   wrap.appendChild(head);
   wrap.appendChild(chart);
 }
