@@ -3061,7 +3061,20 @@ function renderSnsHistory(response) {
     );
     const chart = document.createElement("div");
     chart.className = "chart-wrap";
-    chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+    // The combined follower total carries the same y axis as
+    // the Instagram engagement trend: it is the overview's
+    // headline trend, and its day-to-day movement (a few dozen
+    // followers on a four-thousand base) disappears on a
+    // zero-based scale. The axis follows the Instagram
+    // treatment exactly — data-following domain, round ticks,
+    // tick labels masked like the other raw counts (the head
+    // line's latest value above stays the published, exempt
+    // figure). The section's other two series keep the plain
+    // max-label treatment.
+    chart.innerHTML = buildLineChartSvg(item.points, {
+      label: item.label,
+      yAxis: item.key === "total_followers",
+    });
     wrap.appendChild(head);
     wrap.appendChild(chart);
   }

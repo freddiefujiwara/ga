@@ -364,6 +364,141 @@ describe("dashboard load states (runtime)", () => {
     vi.unstubAllGlobals();
   });
 
+  it("draws the y axis on the overview's follower trend only", async () => {
+    vi.resetModules();
+    document.documentElement.innerHTML = html
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<!doctype html>/i, "");
+    const payload = Buffer.from(
+      JSON.stringify({ email: "owner@example.com" }),
+    ).toString("base64url");
+    localStorage.setItem("ga-google-id-token", `x.${payload}.y`);
+
+    const fetchStub = vi.fn(async (url) => {
+      const text = String(url);
+      if (text.includes("o=rss")) {
+        return {
+          ok: true,
+          text: async () =>
+            `<rss><channel><item><title>${ARTICLE_TITLE}</title>` +
+            `<link>https://freddiefujiwara.com/blog/${ARTICLE_ID}</link></item></channel></rss>`,
+        };
+      }
+      if (text.includes("o=titles")) {
+        return jsonResponse({
+          titles: { [ARTICLE_ID]: ARTICLE_TITLE },
+          tags: { [ARTICLE_ID]: ["川口"] },
+        });
+      }
+      const params = new URL(text).searchParams;
+      if (params.get("action") === "sns_detail") {
+        return jsonResponse({
+          ok: true,
+          collected_at: "2026-11-13T01:00:00Z",
+          instagram: {
+            freddiefujiwara: 2030,
+            media_count: 2420,
+            follows_30d: 487,
+            unfollows_30d: 61,
+          },
+          youtube: {},
+          threads: {},
+          x: {},
+        });
+      }
+      if (params.get("action") === "sns_history") {
+        // Three JST days carrying all three overview series.
+        return jsonResponse({
+          ok: true,
+          rows: [
+            {
+              collected_at: "2026-11-11T01:00:00Z",
+              total_followers: 4100,
+              views_30d: 480000,
+              media_count: 2400,
+            },
+            {
+              collected_at: "2026-11-12T01:00:00Z",
+              total_followers: 4120,
+              views_30d: 500000,
+              media_count: 2410,
+            },
+            {
+              collected_at: "2026-11-13T01:00:00Z",
+              total_followers: 4131,
+              views_30d: 493952,
+              media_count: 2420,
+            },
+          ],
+        });
+      }
+      const dimensions = params.get("dimensions");
+      const metrics = params.get("metrics") || "";
+      if (metrics.includes("customEvent:render_ms")) {
+        return report([]);
+      }
+      if (dimensions === "date") {
+        return report([row(["20261110"], ["42"])]);
+      }
+      if (dimensions === "sessionDefaultChannelGroup") {
+        return report([row(["Organic Search"], ["77"])]);
+      }
+      if (dimensions === "") {
+        return jsonResponse({
+          ok: true,
+          data: {
+            rows: [
+              {
+                metricValues: [
+                  { value: "1000" },
+                  { value: "100" },
+                  { value: "120" },
+                ],
+              },
+            ],
+          },
+        });
+      }
+      // The page-rows report.
+      return report([row([`/blog/${ARTICLE_ID}`], ["123"])]);
+    });
+    vi.stubGlobal("fetch", fetchStub);
+
+    await import("../src/main.js");
+    await until(() => document.getElementById("dashboard").hidden === false);
+    const historyEl = document.getElementById("sns-history");
+    await until(() => historyEl.querySelectorAll("svg").length === 3);
+
+    // The three overview trend charts, in series order. Only
+    // the combined follower total carries the y axis — the
+    // Instagram trend's treatment: gridlines plus round tick
+    // labels on a data-following domain (4,100..4,140 here),
+    // and no separate max label. The tick labels are raw
+    // counts, so they never carry the public exemption; the
+    // head line's latest value keeps it.
+    const svgs = historyEl.querySelectorAll(".chart-wrap svg");
+    const total = svgs[0];
+    expect(total.querySelectorAll(".chart-gridline").length).toBe(5);
+    expect(total.querySelectorAll(".chart-y-label").length).toBe(5);
+    expect(total.querySelector(".chart-y-label").textContent).toBe("4,100");
+    expect(total.querySelector(".chart-max-label")).toBeNull();
+    expect(total.querySelector(".chart-y-label.is-public")).toBeNull();
+    const totalHead = historyEl.querySelector("p.meta");
+    expect(totalHead.textContent).toContain("SNS延べフォロワー数");
+    expect(
+      totalHead.querySelector(".amount-value.is-public"),
+    ).not.toBeNull();
+
+    // The section's other two series keep the zero-based,
+    // max-label treatment.
+    for (const svg of [svgs[1], svgs[2]]) {
+      expect(svg.querySelectorAll(".chart-gridline")).toHaveLength(0);
+      expect(svg.querySelectorAll(".chart-y-label")).toHaveLength(0);
+      expect(svg.querySelector(".chart-max-label")).not.toBeNull();
+    }
+    vi.unstubAllGlobals();
+  });
+
   it("ends failed sections on the failure line, not the loading line", async () => {
     vi.resetModules();
     document.documentElement.innerHTML = html
