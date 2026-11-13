@@ -257,15 +257,15 @@
               <div id="youtube-history"></div>
               <h3 class="subsection-title">動画ごと</h3>
               <div class="table-scroll">
-                <table class="data-table">
+                <table class="data-table" id="sns-youtube-table">
                   <thead>
                     <tr>
                       <th aria-label="サムネイル"></th>
                       <th>タイトル</th>
-                      <th>公開日</th>
-                      <th class="num">再生回数</th>
-                      <th class="num">いいね</th>
-                      <th class="num">コメント</th>
+                      <th class="sortable" data-sort-key="published_at">公開日</th>
+                      <th class="num sortable" data-sort-key="views">再生回数</th>
+                      <th class="num sortable" data-sort-key="likes">いいね</th>
+                      <th class="num sortable" data-sort-key="comments">コメント</th>
                     </tr>
                   </thead>
                   <tbody id="sns-youtube-body"></tbody>
