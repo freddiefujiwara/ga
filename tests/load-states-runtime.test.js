@@ -407,7 +407,9 @@ describe("dashboard load states (runtime)", () => {
         });
       }
       if (params.get("action") === "sns_history") {
-        // Three JST days carrying all three overview series.
+        // Three JST days of history rows. The rows carry the
+        // Instagram-only columns as well; the overview trend
+        // charts only the combined total.
         return jsonResponse({
           ok: true,
           rows: [
@@ -467,15 +469,16 @@ describe("dashboard load states (runtime)", () => {
     await import("../src/main.js");
     await until(() => document.getElementById("dashboard").hidden === false);
     const historyEl = document.getElementById("sns-history");
-    await until(() => historyEl.querySelectorAll("svg").length === 3);
+    await until(() => historyEl.querySelectorAll("svg").length === 1);
 
-    // The three overview trend charts, in series order. Only
-    // the combined follower total carries the y axis — the
-    // Instagram trend's treatment: gridlines plus round tick
-    // labels on a data-following domain (4,100..4,140 here),
-    // and no separate max label. The tick labels are raw
-    // counts, so they never carry the public exemption; the
-    // head line's latest value keeps it.
+    // The overview trend's single chart: the combined follower
+    // total, which carries the y axis — the Instagram trend's
+    // treatment: gridlines plus round tick labels on a
+    // data-following domain (4,100..4,140 here), and no
+    // separate max label. The tick labels are raw counts, so
+    // they never carry the public exemption; the head line's
+    // latest value keeps it. The Instagram-only series
+    // （再生回数・投稿数） are not charted here at all.
     const svgs = historyEl.querySelectorAll(".chart-wrap svg");
     const total = svgs[0];
     expect(total.querySelectorAll(".chart-gridline").length).toBe(5);
@@ -488,14 +491,7 @@ describe("dashboard load states (runtime)", () => {
     expect(
       totalHead.querySelector(".amount-value.is-public"),
     ).not.toBeNull();
-
-    // The section's other two series keep the zero-based,
-    // max-label treatment.
-    for (const svg of [svgs[1], svgs[2]]) {
-      expect(svg.querySelectorAll(".chart-gridline")).toHaveLength(0);
-      expect(svg.querySelectorAll(".chart-y-label")).toHaveLength(0);
-      expect(svg.querySelector(".chart-max-label")).not.toBeNull();
-    }
+    expect(historyEl.querySelectorAll("p.meta")).toHaveLength(1);
     vi.unstubAllGlobals();
   });
 
