@@ -142,8 +142,10 @@ export function dailyLatestSeries(points) {
 // with no numeric point at all are dropped, and an empty history
 // yields an empty list.
 // Shared shaping behind snsHistorySeries / threadsHistorySeries:
-// one chart series per { key, label } definition.
-function shapeHistorySeries(rows, defs) {
+// one chart series per { key, label } definition. A caller that
+// only wants the recent window passes maxDays and keeps the last
+// that many daily points (the stated period follows the slice).
+function shapeHistorySeries(rows, defs, maxDays = null) {
   if (!Array.isArray(rows)) {
     return [];
   }
@@ -174,7 +176,8 @@ function shapeHistorySeries(rows, defs) {
       if (!entries.length) {
         return null;
       }
-      const daily = dailyLatestSeries(entries);
+      const allDaily = dailyLatestSeries(entries);
+      const daily = maxDays ? allDaily.slice(-maxDays) : allDaily;
       const points = daily.map(({ date, views }) => ({ date, views }));
       return {
         key,
@@ -202,6 +205,34 @@ export function threadsHistorySeries(rows) {
   return shapeHistorySeries(rows, [
     { key: "threads_followers", label: "Threads フォロワー" },
   ]);
+}
+
+// The Instagram tab's engagement trend: the account metrics
+// Meta reports as rolling last-30-days totals — views, reach
+// and the interaction total with its breakdown — one series
+// per metric, in chip order. Every series is a rolling total
+// rather than a per-day count, so the chart plots the daily
+// latest value as-is (no moving average: smoothing a rolling
+// total would only blur the window's own movement). Only the
+// newest INSTAGRAM_TREND_DAYS days are plotted; the history
+// itself reaches back further, but a month of days is what the
+// 30-day totals are read against. The interaction breakdown
+// columns only arrive once social-gas serves them; until then
+// those series simply drop out and the chips offer the rest.
+export const INSTAGRAM_TREND_DAYS = 30;
+
+export const INSTAGRAM_TREND_SERIES = [
+  { key: "views_30d", label: "再生回数" },
+  { key: "reach_30d", label: "リーチ" },
+  { key: "interactions_total", label: "反応合計" },
+  { key: "interactions_likes", label: "いいね" },
+  { key: "interactions_comments", label: "コメント" },
+  { key: "interactions_saves", label: "保存" },
+  { key: "interactions_shares", label: "シェア" },
+];
+
+export function instagramTrendSeries(rows) {
+  return shapeHistorySeries(rows, INSTAGRAM_TREND_SERIES, INSTAGRAM_TREND_DAYS);
 }
 
 const isNum = (value) => typeof value === "number" && Number.isFinite(value);
