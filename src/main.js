@@ -19,6 +19,7 @@ import {
   fetchArticleTitles,
   pageRanking,
   pageSpeedRanking,
+  blogSpeedCaption,
   fetchBlogMeta,
   mergeBlogTitles,
   blogArticlesByDate,
@@ -790,6 +791,12 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
               : `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件）`;
           li.appendChild(span);
           speedList.appendChild(li);
+        }
+        // The ranking shows one finished day, not a 28-day
+        // window: the caption names the day the report served.
+        const speedCaption = document.getElementById("speed-caption");
+        if (speedCaption) {
+          speedCaption.textContent = blogSpeedCaption(speed);
         }
         document.getElementById("speed-section").hidden = false;
       })

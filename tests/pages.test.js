@@ -5,6 +5,7 @@ import {
   canonicalPageKey,
   pageRanking,
   pageSpeedRanking,
+  blogSpeedCaption,
   mergeBlogTitles,
   blogArticleDateKey,
   blogArticlesByDate,
@@ -295,6 +296,28 @@ describe("pageSpeedRanking", () => {
     ).toEqual([]);
     expect(pageSpeedRanking(null, titles, origin, 10)).toEqual([]);
     expect(pageSpeedRanking({ ok: false }, titles, origin, 10)).toEqual([]);
+  });
+});
+
+describe("blogSpeedCaption", () => {
+  it("names the day the speed report served", () => {
+    expect(blogSpeedCaption({ ok: true, data: { date: "2026-11-13" } })).toBe(
+      "記事が表示されるまでの時間の、2026年11月13日分の平均です。表示された記録のある記事だけが並びます。",
+    );
+    expect(blogSpeedCaption({ ok: true, data: { date: "2026-01-05" } })).toBe(
+      "記事が表示されるまでの時間の、2026年1月5日分の平均です。表示された記録のある記事だけが並びます。",
+    );
+  });
+
+  it("falls back to yesterday when the report carries no usable date", () => {
+    const fallback =
+      "記事が表示されるまでの時間の、昨日分の平均です。表示された記録のある記事だけが並びます。";
+    expect(blogSpeedCaption({ ok: true, data: { rows: [] } })).toBe(fallback);
+    expect(blogSpeedCaption({ ok: true, data: { date: "13/11/2026" } })).toBe(
+      fallback,
+    );
+    expect(blogSpeedCaption({ ok: false })).toBe(fallback);
+    expect(blogSpeedCaption(null)).toBe(fallback);
   });
 });
 
