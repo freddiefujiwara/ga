@@ -104,11 +104,14 @@ export function jstDateKey(iso) {
   return jstDayKeyFormat.format(date).replace(/-/g, "");
 }
 
-// The three trend series of the SNS section, in display order.
+// The overview trend's series: only the combined follower
+// total, the one cross-channel figure in the history rows.
+// The Instagram-only columns the rows also carry (views_30d,
+// media_count) are not charted here: the views trend already
+// lives on the Instagram tab, and Instagram's own numbers
+// belong to that tab, not the cross-channel overview.
 export const SNS_HISTORY_SERIES = [
   { key: "total_followers", label: "SNS延べフォロワー数" },
-  { key: "views_30d", label: "再生回数（過去30日）" },
-  { key: "media_count", label: "投稿数" },
 ];
 
 // Collapse a chronological point list to one point per calendar

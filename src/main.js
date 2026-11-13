@@ -3104,8 +3104,7 @@ function renderSnsHistory(response) {
     // treatment exactly — data-following domain, round ticks,
     // tick labels masked like the other raw counts (the head
     // line's latest value above stays the published, exempt
-    // figure). The section's other two series keep the plain
-    // max-label treatment.
+    // figure).
     chart.innerHTML = buildLineChartSvg(item.points, {
       label: item.label,
       yAxis: item.key === "total_followers",

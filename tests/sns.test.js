@@ -219,30 +219,24 @@ describe("sns history series", () => {
     expect(jstDateKey("not-a-date")).toBeNull();
   });
 
-  it("shapes rows into the three chart series, skipping missing values", () => {
+  it("shapes rows into the combined-follower series only", () => {
     const series = snsHistorySeries(ROWS);
-    expect(series.map((s) => s.key)).toEqual([
-      "total_followers",
-      "views_30d",
-      "media_count",
-    ]);
+    // The rows also carry the Instagram-only views_30d and
+    // media_count columns, but the overview trend charts just
+    // the cross-channel total; those two live on the
+    // Instagram tab instead.
+    expect(series.map((s) => s.key)).toEqual(["total_followers"]);
     const followers = series[0];
     expect(followers.label).toBe("SNS延べフォロワー数");
-    // All three rows fall on the same JST day, so each series
-    // collapses to that day's last value.
+    // All three rows fall on the same JST day, so the series
+    // collapses to that day's last value; the null in the
+    // third row is skipped, not zero-filled.
     expect(followers.points).toEqual([{ date: "20261109", views: 2005 }]);
     expect(followers.latest).toBe(2005);
     // The period follows the plotted points: the first and last
     // daily points both come from the 10:00 JST collection here.
     expect(followers.firstAt).toBe("2026-11-09T01:00:00.000Z");
     expect(followers.lastAt).toBe("2026-11-09T01:00:00.000Z");
-    // The null in the middle row is skipped, not zero-filled.
-    expect(series[1].points).toEqual([{ date: "20261109", views: 580000 }]);
-    expect(series[1].latest).toBe(580000);
-    expect(series[1].firstAt).toBe("2026-11-09T07:00:00.000Z");
-    expect(series[1].lastAt).toBe("2026-11-09T07:00:00.000Z");
-    expect(series[2].points).toEqual([{ date: "20261109", views: 2421 }]);
-    expect(series[2].latest).toBe(2421);
   });
 
   it("sorts out-of-order rows and drops series without any number", () => {
