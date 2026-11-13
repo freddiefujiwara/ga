@@ -29,6 +29,7 @@ import {
   dataAsOfText,
   snsHistoryRows,
   snsHistorySeries,
+  instagramTrendSeries,
   threadsHistorySeries,
   threadsTotals,
   threadsInteractions,
@@ -2667,6 +2668,73 @@ function renderFollowChart(detail) {
   }
 }
 
+// --- Instagram engagement trend （推移） ---
+// The last-30-days account metrics (views, reach, the
+// interaction total and its breakdown) as daily line charts,
+// one metric at a time behind the chips. The series come from
+// the history rows, so — like the YouTube trend — renderSns
+// and loadSnsHistory both call this, and whichever load lands
+// second completes the section. The metrics are Meta's rolling
+// 30-day totals, so the points are the days' latest values
+// plotted as-is. None of these figures is published anywhere,
+// so the latest value masks like any raw count (the chart's
+// max label hides under masking through the shared CSS).
+
+let instagramTrendKey = "views_30d";
+
+function renderInstagramTrend() {
+  const wrap = document.getElementById("instagram-trend");
+  // Until the history load settles, the wrap carries its load
+  // state rather than the "no history yet" line.
+  if (fillHistoryPending(wrap)) {
+    return;
+  }
+  wrap.innerHTML = "";
+  const series = instagramTrendSeries(overviewState.historyRows);
+  if (!series.length) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = "履歴はまだありません（取得のたびに貯まっていきます）";
+    wrap.appendChild(p);
+    return;
+  }
+  const item =
+    series.find((entry) => entry.key === instagramTrendKey) ?? series[0];
+  instagramTrendKey = item.key;
+  const chips = document.createElement("div");
+  chips.className = "tabs genre-filter";
+  chips.setAttribute("role", "tablist");
+  chips.setAttribute("aria-label", "推移の指標");
+  for (const entry of series) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "tab-button genre-filter-button";
+    const isActive = entry.key === instagramTrendKey;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-selected", String(isActive));
+    btn.textContent = entry.label;
+    btn.addEventListener("click", () => {
+      instagramTrendKey = entry.key;
+      renderInstagramTrend();
+    });
+    chips.appendChild(btn);
+  }
+  wrap.appendChild(chips);
+  const head = document.createElement("p");
+  head.className = "meta";
+  head.append(
+    `${item.label}（過去30日）：最新 `,
+    countSpan(item.latest),
+    `（${formatJstDateTime(item.firstAt)} 〜 ${formatJstDateTime(item.lastAt)}）`,
+  );
+  const chart = document.createElement("div");
+  chart.className = "chart-wrap";
+  chart.innerHTML = buildLineChartSvg(item.points, { label: item.label });
+  wrap.appendChild(head);
+  wrap.appendChild(chart);
+}
+
 // The Instagram tab's KPI row. The フォロー / フォロー解除
 // cards carry a 前日比 taken from the history rows, so the row
 // renders from the shared state and loadSnsHistory re-renders
@@ -2701,6 +2769,7 @@ function renderSns(detail) {
     ? `取得時刻: ${formatJstDateTime(detail.collected_at)}`
     : "";
   renderInstagramTotals();
+  renderInstagramTrend();
   fillTotalBoxes("sns-interactions", snsInteractions(detail));
   const bars = document.getElementById("sns-age-gender");
   bars.innerHTML = "";
@@ -2927,6 +2996,7 @@ async function loadSnsHistory(historyPromise) {
   // when the history settles.
   renderYoutube(overviewState.detail);
   renderInstagramTotals();
+  renderInstagramTrend();
   renderYoutubeHistory();
   renderThreads();
   renderX();

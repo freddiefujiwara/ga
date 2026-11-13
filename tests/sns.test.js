@@ -4,6 +4,7 @@ import {
   fetchSnsHistory,
   snsHistoryRows,
   snsHistorySeries,
+  instagramTrendSeries,
   dailyLatestSeries,
   threadsHistorySeries,
   threadsTotals,
@@ -289,6 +290,95 @@ describe("sns history series", () => {
         { collected_at: "2026-11-09T00:00:00.000Z", total_followers: null },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("instagramTrendSeries", () => {
+  const TREND_ROWS = [
+    {
+      collected_at: "2026-11-08T16:00:00.000Z",
+      views_30d: 570000,
+      reach_30d: 150000,
+      interactions_total: 8500,
+      interactions_likes: 6300,
+      interactions_comments: 170,
+      interactions_shares: 330,
+      interactions_saves: 1190,
+    },
+    {
+      collected_at: "2026-11-09T01:00:00.000Z",
+      views_30d: 580000,
+      reach_30d: null,
+      interactions_total: 8600,
+      interactions_likes: 6400,
+      interactions_comments: 175,
+      interactions_shares: 335,
+      interactions_saves: 1200,
+    },
+  ];
+
+  it("shapes the seven engagement series in chip order, daily-collapsed", () => {
+    const series = instagramTrendSeries(TREND_ROWS);
+    expect(series.map((s) => s.key)).toEqual([
+      "views_30d",
+      "reach_30d",
+      "interactions_total",
+      "interactions_likes",
+      "interactions_comments",
+      "interactions_saves",
+      "interactions_shares",
+    ]);
+    expect(series.map((s) => s.label)).toEqual([
+      "再生回数",
+      "リーチ",
+      "反応合計",
+      "いいね",
+      "コメント",
+      "保存",
+      "シェア",
+    ]);
+    // Both rows fall on JST 2026-11-09, so each series collapses
+    // to that day's last value.
+    const views = series[0];
+    expect(views.points).toEqual([{ date: "20261109", views: 580000 }]);
+    expect(views.latest).toBe(580000);
+    expect(views.firstAt).toBe("2026-11-09T01:00:00.000Z");
+    expect(views.lastAt).toBe("2026-11-09T01:00:00.000Z");
+    // The null reach in the later row is skipped, so the day's
+    // point is the earlier collection's value.
+    expect(series[1].points).toEqual([{ date: "20261109", views: 150000 }]);
+    expect(series[1].firstAt).toBe("2026-11-08T16:00:00.000Z");
+    expect(series[6].latest).toBe(335);
+  });
+
+  it("drops a metric the history never carries (older GAS responses)", () => {
+    const series = instagramTrendSeries([
+      { collected_at: "2026-11-09T01:00:00.000Z", views_30d: 580000 },
+    ]);
+    expect(series.map((s) => s.key)).toEqual(["views_30d"]);
+  });
+
+  it("keeps only the newest 30 days and dates the period by the slice", () => {
+    const rows = [];
+    for (let d = 0; d < 35; d += 1) {
+      rows.push({
+        collected_at: new Date(Date.UTC(2026, 9, 10 + d)).toISOString(),
+        views_30d: 1000 + d,
+      });
+    }
+    const series = instagramTrendSeries(rows);
+    expect(series).toHaveLength(1);
+    expect(series[0].points).toHaveLength(30);
+    expect(series[0].points[0].views).toBe(1005);
+    expect(series[0].latest).toBe(1034);
+    expect(series[0].firstAt).toBe(rows[5].collected_at);
+    expect(series[0].lastAt).toBe(rows[34].collected_at);
+  });
+
+  it("empty or junk history yields no series (the empty state)", () => {
+    expect(instagramTrendSeries([])).toEqual([]);
+    expect(instagramTrendSeries(null)).toEqual([]);
+    expect(instagramTrendSeries("nope")).toEqual([]);
   });
 });
 
