@@ -800,9 +800,11 @@ export function xHistorySeries(rows) {
 // compare. X has no account-wide 30-day totals in the
 // collection (the API tweet-gas reads reports per-post numbers
 // only), so the rest of the row is summed from the fetched
-// posts themselves and labelled 取得分: the post count, their
-// combined views and the per-post average — the average that
-// otherwise only appears inside the genre section.
+// posts themselves and labelled with the scope they cover —
+// the newest 50 posts, the delivery cap on both sides of the
+// sheet: the post count, their combined views and the
+// per-post average — the average that otherwise only appears
+// inside the genre section.
 export function xTotals(detail, historyRows) {
   const x = detail?.x ?? {};
   const change = historyDailyDelta(historyRows, "x_followers");
@@ -816,10 +818,10 @@ export function xTotals(detail, historyRows) {
     // X reports no follow / unfollow split either, so the
     // follower card itself carries the changes.
     followerTotalBox("フォロワー", x.followers, change, growth),
-    { label: "投稿数（取得分）", value: formatCount(posts.length || null) },
-    { label: "表示合計（取得分）", value: formatCount(totalViews) },
+    { label: "投稿数（直近50件）", value: formatCount(posts.length || null) },
+    { label: "表示回数の合計（直近50件）", value: formatCount(totalViews) },
     {
-      label: "平均表示（取得分）",
+      label: "1投稿あたりの平均表示",
       value: formatCount(
         totalViews === null ? null : Math.round(totalViews / viewed.length),
       ),
