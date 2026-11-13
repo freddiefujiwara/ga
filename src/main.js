@@ -117,6 +117,7 @@ import {
   clearSavedShareToken,
 } from "./session.js";
 import { isStagingBuild, showStagingBanner } from "./staging-banner.js";
+import { createAutoRefresher } from "./auto-refresh.js";
 import {
   SECTION_LOADING_TEXT,
   SECTION_FAILED_TEXT,
@@ -462,6 +463,11 @@ async function loadDashboard() {
     metaPromise,
     speedPromise,
   );
+  // The dashboard is up: keep its SNS data current while the
+  // page stays open (see the auto-refresh section below).
+  // start() is a no-op when the schedule is already running,
+  // so a later sign-in needs no guard here.
+  snsAutoRefresher.start();
   return true;
 }
 
@@ -3099,14 +3105,34 @@ async function loadSnsHistory(historyPromise) {
   } catch {
     failed = true;
   }
-  overviewState.historyRows = snsHistoryRows(failed ? null : response);
+  if (!failed) {
+    applySnsHistory(response);
+    return;
+  }
+  overviewState.historyRows = snsHistoryRows(null);
   overviewState.historySettled = true;
   overviewState.historyFailed = failed;
-  if (failed) {
-    setSectionFailed(historyEl);
-  } else {
-    renderSnsHistory(response);
-  }
+  setSectionFailed(historyEl);
+  renderOverview();
+  renderYoutube(overviewState.detail);
+  renderInstagramTotals();
+  renderInstagramTrend();
+  renderYoutubeHistory();
+  renderThreads();
+  renderX();
+}
+
+// Lands a fetched history response on the shared state and
+// re-renders everything the rows feed: the overview trend and
+// KPI deltas, and the channel totals that read the history
+// (the YouTube subscriber change card among them). Shared by
+// the initial load above and the auto-refresh below, so the two
+// paths can never drift apart.
+function applySnsHistory(response) {
+  overviewState.historyRows = snsHistoryRows(response);
+  overviewState.historySettled = true;
+  overviewState.historyFailed = false;
+  renderSnsHistory(response);
   renderOverview();
   // The YouTube totals now read the history too (the subscriber
   // change card), so they re-render with the other channel tabs
@@ -3118,6 +3144,68 @@ async function loadSnsHistory(historyPromise) {
   renderThreads();
   renderX();
 }
+
+// --- Auto-refresh ---
+// While the dashboard stays open, the SNS snapshot and history
+// are re-fetched every ten minutes (see auto-refresh.js), so a
+// new hourly collection appears without a manual reload. Only
+// the SNS data is re-fetched: it is what the hourly collection
+// updates, and the GA/blog sections keep the figures they
+// loaded with. A refresh that fails — or answers without ok —
+// leaves the current display exactly as it is and simply lets
+// the next cycle try again; the loading and failure states of
+// the initial loads never reappear here.
+//
+// The tab selection lives in the URL and the renderers rebuild
+// in place, so the open tab and the scroll position survive a
+// refresh. Selections held in module state — the Instagram
+// trend's metric and period chips, the genre sections' period
+// and sort, the Threads / X genre filters, every table's sort —
+// are read back by the renderers and survive as well. The one
+// exception is the Instagram per-post genre filter: renderSns
+// resets it on every fresh snapshot by design, so it is saved
+// and restored around the render (and dropped when the new
+// snapshot no longer carries that genre).
+
+async function refreshSnsData() {
+  const detailPromise = fetchSnsDetail(CONFIG.GAS_ENDPOINT, auth());
+  detailPromise.catch(() => {});
+  const historyPromise = fetchSnsHistory(CONFIG.GAS_ENDPOINT, auth());
+  historyPromise.catch(() => {});
+  let detail = null;
+  try {
+    detail = await detailPromise;
+  } catch {
+    detail = null;
+  }
+  if (detail && detail.ok) {
+    const keepGenreFilter = snsGenreFilter;
+    renderSns(detail);
+    if (
+      keepGenreFilter !== null &&
+      mediaGenreOptions(snsMediaRows).some(
+        (option) => option.genre === keepGenreFilter,
+      )
+    ) {
+      snsGenreFilter = keepGenreFilter;
+      renderMediaGenreTabs();
+      renderMediaTable();
+    }
+  }
+  let history = null;
+  try {
+    history = await historyPromise;
+  } catch {
+    history = null;
+  }
+  if (history && history.ok) {
+    applySnsHistory(history);
+  }
+}
+
+const snsAutoRefresher = createAutoRefresher({
+  onRefresh: refreshSnsData,
+});
 
 // --- Daily chart tooltip (hover on PC, tap on touch) ---
 
@@ -3218,6 +3306,7 @@ function initGoogleSignIn() {
 
 logoutBtn.addEventListener("click", () => {
   const endingSession = sessionToken;
+  snsAutoRefresher.stop();
   sessionToken = null;
   shareToken = null;
   renderPrivacy();
