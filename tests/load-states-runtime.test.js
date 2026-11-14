@@ -148,9 +148,6 @@ describe("dashboard load states (runtime)", () => {
     expect(document.getElementById("total-articles").textContent).toBe(
       "読み込み中…",
     );
-    expect(document.getElementById("top-pages").textContent).toContain(
-      "読み込み中…",
-    );
     expect(document.getElementById("sns-history").textContent).toContain(
       "読み込み中…",
     );
@@ -229,9 +226,10 @@ describe("dashboard load states (runtime)", () => {
       );
     }
     expect(articleCells[0].classList.contains("amount-value")).toBe(false);
-    expect(document.getElementById("top-pages").textContent).toContain(
-      ARTICLE_TITLE,
-    );
+    // The removed sections stay removed: no page-ranking list
+    // and no display-time ranking in the blog tab.
+    expect(document.getElementById("top-pages")).toBeNull();
+    expect(document.getElementById("speed-section")).toBeNull();
     expect(document.getElementById("blog-genres").textContent).toContain(
       "川口",
     );
@@ -616,9 +614,6 @@ describe("dashboard load states (runtime)", () => {
       document
         .getElementById("blog-article-body")
         .textContent.includes("取得できませんでした"),
-    );
-    expect(document.getElementById("top-pages").textContent).toContain(
-      "取得できませんでした",
     );
     expect(document.getElementById("blog-genres").textContent).toContain(
       "取得できませんでした",
