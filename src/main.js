@@ -25,6 +25,7 @@ import {
   blogArticlesByDate,
   blogGenreStats,
   blogArticleList,
+  blogScrollMap,
   fetchSnsDetail,
   fetchSnsHistory,
   dataAsOfText,
@@ -405,6 +406,19 @@ async function loadDashboard() {
     limit: 250,
   });
   speedPromise.catch(() => {});
+  // Per-article scroll-depth reach counts (the percent_scrolled
+  // event's 25/50/75/100 milestones) for the 記事ごと table's
+  // depth columns. Served by the bridge from GA like the other
+  // reports; until social-gas collects the dimension the report
+  // answers with no rows and the columns stay "—", so a
+  // rejection here must never break the blog tab either — the
+  // catch is attached up front, like the speed report's.
+  const scrollPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
+    dimensions: "pagePath,customEvent:percent_scrolled",
+    metrics: "eventCount",
+    limit: 250,
+  });
+  scrollPromise.catch(() => {});
   const sourcesPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     dimensions: "sessionDefaultChannelGroup",
     limit: 8,
@@ -463,6 +477,7 @@ async function loadDashboard() {
     titlesPromise,
     metaPromise,
     speedPromise,
+    scrollPromise,
   );
   // The dashboard is up: keep its SNS data current while the
   // page stays open (see the auto-refresh section below).
@@ -501,6 +516,7 @@ function loadBlogSections(
   titlesPromise,
   metaPromise,
   speedPromise,
+  scrollPromise,
 ) {
   const dailyChartEl = document.getElementById("daily-chart");
   const sourcesEl = document.getElementById("top-sources");
@@ -570,7 +586,7 @@ function loadBlogSections(
       renderRanking("top-sources", sources, 8);
     })
     .catch(() => setSectionFailed(sourcesEl));
-  fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise);
+  fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise, scrollPromise);
 }
 
 // --- Blog daily chart (日ごとの表示回数と公開した記事) ---
@@ -708,7 +724,7 @@ function settleBlogPagesFailed() {
 // and the per-article table. They share one input set — the GA
 // page rows plus the two title sources — so they land together,
 // when the slowest of the three arrives.
-async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise) {
+async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise, scrollPromise) {
   let pages;
   let rssTitles;
   let meta;
@@ -806,7 +822,20 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
   // renders only when the map actually arrived; blogGenreStats
   // returns nothing without one and the section says why instead.
   renderBlogGenres(pages, meta, titles);
-  renderBlogArticles(pages, meta, titles);
+  // The scroll-depth map rides its own report, awaited only
+  // here, where the per-article table is built: it has been in
+  // flight since loadDashboard started it, and any failure
+  // (the promise carries an up-front catch) simply leaves the
+  // depth columns empty rather than failing the page sections.
+  let scrollMap = new Map();
+  if (scrollPromise) {
+    try {
+      scrollMap = blogScrollMap(await scrollPromise);
+    } catch {
+      scrollMap = new Map();
+    }
+  }
+  renderBlogArticles(pages, meta, titles, scrollMap);
   // The blog KPI row gains the article count and the per-article
   // average over the same article list the 記事ごと table shows;
   // the boxes leave their pending state (the masking class comes
@@ -1123,14 +1152,28 @@ function renderBlogArticleTable() {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 3;
+    td.colSpan = 9;
     td.textContent = "データがありません";
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
   }
+  // A numeric cell of the depth / completion columns. Like the
+  // view count beside it, every figure here is a last-28-days
+  // GA number no public page prints, so the cell masks the
+  // same way; a figure the collection does not have shows "—".
+  const depthCell = (value, format) => {
+    const td = document.createElement("td");
+    td.className = "num amount-value";
+    td.textContent = format(value);
+    return td;
+  };
   for (const article of rows) {
     const tr = document.createElement("tr");
+    const publishedTd = document.createElement("td");
+    publishedTd.className = "nowrap";
+    publishedTd.textContent = article.published ?? "—";
+    tr.appendChild(publishedTd);
     const titleTd = document.createElement("td");
     const link = document.createElement("a");
     link.href = article.href;
@@ -1151,12 +1194,21 @@ function renderBlogArticleTable() {
     viewsTd.className = "num amount-value";
     viewsTd.textContent = formatCount(article.views);
     tr.appendChild(viewsTd);
+    tr.appendChild(depthCell(article.scroll25, formatCount));
+    tr.appendChild(depthCell(article.scroll50, formatCount));
+    tr.appendChild(depthCell(article.scroll75, formatCount));
+    tr.appendChild(depthCell(article.scroll100, formatCount));
+    tr.appendChild(
+      depthCell(article.completion, (value) =>
+        value === null || value === undefined ? "—" : `${value.toFixed(1)}%`,
+      ),
+    );
     tbody.appendChild(tr);
   }
   updateSortHeaders("blog-article-table", blogArticleSort);
 }
 
-function renderBlogArticles(pagesResponse, meta, rssTitles) {
+function renderBlogArticles(pagesResponse, meta, rssTitles, scrollMap) {
   // The RSS titles win; the titles payload fills any gap — the
   // same merge the genre rollup makes.
   const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
@@ -1165,6 +1217,7 @@ function renderBlogArticles(pagesResponse, meta, rssTitles) {
     meta ? meta.tags : null,
     titles,
     CONFIG.SITE_ORIGIN,
+    scrollMap,
   );
   const articleRangeEl = document.getElementById("blog-article-range");
   articleRangeEl.textContent = "";

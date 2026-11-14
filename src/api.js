@@ -1810,28 +1810,99 @@ export function blogGenreStats(response, tags, titles, origin) {
     .sort((a, b) => b.totalViews - a.totalViews || b.count - a.count);
 }
 
+// The scroll-depth milestones the blog's percent_scrolled
+// event reports, paired with the row field each one lands in.
+const SCROLL_DEPTH_STEPS = [
+  [25, "scroll25"],
+  [50, "scroll50"],
+  [75, "scroll75"],
+  [100, "scroll100"],
+];
+
+// Per-article scroll-depth reach counts from the
+// percent_scrolled report (rows of pagePath x percent x
+// eventCount): a Map of article id -> { scroll25, scroll50,
+// scroll75, scroll100 }, each the number of article displays
+// that scrolled at least that far in the GA window. Split
+// article paths merge under the canonical key exactly like
+// articlePageViews, and the same article + milestone sums.
+// An article only appears when at least one of its displays
+// reported a milestone — nobody scrolling leaves the article
+// absent, not zero. Milestones outside the known four are
+// ignored.
+export function blogScrollMap(response) {
+  const merged = new Map();
+  for (const row of rowsOf(response)) {
+    const percent = Number(row.dimensionValues?.[1]?.value);
+    const step = SCROLL_DEPTH_STEPS.find(([value]) => value === percent);
+    if (!step) {
+      continue;
+    }
+    const key = canonicalPageKey(row.dimensionValues[0].value);
+    const match = ARTICLE_KEY_PATTERN.exec(key);
+    if (!match) {
+      continue;
+    }
+    const count = Number(row.metricValues?.[0]?.value) || 0;
+    let entry = merged.get(match[1]);
+    if (!entry) {
+      entry = { scroll25: 0, scroll50: 0, scroll75: 0, scroll100: 0 };
+      merged.set(match[1], entry);
+    }
+    entry[step[1]] += count;
+  }
+  return merged;
+}
+
 // Per-article rows for the blog tab's 記事ごと table, the blog
 // counterpart of the Instagram tab's per-post table:
-// [{ id, title, href, views, tags }] sorted by views, biggest
-// first (title order breaks ties). Views are the same merged
-// per-article counts blogGenreStats rolls up, so the two sections
-// always agree. `tags` is the article's genre list under the
-// rollup's convention: the tag map's list when it has one, and
-// [UNTAGGED_LABEL] when the map exists but does not cover the
-// article. When there is no tag map at all, tags is empty — the
-// genre is unknown, not "untagged" — and the caller shows "—"
-// and offers no genre filter.
-export function blogArticleList(response, tags, titles, origin) {
+// [{ id, title, href, views, tags, published, scroll25,
+// scroll50, scroll75, scroll100, completion }] sorted by views,
+// biggest first (title order breaks ties). Views are the same
+// merged per-article counts blogGenreStats rolls up, so the two
+// sections always agree. `tags` is the article's genre list
+// under the rollup's convention: the tag map's list when it has
+// one, and [UNTAGGED_LABEL] when the map exists but does not
+// cover the article. When there is no tag map at all, tags is
+// empty — the genre is unknown, not "untagged" — and the caller
+// shows "—" and offers no genre filter. `published` is the
+// article's publication day ("YYYY-MM-DD") read off the title's
+// leading date (blogArticleDateKey), null when the title carries
+// none. The four scroll fields and `completion` (the 100% reach
+// as a percentage of the article's views, one decimal) come from
+// the optional scroll-depth map (blogScrollMap): an article the
+// map does not cover — or no map at all — keeps them null, and
+// the caller renders "—".
+export function blogArticleList(response, tags, titles, origin, scrollMap) {
   const hasMap = Boolean(tags) && typeof tags.get === "function" && tags.size > 0;
+  const hasScroll =
+    Boolean(scrollMap) && typeof scrollMap.get === "function";
   return articlePageViews(response)
     .map(({ id, views }) => {
       const own = hasMap ? tags.get(id) : null;
+      const title = (titles && titles.get(id)) || id;
+      const dateKey = blogArticleDateKey(title);
+      const depth = hasScroll ? scrollMap.get(id) : null;
+      const depthValue = (field) =>
+        depth && isNum(depth[field]) ? depth[field] : null;
+      const scroll100 = depthValue("scroll100");
       return {
         id,
-        title: (titles && titles.get(id)) || id,
+        title,
         href: `${origin}/blog/${id}`,
         views,
         tags: !hasMap ? [] : Array.isArray(own) && own.length ? [...own] : [UNTAGGED_LABEL],
+        published: dateKey
+          ? `${dateKey.slice(0, 4)}-${dateKey.slice(4, 6)}-${dateKey.slice(6, 8)}`
+          : null,
+        scroll25: depthValue("scroll25"),
+        scroll50: depthValue("scroll50"),
+        scroll75: depthValue("scroll75"),
+        scroll100,
+        completion:
+          scroll100 !== null && views > 0
+            ? Math.round((scroll100 / views) * 1000) / 10
+            : null,
       };
     })
     .sort((a, b) => b.views - a.views || a.title.localeCompare(b.title));
