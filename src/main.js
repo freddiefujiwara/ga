@@ -26,6 +26,7 @@ import {
   blogGenreStats,
   blogArticleList,
   blogScrollMap,
+  blogSpeedMap,
   fetchSnsDetail,
   fetchSnsHistory,
   dataAsOfText,
@@ -835,7 +836,22 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
       scrollMap = new Map();
     }
   }
-  renderBlogArticles(pages, meta, titles, scrollMap);
+  // The display-time columns join from the same speed report
+  // the ranking above renders (no second fetch): the promise
+  // has been in flight since loadDashboard and carries an
+  // up-front catch, so a failure simply leaves the two columns
+  // empty. Its window is the one finished day the ranking
+  // shows, not the table's 28 days — the caption under the
+  // table says so.
+  let speedMap = new Map();
+  if (speedPromise) {
+    try {
+      speedMap = blogSpeedMap(await speedPromise);
+    } catch {
+      speedMap = new Map();
+    }
+  }
+  renderBlogArticles(pages, meta, titles, scrollMap, speedMap);
   // The blog KPI row gains the article count and the per-article
   // average over the same article list the 記事ごと table shows;
   // the boxes leave their pending state (the masking class comes
@@ -1152,16 +1168,16 @@ function renderBlogArticleTable() {
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 9;
+    td.colSpan = 11;
     td.textContent = "データがありません";
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
   }
-  // A numeric cell of the depth / completion columns. Like the
-  // view count beside it, every figure here is a last-28-days
-  // GA number no public page prints, so the cell masks the
-  // same way; a figure the collection does not have shows "—".
+  // A numeric cell of the speed / depth / completion columns.
+  // Like the view count beside it, every figure here is a GA
+  // number no public page prints, so the cell masks the same
+  // way; a figure the collection does not have shows "—".
   const depthCell = (value, format) => {
     const td = document.createElement("td");
     td.className = "num amount-value";
@@ -1194,6 +1210,17 @@ function renderBlogArticleTable() {
     viewsTd.className = "num amount-value";
     viewsTd.textContent = formatCount(article.views);
     tr.appendChild(viewsTd);
+    // The display-time pair: the day's average in seconds (one
+    // decimal, the ranking's format) and how many of the day's
+    // displays took ten seconds or more. Both are blog figures
+    // like the view count, so they mask through the same cell
+    // helper as the depth columns.
+    tr.appendChild(
+      depthCell(article.avgSpeedSec, (value) =>
+        value === null || value === undefined ? "—" : value.toFixed(1),
+      ),
+    );
+    tr.appendChild(depthCell(article.slowCount, formatCount));
     tr.appendChild(depthCell(article.scroll25, formatCount));
     tr.appendChild(depthCell(article.scroll50, formatCount));
     tr.appendChild(depthCell(article.scroll75, formatCount));
@@ -1208,7 +1235,7 @@ function renderBlogArticleTable() {
   updateSortHeaders("blog-article-table", blogArticleSort);
 }
 
-function renderBlogArticles(pagesResponse, meta, rssTitles, scrollMap) {
+function renderBlogArticles(pagesResponse, meta, rssTitles, scrollMap, speedMap) {
   // The RSS titles win; the titles payload fills any gap — the
   // same merge the genre rollup makes.
   const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
@@ -1218,6 +1245,7 @@ function renderBlogArticles(pagesResponse, meta, rssTitles, scrollMap) {
     titles,
     CONFIG.SITE_ORIGIN,
     scrollMap,
+    speedMap,
   );
   const articleRangeEl = document.getElementById("blog-article-range");
   articleRangeEl.textContent = "";

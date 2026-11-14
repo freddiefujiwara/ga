@@ -1601,6 +1601,49 @@ export function pageSpeedRanking(response, titles, origin, limit = 10) {
     .slice(0, limit);
 }
 
+// Per-article display times from the same speed report
+// pageSpeedRanking reads, as a Map of article id ->
+// { avgMs, samples, slow }: split article paths merge under
+// the canonical key with totals, samples and slow counts
+// summed, exactly like the ranking — but nothing is cut to a
+// top-N, so the per-article table can join every article the
+// report covers. The average follows the ranking's rounding
+// (whole milliseconds). Articles with no recorded display are
+// absent from the report and stay absent here. The report
+// covers one finished day (see blogSpeedCaption), unlike the
+// 28-day window the table's other columns use.
+export function blogSpeedMap(response) {
+  const merged = new Map();
+  for (const row of rowsOf(response)) {
+    const total = Number(row.metricValues?.[0]?.value) || 0;
+    const samples = Number(row.metricValues?.[1]?.value) || 0;
+    if (!samples) {
+      continue;
+    }
+    const slow = Number(row.metricValues?.[2]?.value) || 0;
+    const key = canonicalPageKey(row.dimensionValues[0].value);
+    const match = ARTICLE_KEY_PATTERN.exec(key);
+    if (!match) {
+      continue;
+    }
+    const entry = merged.get(match[1]) || { total: 0, samples: 0, slow: 0 };
+    entry.total += total;
+    entry.samples += samples;
+    entry.slow += slow;
+    merged.set(match[1], entry);
+  }
+  return new Map(
+    [...merged.entries()].map(([id, entry]) => [
+      id,
+      {
+        avgMs: Math.round(entry.total / entry.samples),
+        samples: entry.samples,
+        slow: entry.slow,
+      },
+    ]),
+  );
+}
+
 // The caption under the display-time ranking. The speed report
 // serves exactly one finished JST day (yesterday) from the
 // blog_speed tab and carries that day as `date` ("2026-11-13")
@@ -1857,7 +1900,8 @@ export function blogScrollMap(response) {
 // Per-article rows for the blog tab's 記事ごと table, the blog
 // counterpart of the Instagram tab's per-post table:
 // [{ id, title, href, views, tags, published, scroll25,
-// scroll50, scroll75, scroll100, completion }] sorted by views,
+// scroll50, scroll75, scroll100, completion, avgSpeedSec,
+// slowCount }] sorted by views,
 // biggest first (title order breaks ties). Views are the same
 // merged per-article counts blogGenreStats rolls up, so the two
 // sections always agree. `tags` is the article's genre list
@@ -1872,11 +1916,17 @@ export function blogScrollMap(response) {
 // as a percentage of the article's views, one decimal) come from
 // the optional scroll-depth map (blogScrollMap): an article the
 // map does not cover — or no map at all — keeps them null, and
-// the caller renders "—".
-export function blogArticleList(response, tags, titles, origin, scrollMap) {
+// the caller renders "—". `avgSpeedSec` (the article's average
+// display time in seconds) and `slowCount` (how many of its
+// displays took ten seconds or more) come from the optional
+// speed map (blogSpeedMap) under the same convention — null
+// when uncovered. Note the window differs: the speed map is
+// one finished day, not the 28 days the other figures cover.
+export function blogArticleList(response, tags, titles, origin, scrollMap, speedMap) {
   const hasMap = Boolean(tags) && typeof tags.get === "function" && tags.size > 0;
   const hasScroll =
     Boolean(scrollMap) && typeof scrollMap.get === "function";
+  const hasSpeed = Boolean(speedMap) && typeof speedMap.get === "function";
   return articlePageViews(response)
     .map(({ id, views }) => {
       const own = hasMap ? tags.get(id) : null;
@@ -1886,6 +1936,7 @@ export function blogArticleList(response, tags, titles, origin, scrollMap) {
       const depthValue = (field) =>
         depth && isNum(depth[field]) ? depth[field] : null;
       const scroll100 = depthValue("scroll100");
+      const speed = hasSpeed ? speedMap.get(id) : null;
       return {
         id,
         title,
@@ -1903,6 +1954,9 @@ export function blogArticleList(response, tags, titles, origin, scrollMap) {
           scroll100 !== null && views > 0
             ? Math.round((scroll100 / views) * 1000) / 10
             : null,
+        avgSpeedSec:
+          speed && isNum(speed.avgMs) ? speed.avgMs / 1000 : null,
+        slowCount: speed && isNum(speed.slow) ? speed.slow : null,
       };
     })
     .sort((a, b) => b.views - a.views || a.title.localeCompare(b.title));

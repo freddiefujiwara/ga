@@ -7,6 +7,7 @@ import {
   blogGenreStats,
   blogArticleList,
   blogScrollMap,
+  blogSpeedMap,
   UNTAGGED_LABEL,
 } from "../src/api.js";
 import { articleGenreOptions, sortGenreRows } from "../src/genres.js";
@@ -241,6 +242,8 @@ describe("blogArticleList", () => {
     scroll75: null,
     scroll100: null,
     completion: null,
+    avgSpeedSec: null,
+    slowCount: null,
   };
 
   it("lists every viewed article with title, link, views and tags, biggest first", () => {
@@ -320,6 +323,22 @@ describe("blogArticleList", () => {
       scroll75: null,
       scroll100: null,
       completion: null,
+    });
+  });
+
+  it("joins the speed map into seconds and slow counts", () => {
+    const speed = new Map([
+      [ID_UNNEI, { avgMs: 12345, samples: 10, slow: 3 }],
+    ]);
+    const rows = blogArticleList(pages, TAGS, TITLES, ORIGIN, null, speed);
+    expect(rows.find((r) => r.id === ID_UNNEI)).toMatchObject({
+      avgSpeedSec: 12.345,
+      slowCount: 3,
+    });
+    // An article the map does not cover keeps both fields null.
+    expect(rows.find((r) => r.id === ID_MULTI)).toMatchObject({
+      avgSpeedSec: null,
+      slowCount: null,
     });
   });
 
@@ -436,5 +455,65 @@ describe("blogScrollMap", () => {
     expect(blogScrollMap(null).size).toBe(0);
     expect(blogScrollMap({ ok: false }).size).toBe(0);
     expect(blogScrollMap(response([])).size).toBe(0);
+  });
+});
+
+describe("blogSpeedMap", () => {
+  const speedRow = (path, total, samples, slow) => ({
+    dimensionValues: [{ value: path }],
+    metricValues: [
+      { value: String(total) },
+      { value: String(samples) },
+      ...(slow === undefined ? [] : [{ value: String(slow) }]),
+    ],
+  });
+
+  it("builds the per-article speed map with the ranking's average", () => {
+    const map = blogSpeedMap(
+      response([
+        speedRow(`/blog/${ID_UNNEI}`, 25000, 10, 3),
+        speedRow(`/blog/${ID_CHINESE}`, 4000, 4, 0),
+      ]),
+    );
+    expect(map.get(ID_UNNEI)).toEqual({ avgMs: 2500, samples: 10, slow: 3 });
+    expect(map.get(ID_CHINESE)).toEqual({ avgMs: 1000, samples: 4, slow: 0 });
+    expect(map.has(ID_MULTI)).toBe(false);
+  });
+
+  it("merges split article paths, summing totals, samples and slow counts", () => {
+    const map = blogSpeedMap(
+      response([
+        speedRow(`/${ID_UNNEI}`, 10000, 2, 1),
+        speedRow(`/blog/${ID_UNNEI}`, 20000, 3, 2),
+      ]),
+    );
+    // (10000 + 20000) / (2 + 3) = 6000ms across the merged forms.
+    expect(map.get(ID_UNNEI)).toEqual({ avgMs: 6000, samples: 5, slow: 3 });
+  });
+
+  it("skips non-article pages and rows without samples", () => {
+    const map = blogSpeedMap(
+      response([
+        speedRow("/", 90000, 90, 9),
+        speedRow("/list-of-stuff/", 5000, 5, 1),
+        speedRow(`/blog/${ID_UNNEI}`, 0, 0, 0),
+        speedRow(`/blog/${ID_CHINESE}`, 3000, 3, 1),
+      ]),
+    );
+    expect(map.size).toBe(1);
+    expect(map.get(ID_CHINESE)).toEqual({ avgMs: 1000, samples: 3, slow: 1 });
+  });
+
+  it("reads a report without the slow-count value as zero slow", () => {
+    const map = blogSpeedMap(
+      response([speedRow(`/blog/${ID_UNNEI}`, 8000, 2, undefined)]),
+    );
+    expect(map.get(ID_UNNEI)).toEqual({ avgMs: 4000, samples: 2, slow: 0 });
+  });
+
+  it("returns an empty map for a missing response", () => {
+    expect(blogSpeedMap(null).size).toBe(0);
+    expect(blogSpeedMap({ ok: false }).size).toBe(0);
+    expect(blogSpeedMap(response([])).size).toBe(0);
   });
 });
