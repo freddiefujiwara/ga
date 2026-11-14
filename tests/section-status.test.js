@@ -105,7 +105,7 @@ describe("main.js section-state wiring", () => {
     const sections = fnBody("function loadBlogSections(");
     expect(sections).toContain("speedPromise");
     expect(sections).toContain(
-      "fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise)",
+      "fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise, scrollPromise)",
     );
   });
 

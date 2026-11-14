@@ -233,15 +233,21 @@
                 <table class="data-table" id="blog-article-table">
                   <thead>
                     <tr>
+                      <th class="sortable" data-sort-key="published">公開日</th>
                       <th class="sortable" data-sort-key="title">タイトル</th>
                       <th>ジャンル</th>
                       <th class="num sortable" data-sort-key="views">表示回数</th>
+                      <th class="num sortable" data-sort-key="scroll25">25%到達</th>
+                      <th class="num sortable" data-sort-key="scroll50">50%到達</th>
+                      <th class="num sortable" data-sort-key="scroll75">75%到達</th>
+                      <th class="num sortable" data-sort-key="scroll100">100%到達</th>
+                      <th class="num sortable" data-sort-key="completion">読了率</th>
                     </tr>
                   </thead>
                   <tbody id="blog-article-body"></tbody>
                 </table>
               </div>
-              <p class="meta">ジャンルは記事のタグです。タグが複数ある記事は、それぞれのジャンルの絞り込みに現れます。</p>
+              <p class="meta">ジャンルは記事のタグです。タグが複数ある記事は、それぞれのジャンルの絞り込みに現れます。25%到達などの深度は、記事を開いてどこまでスクロールしたかの到達数です（直近28日間、計測できた記事のみ）。読了率は、100%まで読んだ回数 ÷ 表示回数です。</p>
             </section>
             <section class="table-wrap">
               <h2 class="section-title">参照元 上位8件</h2>

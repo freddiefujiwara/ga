@@ -6,6 +6,7 @@ import {
   articlePageViews,
   blogGenreStats,
   blogArticleList,
+  blogScrollMap,
   UNTAGGED_LABEL,
 } from "../src/api.js";
 import { articleGenreOptions, sortGenreRows } from "../src/genres.js";
@@ -230,6 +231,18 @@ describe("blogArticleList", () => {
     row("/", 999),
   ]);
 
+  // The fields beyond title / views / tags: no title here leads
+  // with a date and no scroll map is passed, so every row's
+  // published and depth fields are null.
+  const noDepth = {
+    published: null,
+    scroll25: null,
+    scroll50: null,
+    scroll75: null,
+    scroll100: null,
+    completion: null,
+  };
+
   it("lists every viewed article with title, link, views and tags, biggest first", () => {
     expect(blogArticleList(pages, TAGS, TITLES, ORIGIN)).toEqual([
       {
@@ -238,6 +251,7 @@ describe("blogArticleList", () => {
         href: `${ORIGIN}/blog/${ID_UNNEI}`,
         views: 100,
         tags: ["運営"],
+        ...noDepth,
       },
       {
         id: ID_MULTI,
@@ -245,6 +259,7 @@ describe("blogArticleList", () => {
         href: `${ORIGIN}/blog/${ID_MULTI}`,
         views: 60,
         tags: ["運営", "技術"],
+        ...noDepth,
       },
       {
         id: ID_CHINESE,
@@ -252,6 +267,7 @@ describe("blogArticleList", () => {
         href: `${ORIGIN}/blog/${ID_CHINESE}`,
         views: 45,
         tags: ["中国語"],
+        ...noDepth,
       },
       {
         id: ID_KAWAGUCHI,
@@ -259,6 +275,7 @@ describe("blogArticleList", () => {
         href: `${ORIGIN}/blog/${ID_KAWAGUCHI}`,
         views: 40,
         tags: ["川口"],
+        ...noDepth,
       },
       {
         id: ID_UNTAGGED,
@@ -266,8 +283,53 @@ describe("blogArticleList", () => {
         href: `${ORIGIN}/blog/${ID_UNTAGGED}`,
         views: 10,
         tags: [UNTAGGED_LABEL],
+        ...noDepth,
       },
     ]);
+  });
+
+  it("reads the publication day off the title's leading date", () => {
+    const dated = new Map(TITLES);
+    dated.set(ID_UNNEI, "2026-11-07 ブログ運営の裏側：運用費の話");
+    dated.set(ID_MULTI, "2026-13-40 ありえない日付の記事");
+    const rows = blogArticleList(pages, TAGS, dated, ORIGIN);
+    expect(rows.find((r) => r.id === ID_UNNEI).published).toBe("2026-11-07");
+    expect(rows.find((r) => r.id === ID_MULTI).published).toBeNull();
+    expect(rows.find((r) => r.id === ID_CHINESE).published).toBeNull();
+  });
+
+  it("joins the scroll-depth map and derives the completion rate", () => {
+    const scroll = new Map([
+      [ID_UNNEI, { scroll25: 80, scroll50: 60, scroll75: 40, scroll100: 25 }],
+    ]);
+    const rows = blogArticleList(pages, TAGS, TITLES, ORIGIN, scroll);
+    const unnei = rows.find((r) => r.id === ID_UNNEI);
+    expect(unnei).toMatchObject({
+      scroll25: 80,
+      scroll50: 60,
+      scroll75: 40,
+      scroll100: 25,
+      // 25 of 100 views reached the end: 25.0%.
+      completion: 25,
+    });
+    // An article the map does not cover keeps its depth null.
+    const multi = rows.find((r) => r.id === ID_MULTI);
+    expect(multi).toMatchObject({
+      scroll25: null,
+      scroll50: null,
+      scroll75: null,
+      scroll100: null,
+      completion: null,
+    });
+  });
+
+  it("rounds the completion rate to one decimal", () => {
+    const scroll = new Map([
+      [ID_CHINESE, { scroll25: 30, scroll50: 20, scroll75: 12, scroll100: 7 }],
+    ]);
+    const rows = blogArticleList(pages, TAGS, TITLES, ORIGIN, scroll);
+    // 7 of 45 views: 15.555…% -> 15.6%.
+    expect(rows.find((r) => r.id === ID_CHINESE).completion).toBe(15.6);
   });
 
   it("merges split article paths into one row, like the rollup", () => {
@@ -306,5 +368,73 @@ describe("blogArticleList", () => {
       (row) => ({ genre: row.tag, count: row.count }),
     );
     expect(options).toEqual(fromRollup);
+  });
+});
+
+describe("blogScrollMap", () => {
+  const scrollRow = (path, percent, count) => ({
+    dimensionValues: [{ value: path }, { value: String(percent) }],
+    metricValues: [{ value: String(count) }],
+  });
+
+  it("builds the per-article depth map from the percent_scrolled rows", () => {
+    const map = blogScrollMap(
+      response([
+        scrollRow(`/blog/${ID_UNNEI}`, 25, 80),
+        scrollRow(`/blog/${ID_UNNEI}`, 50, 60),
+        scrollRow(`/blog/${ID_UNNEI}`, 75, 40),
+        scrollRow(`/blog/${ID_UNNEI}`, 100, 25),
+        scrollRow(`/blog/${ID_CHINESE}`, 25, 30),
+      ]),
+    );
+    expect(map.get(ID_UNNEI)).toEqual({
+      scroll25: 80,
+      scroll50: 60,
+      scroll75: 40,
+      scroll100: 25,
+    });
+    // Milestones a report does not carry read as zero reach,
+    // not as missing: the article was measured.
+    expect(map.get(ID_CHINESE)).toEqual({
+      scroll25: 30,
+      scroll50: 0,
+      scroll75: 0,
+      scroll100: 0,
+    });
+    expect(map.has(ID_MULTI)).toBe(false);
+  });
+
+  it("merges split article paths and sums the same milestone", () => {
+    const map = blogScrollMap(
+      response([
+        scrollRow(`/${ID_UNNEI}`, 25, 30),
+        scrollRow(`/blog/${ID_UNNEI}`, 25, 12),
+      ]),
+    );
+    expect(map.get(ID_UNNEI).scroll25).toBe(42);
+  });
+
+  it("skips non-article pages and unknown milestones", () => {
+    const map = blogScrollMap(
+      response([
+        scrollRow("/", 25, 900),
+        scrollRow("/list-of-stuff/", 50, 200),
+        scrollRow(`/blog/${ID_UNNEI}`, 10, 5),
+        scrollRow(`/blog/${ID_UNNEI}`, 25, 7),
+      ]),
+    );
+    expect(map.size).toBe(1);
+    expect(map.get(ID_UNNEI)).toEqual({
+      scroll25: 7,
+      scroll50: 0,
+      scroll75: 0,
+      scroll100: 0,
+    });
+  });
+
+  it("returns an empty map for a missing response", () => {
+    expect(blogScrollMap(null).size).toBe(0);
+    expect(blogScrollMap({ ok: false }).size).toBe(0);
+    expect(blogScrollMap(response([])).size).toBe(0);
   });
 });

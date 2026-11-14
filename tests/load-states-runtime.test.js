@@ -94,6 +94,14 @@ describe("dashboard load states (runtime)", () => {
       if (metrics.includes("customEvent:render_ms")) {
         return report([]);
       }
+      if (dimensions === "pagePath,customEvent:percent_scrolled") {
+        return report([
+          row([`/blog/${ARTICLE_ID}`, "25"], ["90"]),
+          row([`/blog/${ARTICLE_ID}`, "50"], ["60"]),
+          row([`/blog/${ARTICLE_ID}`, "75"], ["30"]),
+          row([`/blog/${ARTICLE_ID}`, "100"], ["15"]),
+        ]);
+      }
       if (dimensions === "date") {
         return report([row(["20261110"], ["42"])]);
       }
@@ -171,6 +179,48 @@ describe("dashboard load states (runtime)", () => {
         .textContent.includes(ARTICLE_TITLE),
     );
     expect(document.getElementById("total-articles").textContent).toBe("1");
+
+    // The per-article table's full column set: publication day
+    // off the title's date prefix, then the genre, the views
+    // and the scroll-depth reach counts the stubbed
+    // percent_scrolled report carried, with the completion
+    // rate derived from them (15 of 123 views -> 12.2%).
+    const articleHeaders = [
+      ...document.querySelectorAll("#blog-article-table th"),
+    ].map((th) => th.dataset.sortKey || "");
+    expect(articleHeaders).toEqual([
+      "published",
+      "title",
+      "",
+      "views",
+      "scroll25",
+      "scroll50",
+      "scroll75",
+      "scroll100",
+      "completion",
+    ]);
+    const articleCells = [
+      ...document.querySelectorAll("#blog-article-body tr td"),
+    ];
+    expect(articleCells.map((td) => td.textContent)).toEqual([
+      "2026-11-10",
+      ARTICLE_TITLE,
+      "川口",
+      "123",
+      "90",
+      "60",
+      "30",
+      "15",
+      "12.2%",
+    ]);
+    // The depth and completion cells mask like the view count;
+    // the publication day does not.
+    for (const index of [3, 4, 5, 6, 7, 8]) {
+      expect(articleCells[index].classList.contains("amount-value")).toBe(
+        true,
+      );
+    }
+    expect(articleCells[0].classList.contains("amount-value")).toBe(false);
     expect(document.getElementById("top-pages").textContent).toContain(
       ARTICLE_TITLE,
     );
