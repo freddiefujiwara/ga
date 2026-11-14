@@ -4,8 +4,6 @@ import {
   pageDisplay,
   canonicalPageKey,
   pageRanking,
-  pageSpeedRanking,
-  blogSpeedCaption,
   mergeBlogTitles,
   blogArticleDateKey,
   blogArticlesByDate,
@@ -204,120 +202,6 @@ describe("pageRanking", () => {
       { label: "持ち物リスト", href: `${origin}/list-of-stuff/`, views: 50 },
       { label: "ブログ トップ", href: `${origin}/blog/`, views: 40 },
     ]);
-  });
-});
-
-describe("pageSpeedRanking", () => {
-  const titles = parseRssTitles(RSS);
-  const origin = "https://freddiefujiwara.com";
-  const row = (path, total, samples) => ({
-    dimensionValues: [{ value: path }],
-    metricValues: [{ value: String(total) }, { value: String(samples) }],
-  });
-  const rowSlow = (path, total, samples, slow) => ({
-    dimensionValues: [{ value: path }],
-    metricValues: [
-      { value: String(total) },
-      { value: String(samples) },
-      { value: String(slow) },
-    ],
-  });
-  const response = (rows) => ({ ok: true, data: { rows } });
-
-  it("merges split paths, averages, and sorts slowest first", () => {
-    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
-    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
-    const ranking = pageSpeedRanking(
-      response([
-        row(`/${idA}`, 30000, 10),
-        row(`/blog/${idA}`, 10000, 10),
-        row(`/blog/${idB}`, 9000, 3),
-      ]),
-      titles,
-      origin,
-      10,
-    );
-    expect(ranking).toEqual([
-      {
-        label: "2026-10-31 川口の行きたい店まとめ",
-        href: `${origin}/blog/${idB}`,
-        avgMs: 3000,
-        samples: 3,
-        slow: 0,
-      },
-      {
-        label: "2026-11-02 Museのご紹介 & 使い方",
-        href: `${origin}/blog/${idA}`,
-        avgMs: 2000,
-        samples: 20,
-        slow: 0,
-      },
-    ]);
-  });
-
-  it("sums the slow counts of split paths; a missing value reads as zero", () => {
-    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
-    const idB = "1ORcobKE3DfRrSUV6yMUodfVQgiL1ouKaCTWKTEFUR6A";
-    const ranking = pageSpeedRanking(
-      response([
-        // One article split across two paths: the 41.8s stall
-        // that inflated its 7.5s average is the fragment row's
-        // slow count (cf. the 2026-11-12 map article).
-        rowSlow(`/blog/${idA}`, 10700, 6, 0),
-        rowSlow(`/${idA}`, 41843, 1, 1),
-        row(`/blog/${idB}`, 9000, 3),
-      ]),
-      titles,
-      origin,
-      10,
-    );
-    expect(ranking).toEqual([
-      {
-        label: "2026-11-02 Museのご紹介 & 使い方",
-        href: `${origin}/blog/${idA}`,
-        avgMs: 7506,
-        samples: 7,
-        slow: 1,
-      },
-      {
-        label: "2026-10-31 川口の行きたい店まとめ",
-        href: `${origin}/blog/${idB}`,
-        avgMs: 3000,
-        samples: 3,
-        slow: 0,
-      },
-    ]);
-  });
-
-  it("skips zero-sample rows and tolerates a missing response", () => {
-    const idA = "1m40NeOkTYxG3bEpLY6ZYfNq9C-9yRLZptON9iFsXwM8";
-    expect(
-      pageSpeedRanking(response([row(`/blog/${idA}`, 0, 0)]), titles, origin, 10),
-    ).toEqual([]);
-    expect(pageSpeedRanking(null, titles, origin, 10)).toEqual([]);
-    expect(pageSpeedRanking({ ok: false }, titles, origin, 10)).toEqual([]);
-  });
-});
-
-describe("blogSpeedCaption", () => {
-  it("names the day the speed report served", () => {
-    expect(blogSpeedCaption({ ok: true, data: { date: "2026-11-13" } })).toBe(
-      "記事が表示されるまでの時間の、2026年11月13日分の平均です。表示された記録のある記事だけが並びます。",
-    );
-    expect(blogSpeedCaption({ ok: true, data: { date: "2026-01-05" } })).toBe(
-      "記事が表示されるまでの時間の、2026年1月5日分の平均です。表示された記録のある記事だけが並びます。",
-    );
-  });
-
-  it("falls back to yesterday when the report carries no usable date", () => {
-    const fallback =
-      "記事が表示されるまでの時間の、昨日分の平均です。表示された記録のある記事だけが並びます。";
-    expect(blogSpeedCaption({ ok: true, data: { rows: [] } })).toBe(fallback);
-    expect(blogSpeedCaption({ ok: true, data: { date: "13/11/2026" } })).toBe(
-      fallback,
-    );
-    expect(blogSpeedCaption({ ok: false })).toBe(fallback);
-    expect(blogSpeedCaption(null)).toBe(fallback);
   });
 });
 

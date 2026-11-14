@@ -1561,57 +1561,17 @@ export function pageRanking(response, titles, origin, limit = 10) {
     .slice(0, limit);
 }
 
-// Build the per-article display-time ranking from the speed
-// report (pagePath x [render_ms total, sample count, slow
-// count], served by social-gas from its blog_speed tab): split
-// article paths merge under the canonical key with totals,
-// samples and slow counts summed, the average is total /
-// samples, slowest first. The slow count is how many of the
-// article's displays took ten seconds or more (the blog's
-// article_render_slow events); a report that predates it has
-// no third value and reads as zero. Articles with no recorded
-// display are absent from the report and stay absent here.
-// Returns [{ label, href, avgMs, samples, slow }] ready to
-// render.
-export function pageSpeedRanking(response, titles, origin, limit = 10) {
-  const merged = new Map();
-  for (const row of rowsOf(response)) {
-    const path = row.dimensionValues[0].value;
-    const total = Number(row.metricValues[0].value) || 0;
-    const samples = Number(row.metricValues[1].value) || 0;
-    if (!samples) {
-      continue;
-    }
-    const slow = Number(row.metricValues[2]?.value) || 0;
-    const key = canonicalPageKey(path);
-    const entry = merged.get(key) || { total: 0, samples: 0, slow: 0 };
-    entry.total += total;
-    entry.samples += samples;
-    entry.slow += slow;
-    merged.set(key, entry);
-  }
-  return [...merged.entries()]
-    .map(([key, entry]) => ({
-      ...pageDisplay(key, titles, origin),
-      avgMs: Math.round(entry.total / entry.samples),
-      samples: entry.samples,
-      slow: entry.slow,
-    }))
-    .sort((a, b) => b.avgMs - a.avgMs)
-    .slice(0, limit);
-}
-
-// Per-article display times from the same speed report
-// pageSpeedRanking reads, as a Map of article id ->
-// { avgMs, samples, slow }: split article paths merge under
+// Per-article display times from the speed report (pagePath x
+// [render_ms total, sample count, slow count], served by
+// social-gas from its blog_speed tab), as a Map of article id
+// -> { avgMs, samples, slow }: split article paths merge under
 // the canonical key with totals, samples and slow counts
-// summed, exactly like the ranking — but nothing is cut to a
-// top-N, so the per-article table can join every article the
-// report covers. The average follows the ranking's rounding
-// (whole milliseconds). Articles with no recorded display are
-// absent from the report and stay absent here. The report
-// covers one finished day (see blogSpeedCaption), unlike the
-// 28-day window the table's other columns use.
+// summed, and nothing is cut to a top-N, so the per-article
+// table can join every article the report covers. The average
+// is total / samples in whole milliseconds. Articles with no
+// recorded display are absent from the report and stay absent
+// here. The report covers one finished day, unlike the 28-day
+// window the table's other columns use.
 export function blogSpeedMap(response) {
   const merged = new Map();
   for (const row of rowsOf(response)) {
@@ -1642,24 +1602,6 @@ export function blogSpeedMap(response) {
       },
     ]),
   );
-}
-
-// The caption under the display-time ranking. The speed report
-// serves exactly one finished JST day (yesterday) from the
-// blog_speed tab and carries that day as `date` ("2026-11-13")
-// next to the rows, so the caption names the day the ranking
-// actually shows instead of implying a longer window; the
-// hour-cached payload can straddle midnight, when the day it
-// holds is no longer yesterday, which is why the served day
-// wins over a fixed "yesterday" wording. A response without a
-// usable date (a bridge that predates the field) falls back to
-// "昨日分", which is what the bridge serves by construction.
-export function blogSpeedCaption(response) {
-  const date =
-    response && response.ok && response.data ? response.data.date : null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
-  const day = m ? `${m[1]}年${Number(m[2])}月${Number(m[3])}日` : "昨日";
-  return `記事が表示されるまでの時間の、${day}分の平均です。表示された記録のある記事だけが並びます。`;
 }
 
 // --- Blog article tags (blog-gas titles payload) ---

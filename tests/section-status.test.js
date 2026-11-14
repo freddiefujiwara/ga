@@ -121,7 +121,7 @@ describe("main.js section-state wiring", () => {
       'const sourcesEl = document.getElementById("top-sources")',
     );
     expect(sections).toContain("setSectionLoading(sourcesEl)");
-    for (const id of ["top-pages", "blog-genres", "blog-article-body"]) {
+    for (const id of ["blog-genres", "blog-article-body"]) {
       expect(sections).toContain(
         `setSectionLoading(document.getElementById("${id}"))`,
       );
@@ -138,7 +138,7 @@ describe("main.js section-state wiring", () => {
   it("settles every page-fed blog section as failed when the page rows fail", () => {
     const settle = fnBody("function settleBlogPagesFailed()");
     expect(settle).toContain("overviewState.blogFailed = true");
-    for (const id of ["top-pages", "blog-genres", "blog-article-body"]) {
+    for (const id of ["blog-genres", "blog-article-body"]) {
       expect(settle).toContain(
         `setSectionFailed(document.getElementById("${id}"))`,
       );

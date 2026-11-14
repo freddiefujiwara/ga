@@ -18,8 +18,6 @@ import {
   dimensionRanking,
   fetchArticleTitles,
   pageRanking,
-  pageSpeedRanking,
-  blogSpeedCaption,
   fetchBlogMeta,
   mergeBlogTitles,
   blogArticlesByDate,
@@ -399,8 +397,9 @@ async function loadDashboard() {
   // inflated by one stall reads as such). Served from the
   // history sheet's blog_speed tab; until the first displays
   // are recorded the report answers with no rows and the
-  // section stays hidden, so a rejection here must never break
-  // the blog tab — the catch is attached up front.
+  // article table's speed columns stay empty, so a rejection
+  // here must never break the blog tab — the catch is
+  // attached up front.
   const speedPromise = fetchReport(CONFIG.GAS_ENDPOINT, auth(), {
     dimensions: "pagePath",
     metrics: "customEvent:render_ms,eventCount,customEvent:render_slow_count",
@@ -523,7 +522,6 @@ function loadBlogSections(
   const sourcesEl = document.getElementById("top-sources");
   setSectionLoading(dailyChartEl);
   setSectionLoading(sourcesEl);
-  setSectionLoading(document.getElementById("top-pages"));
   setSectionLoading(document.getElementById("blog-genres"));
   setSectionLoading(document.getElementById("blog-article-body"));
   // The two KPI boxes the page rows feed (the article count and
@@ -709,7 +707,6 @@ function renderBlogDaily(points, titles) {
 function settleBlogPagesFailed() {
   overviewState.blogSettled = true;
   overviewState.blogFailed = true;
-  setSectionFailed(document.getElementById("top-pages"));
   setSectionFailed(document.getElementById("blog-genres"));
   setSectionFailed(document.getElementById("blog-article-body"));
   for (const id of ["total-articles", "total-per-article"]) {
@@ -720,11 +717,11 @@ function settleBlogPagesFailed() {
   renderTopPosts();
 }
 
-// The page ranking and everything joined to it: the blog tab's
-// page list, the overview's blog top-3 rows, the per-genre rollup
-// and the per-article table. They share one input set — the GA
-// page rows plus the two title sources — so they land together,
-// when the slowest of the three arrives.
+// The page rows and everything joined to them: the overview's
+// blog top-3 rows, the per-genre rollup and the per-article
+// table. They share one input set — the GA page rows plus the
+// two title sources — so they land together, when the slowest
+// of the three arrives.
 async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedPromise, scrollPromise) {
   let pages;
   let rssTitles;
@@ -746,79 +743,16 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
   // Page rows show the article title and link to the page itself,
   // opening in a new tab. Split article paths are merged into a
   // single row by pageRanking. The titles are the merged map of
-  // both blog title sources (RSS + the titles payload): the page
-  // ranking used to read the RSS alone, so one failed RSS fetch
-  // silently dropped every article back to its raw path even
-  // though the payload copy had arrived fine.
+  // both blog title sources (RSS + the titles payload): the
+  // overview ranking used to read the RSS alone, so one failed
+  // RSS fetch silently dropped every article back to its raw
+  // path even though the payload copy had arrived fine.
   const titles = mergeBlogTitles(meta ? meta.titles : null, rssTitles);
-  const pageList = document.getElementById("top-pages");
-  pageList.innerHTML = "";
-  for (const item of pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 10)) {
-    const li = document.createElement("li");
-    const link = document.createElement("a");
-    link.href = item.href;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = item.label;
-    li.appendChild(link);
-    const span = document.createElement("span");
-    // Per-article view counts here are last-28-days GA figures,
-    // not a number any public page prints: masked.
-    span.className = "rank-value amount-value";
-    span.textContent = item.views.toLocaleString();
-    li.appendChild(span);
-    pageList.appendChild(li);
-  }
-  // The same ranking, top 3 only, feeds the overview's blog
+  // The page ranking, top 3 only, feeds the overview's blog
   // section in the per-channel top lists.
   overviewState.blogTop = pageRanking(pages, titles, CONFIG.SITE_ORIGIN, 3);
   overviewState.blogSettled = true;
   renderTopPosts();
-  // The display-time ranking rides its own report; it fills in
-  // when it lands and reveals its section only when at least one
-  // article has a recorded display time. Any failure leaves the
-  // section hidden.
-  if (speedPromise) {
-    speedPromise
-      .then((speed) => {
-        const items = pageSpeedRanking(speed, titles, CONFIG.SITE_ORIGIN, 10);
-        if (!items.length) {
-          return;
-        }
-        const speedList = document.getElementById("top-speed");
-        speedList.innerHTML = "";
-        for (const item of items) {
-          const li = document.createElement("li");
-          const link = document.createElement("a");
-          link.href = item.href;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = item.label;
-          li.appendChild(link);
-          const span = document.createElement("span");
-          // Per-article display times are blog figures like the
-          // view counts above: masked outside share links. An
-          // article with slow displays names them, so an average
-          // inflated by one stall reads as one; with none, the
-          // line keeps its plain form.
-          span.className = "rank-value amount-value";
-          span.textContent =
-            item.slow > 0
-              ? `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件・うち遅い${item.slow.toLocaleString()}件）`
-              : `${(item.avgMs / 1000).toFixed(1)}秒（${item.samples.toLocaleString()}件）`;
-          li.appendChild(span);
-          speedList.appendChild(li);
-        }
-        // The ranking shows one finished day, not a 28-day
-        // window: the caption names the day the report served.
-        const speedCaption = document.getElementById("speed-caption");
-        if (speedCaption) {
-          speedCaption.textContent = blogSpeedCaption(speed);
-        }
-        document.getElementById("speed-section").hidden = false;
-      })
-      .catch(() => {});
-  }
   // The per-genre rollup joins the page rows with the tag map. It
   // renders only when the map actually arrived; blogGenreStats
   // returns nothing without one and the section says why instead.
@@ -836,13 +770,12 @@ async function fillBlogPages(pagesPromise, titlesPromise, metaPromise, speedProm
       scrollMap = new Map();
     }
   }
-  // The display-time columns join from the same speed report
-  // the ranking above renders (no second fetch): the promise
-  // has been in flight since loadDashboard and carries an
-  // up-front catch, so a failure simply leaves the two columns
-  // empty. Its window is the one finished day the ranking
-  // shows, not the table's 28 days — the caption under the
-  // table says so.
+  // The display-time columns join from the speed report (no
+  // second fetch): the promise has been in flight since
+  // loadDashboard and carries an up-front catch, so a failure
+  // simply leaves the two columns empty. Its window is one
+  // finished day, not the table's 28 days — the caption under
+  // the table says so.
   let speedMap = new Map();
   if (speedPromise) {
     try {
@@ -1211,7 +1144,7 @@ function renderBlogArticleTable() {
     viewsTd.textContent = formatCount(article.views);
     tr.appendChild(viewsTd);
     // The display-time pair: the day's average in seconds (one
-    // decimal, the ranking's format) and how many of the day's
+    // decimal) and how many of the day's
     // displays took ten seconds or more. Both are blog figures
     // like the view count, so they mask through the same cell
     // helper as the depth columns.
