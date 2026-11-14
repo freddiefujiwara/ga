@@ -92,7 +92,11 @@ describe("dashboard load states (runtime)", () => {
       const dimensions = params.get("dimensions");
       const metrics = params.get("metrics") || "";
       if (metrics.includes("customEvent:render_ms")) {
-        return report([]);
+        // The day's display times for the one article: 24,600ms
+        // over 2 displays (12.3s on average), 1 of them slow.
+        return report([
+          row([`/blog/${ARTICLE_ID}`], ["24600", "2", "1"]),
+        ]);
       }
       if (dimensions === "pagePath,customEvent:percent_scrolled") {
         return report([
@@ -193,6 +197,8 @@ describe("dashboard load states (runtime)", () => {
       "title",
       "",
       "views",
+      "avgSpeedSec",
+      "slowCount",
       "scroll25",
       "scroll50",
       "scroll75",
@@ -207,15 +213,17 @@ describe("dashboard load states (runtime)", () => {
       ARTICLE_TITLE,
       "川口",
       "123",
+      "12.3",
+      "1",
       "90",
       "60",
       "30",
       "15",
       "12.2%",
     ]);
-    // The depth and completion cells mask like the view count;
-    // the publication day does not.
-    for (const index of [3, 4, 5, 6, 7, 8]) {
+    // The speed, depth and completion cells mask like the view
+    // count; the publication day does not.
+    for (const index of [3, 4, 5, 6, 7, 8, 9, 10]) {
       expect(articleCells[index].classList.contains("amount-value")).toBe(
         true,
       );
